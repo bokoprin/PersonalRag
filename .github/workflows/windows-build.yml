@@ -50,6 +50,8 @@ jobs:
             }
             git apply --reverse --check $patch.FullName 2>$null
             if ($LASTEXITCODE -ne 0) {
+              Write-Host "Patch diagnostics for $($patch.Name):"
+              git apply --check --verbose $patch.FullName
               throw "Patch neither applies nor is already applied: $($patch.Name)"
             }
           }
