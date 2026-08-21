@@ -1,0 +1,56 @@
+[scan_baseline_parallel]
+elapsed_ms=51.244 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=45.675 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=53.985 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=47.527 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=49.773 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=47.388 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=50.250 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=50.467 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=51.033 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+[scan_optimized_parallel]
+elapsed_ms=43.381 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=46.853 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=45.766 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=48.944 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=45.094 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=52.721 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=50.840 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=46.615 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+elapsed_ms=46.420 files=80000 discovered=80257 pruned=4 errors=0 bytes=80000
+[build_old]
+kind=old count=20000 elapsed_ms=59.383 docs=20000 segments=4 bytes=5123904
+kind=old count=20000 elapsed_ms=52.027 docs=20000 segments=4 bytes=5123904
+kind=old count=20000 elapsed_ms=60.031 docs=20000 segments=4 bytes=5123904
+kind=old count=20000 elapsed_ms=59.550 docs=20000 segments=4 bytes=5123904
+kind=old count=20000 elapsed_ms=52.529 docs=20000 segments=4 bytes=5123904
+kind=old count=20000 elapsed_ms=49.294 docs=20000 segments=4 bytes=5123904
+kind=old count=20000 elapsed_ms=58.554 docs=20000 segments=4 bytes=5123904
+[build_fast]
+kind=fast count=20000 elapsed_ms=42.391 docs=20000 segments=4 bytes=5123904
+kind=fast count=20000 elapsed_ms=41.965 docs=20000 segments=4 bytes=5123904
+kind=fast count=20000 elapsed_ms=42.010 docs=20000 segments=4 bytes=5123904
+kind=fast count=20000 elapsed_ms=39.992 docs=20000 segments=4 bytes=5123904
+kind=fast count=20000 elapsed_ms=46.366 docs=20000 segments=4 bytes=5123904
+kind=fast count=20000 elapsed_ms=39.516 docs=20000 segments=4 bytes=5123904
+kind=fast count=20000 elapsed_ms=35.514 docs=20000 segments=4 bytes=5123904
+[search_old_metadata_sort]
+kind=old elapsed_ms=25.368 hits=100
+kind=old elapsed_ms=27.212 hits=100
+kind=old elapsed_ms=27.548 hits=100
+kind=old elapsed_ms=30.797 hits=100
+kind=old elapsed_ms=24.995 hits=100
+kind=old elapsed_ms=25.195 hits=100
+kind=old elapsed_ms=25.181 hits=100
+kind=old elapsed_ms=25.882 hits=100
+kind=old elapsed_ms=25.446 hits=100
+[search_cached_metadata_sort]
+kind=cached elapsed_ms=6.921 hits=100
+kind=cached elapsed_ms=7.522 hits=100
+kind=cached elapsed_ms=7.250 hits=100
+kind=cached elapsed_ms=7.787 hits=100
+kind=cached elapsed_ms=6.943 hits=100
+kind=cached elapsed_ms=7.177 hits=100
+kind=cached elapsed_ms=7.035 hits=100
+kind=cached elapsed_ms=6.848 hits=100
+kind=cached elapsed_ms=8.905 hits=100

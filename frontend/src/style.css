@@ -1,0 +1,56 @@
+:root { font-family: "Segoe UI", "Yu Gothic UI", sans-serif; color: #202124; background: #f6f7fb; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.topbar { display: flex; align-items: baseline; gap: 16px; padding: 12px 24px; color: white; background: #253858; }
+.topbar h1 { margin: 0; font-size: 20px; }
+.topbar span { opacity: .8; font-size: 13px; }
+main { max-width: 1500px; margin: 0 auto; padding: 18px 24px; }
+.search-panel, .index-panel { padding: 16px; border: 1px solid #d9deea; border-radius: 8px; background: white; box-shadow: 0 1px 3px #1c2a3a12; }
+.search-panel > label { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: center; gap: 12px; margin-bottom: 10px; font-weight: 600; }
+input, select, button { border: 1px solid #bac4d7; border-radius: 5px; background: white; font: inherit; }
+input, select { min-height: 32px; padding: 5px 8px; }
+button { min-height: 30px; padding: 4px 10px; cursor: pointer; }
+button:hover { background: #edf3ff; }
+.options { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; color: #465267; font-size: 13px; }
+.options label { display: inline-flex; align-items: center; gap: 5px; }
+.options input:not([type=checkbox]), .options select { width: 130px; }
+.tabs { display: flex; align-items: center; gap: 8px; margin: 14px 0 8px; }
+.tabs button.active { color: white; border-color: #2c65c8; background: #2c65c8; }
+#result-count { margin-left: auto; color: #617087; font-size: 13px; }
+.results { min-height: 250px; overflow: auto; border: 1px solid #d9deea; border-radius: 8px; background: white; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid #edf0f5; text-align: left; white-space: nowrap; }
+td:nth-child(2) { max-width: 560px; overflow: hidden; text-overflow: ellipsis; }
+.actions { display: flex; gap: 4px; }
+.actions button { min-height: 24px; padding: 2px 6px; font-size: 12px; }
+.empty { padding: 32px; color: #68758a; text-align: center; }
+.error { margin: 8px 0; padding: 9px 12px; border: 1px solid #ed9a9a; border-radius: 5px; color: #9d1717; background: #fff1f1; white-space: pre-wrap; }
+.hits { display: grid; gap: 8px; }
+.hits article { padding: 10px 14px; border: 1px solid #d9deea; border-radius: 8px; background: white; }
+.hits h3 { margin: 0 0 6px; font-size: 13px; }
+.hits pre { margin: 0; overflow: auto; font: 13px/1.5 Consolas, monospace; }
+mark { padding: 0 2px; border-radius: 2px; background: #ffe08a; }
+.index-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.index-panel h2 { width: 100%; margin: 0; font-size: 15px; }
+.index-panel label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.index-options { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 0; color: #53647a; font-size: 13px; }
+.index-options label { color: #202124; }
+.index-options .custom-excludes input { width: 230px; }
+#index-root { width: 320px; }
+#index-status { min-width: 0; flex: 1 1 320px; overflow: hidden; color: #53647a; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.index-progress { flex-basis: 100%; display: grid; gap: 8px; padding: 12px; border: 1px solid #d9deea; border-radius: 6px; background: #f8faff; }
+.index-progress-heading { display: flex; align-items: center; justify-content: space-between; color: #253858; }
+.index-progress-heading span { font-size: 18px; font-variant-numeric: tabular-nums; }
+#index-progress-bar { width: 100%; height: 18px; accent-color: #2c65c8; }
+.index-progress-grid { display: grid; grid-template-columns: repeat(6, minmax(105px, 1fr)); gap: 8px; }
+.index-progress-grid div { display: grid; gap: 2px; padding: 6px 8px; border: 1px solid #e2e7f0; border-radius: 5px; background: white; }
+.index-progress-grid span { color: #617087; font-size: 12px; }
+.index-progress-grid strong { color: #202124; font-size: 13px; font-variant-numeric: tabular-nums; }
+.load-more { display: block; margin: 10px auto; }
+.background-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; padding: 16px; border: 1px solid #d9deea; border-radius: 8px; background: white; box-shadow: 0 1px 3px #1c2a3a12; }
+.background-panel h2 { width: 100%; margin: 0; font-size: 15px; }
+.background-panel p { margin: 0; color: #53647a; font-size: 13px; }
+.background-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 900px) {
+  .index-progress-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+}

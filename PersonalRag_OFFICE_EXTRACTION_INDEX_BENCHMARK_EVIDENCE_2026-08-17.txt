@@ -1,0 +1,46 @@
+PersonalRag Office extraction + vNext index benchmark raw evidence
+Date: 2026-08-17
+Benchmark source: FurtherAccelerated + benchmark-only tooling
+
+Linux 964e6d700d30 6.18.35 #1 SMP Mon Jul 27 18:07:50 UTC 2026 x86_64 GNU/Linux
+NPROC=5
+CPU(s):                                  5
+On-line CPU(s) list:                     0-4
+Model name:                              AMD EPYC 9V74 80-Core Processor
+Thread(s) per core:                      1
+Core(s) per socket:                      5
+Socket(s):                               1
+NUMA node0 CPU(s):                       0-4
+
+=== 1000 files x 4 KiB ===
+OFFICE_INDEX_BENCH profile=single format=txt files=1000 source_bytes=4096000 extracted_bytes=4096000 expansion=1.000 index_bytes=4709320 extract_ms=3.657 extract_files_s=273480.4 index_ms=63.832 direct_e2e_ms=67.068 direct_e2e_files_s=14910.1 production_like_ms=69.847 production_like_files_s=14317.0
+OFFICE_INDEX_BENCH profile=single format=docx files=1000 source_bytes=1002774 extracted_bytes=4107000 expansion=4.096 index_bytes=4733352 extract_ms=29.549 extract_files_s=33842.1 index_ms=82.061 direct_e2e_ms=97.192 direct_e2e_files_s=10288.9 production_like_ms=116.486 production_like_files_s=8584.7
+OFFICE_INDEX_BENCH profile=single format=xlsx files=1000 source_bytes=1284710 extracted_bytes=4109000 expansion=3.198 index_bytes=4764376 extract_ms=37.456 extract_files_s=26698.1 index_ms=84.351 direct_e2e_ms=119.511 direct_e2e_files_s=8367.5 production_like_ms=124.534 production_like_files_s=8029.9
+OFFICE_INDEX_BENCH profile=single format=pptx files=1000 source_bytes=1019317 extracted_bytes=4105000 expansion=4.027 index_bytes=4740400 extract_ms=32.549 extract_files_s=30722.9 index_ms=75.234 direct_e2e_ms=119.274 direct_e2e_files_s=8384.0 production_like_ms=124.817 production_like_files_s=8011.7
+OFFICE_INDEX_BENCH profile=multipart format=txt files=1000 source_bytes=4096000 extracted_bytes=4096000 expansion=1.000 index_bytes=4709320 extract_ms=3.742 extract_files_s=267229.9 index_ms=72.935 direct_e2e_ms=77.943 direct_e2e_files_s=12829.9 production_like_ms=73.701 production_like_files_s=13568.3
+OFFICE_INDEX_BENCH profile=multipart format=docx files=1000 source_bytes=2595450 extracted_bytes=4211000 expansion=1.622 index_bytes=4876536 extract_ms=62.272 extract_files_s=16058.6 index_ms=74.798 direct_e2e_ms=130.453 direct_e2e_files_s=7665.6 production_like_ms=160.650 production_like_files_s=6224.7
+OFFICE_INDEX_BENCH profile=multipart format=xlsx files=1000 source_bytes=3789625 extracted_bytes=4207000 expansion=1.110 index_bytes=4868856 extract_ms=80.859 extract_files_s=12367.2 index_ms=77.518 direct_e2e_ms=168.282 direct_e2e_files_s=5942.4 production_like_ms=177.650 production_like_files_s=5629.1
+OFFICE_INDEX_BENCH profile=multipart format=pptx files=1000 source_bytes=7892303 extracted_bytes=4347000 expansion=0.551 index_bytes=4992560 extract_ms=148.974 extract_files_s=6712.6 index_ms=83.312 direct_e2e_ms=227.159 direct_e2e_files_s=4402.2 production_like_ms=245.414 production_like_files_s=4074.7
+OFFICE_INDEX_BENCH_PASS
+
+=== 200 files x 24 KiB ===
+OFFICE_INDEX_BENCH profile=single format=txt files=200 source_bytes=4915200 extracted_bytes=4915200 expansion=1.000 index_bytes=5467600 extract_ms=1.485 extract_files_s=134698.8 index_ms=73.424 direct_e2e_ms=74.858 direct_e2e_files_s=2671.7 production_like_ms=75.219 production_like_files_s=2658.9
+OFFICE_INDEX_BENCH profile=single format=docx files=200 source_bytes=447521 extracted_bytes=4917400 expansion=10.988 index_bytes=5505240 extract_ms=24.446 extract_files_s=8181.2 index_ms=79.196 direct_e2e_ms=105.231 direct_e2e_files_s=1900.6 production_like_ms=113.168 production_like_files_s=1767.3
+OFFICE_INDEX_BENCH profile=single format=xlsx files=200 source_bytes=800967 extracted_bytes=4917800 expansion=6.140 index_bytes=5534056 extract_ms=33.774 extract_files_s=5921.7 index_ms=78.940 direct_e2e_ms=117.456 direct_e2e_files_s=1702.8 production_like_ms=124.031 production_like_files_s=1612.5
+OFFICE_INDEX_BENCH profile=single format=pptx files=200 source_bytes=432093 extracted_bytes=4917000 expansion=11.379 index_bytes=5513440 extract_ms=26.599 extract_files_s=7519.1 index_ms=82.490 direct_e2e_ms=108.510 direct_e2e_files_s=1843.1 production_like_ms=118.009 production_like_files_s=1694.8
+OFFICE_INDEX_BENCH profile=multipart format=txt files=200 source_bytes=4915200 extracted_bytes=4915200 expansion=1.000 index_bytes=5467600 extract_ms=1.537 extract_files_s=130120.9 index_ms=74.957 direct_e2e_ms=76.865 direct_e2e_files_s=2602.0 production_like_ms=81.090 production_like_files_s=2466.4
+OFFICE_INDEX_BENCH profile=multipart format=docx files=200 source_bytes=821004 extracted_bytes=4938200 expansion=6.015 index_bytes=5563488 extract_ms=32.001 extract_files_s=6249.7 index_ms=74.200 direct_e2e_ms=114.376 direct_e2e_files_s=1748.6 production_like_ms=113.900 production_like_files_s=1755.9
+OFFICE_INDEX_BENCH profile=multipart format=xlsx files=200 source_bytes=1341111 extracted_bytes=4937400 expansion=3.682 index_bytes=5559424 extract_ms=43.618 extract_files_s=4585.3 index_ms=80.751 direct_e2e_ms=127.271 direct_e2e_files_s=1571.5 production_like_ms=131.838 production_like_files_s=1517.0
+OFFICE_INDEX_BENCH profile=multipart format=pptx files=200 source_bytes=1837774 extracted_bytes=4965400 expansion=2.702 index_bytes=5570504 extract_ms=51.845 extract_files_s=3857.6 index_ms=83.848 direct_e2e_ms=128.445 direct_e2e_files_s=1557.1 production_like_ms=134.214 production_like_files_s=1490.2
+OFFICE_INDEX_BENCH_PASS
+
+=== 64 files x 64 KiB ===
+OFFICE_INDEX_BENCH profile=single format=txt files=64 source_bytes=4194304 extracted_bytes=4194304 expansion=1.000 index_bytes=4766624 extract_ms=0.841 extract_files_s=76078.3 index_ms=70.442 direct_e2e_ms=72.546 direct_e2e_files_s=882.2 production_like_ms=71.097 production_like_files_s=900.2
+OFFICE_INDEX_BENCH profile=single format=docx files=64 source_bytes=290931 extracted_bytes=4195008 expansion=14.419 index_bytes=4790064 extract_ms=20.299 extract_files_s=3152.9 index_ms=64.807 direct_e2e_ms=94.009 direct_e2e_files_s=680.8 production_like_ms=87.806 production_like_files_s=728.9
+OFFICE_INDEX_BENCH profile=single format=xlsx files=64 source_bytes=595480 extracted_bytes=4195136 expansion=7.045 index_bytes=4818368 extract_ms=30.444 extract_files_s=2102.3 index_ms=71.817 direct_e2e_ms=98.155 direct_e2e_files_s=652.0 production_like_ms=107.578 production_like_files_s=594.9
+OFFICE_INDEX_BENCH profile=single format=pptx files=64 source_bytes=275435 extracted_bytes=4194880 expansion=15.230 index_bytes=4798632 extract_ms=21.883 extract_files_s=2924.7 index_ms=76.890 direct_e2e_ms=93.725 direct_e2e_files_s=682.9 production_like_ms=99.257 production_like_files_s=644.8
+OFFICE_INDEX_BENCH profile=multipart format=txt files=64 source_bytes=4194304 extracted_bytes=4194304 expansion=1.000 index_bytes=4766624 extract_ms=0.806 extract_files_s=79445.3 index_ms=70.079 direct_e2e_ms=63.056 direct_e2e_files_s=1015.0 production_like_ms=71.739 production_like_files_s=892.1
+OFFICE_INDEX_BENCH profile=multipart format=docx files=64 source_bytes=430835 extracted_bytes=4201664 expansion=9.752 index_bytes=4831696 extract_ms=25.096 extract_files_s=2550.2 index_ms=69.380 direct_e2e_ms=86.236 direct_e2e_files_s=742.2 production_like_ms=85.814 production_like_files_s=745.8
+OFFICE_INDEX_BENCH profile=multipart format=xlsx files=64 source_bytes=772518 extracted_bytes=4201408 expansion=5.439 index_bytes=4828832 extract_ms=34.450 extract_files_s=1857.7 index_ms=66.404 direct_e2e_ms=104.135 direct_e2e_files_s=614.6 production_like_ms=100.952 production_like_files_s=634.0
+OFFICE_INDEX_BENCH profile=multipart format=pptx files=64 source_bytes=715946 extracted_bytes=4210368 expansion=5.881 index_bytes=4820424 extract_ms=29.504 extract_files_s=2169.2 index_ms=71.183 direct_e2e_ms=102.739 direct_e2e_files_s=622.9 production_like_ms=98.890 production_like_files_s=647.2
+OFFICE_INDEX_BENCH_PASS

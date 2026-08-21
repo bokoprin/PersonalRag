@@ -1,0 +1,59 @@
+PersonalRag vNext Further Acceleration evidence — 2026-08-17
+
+BASELINE AdaptiveFastPath first-N (100k / limit 2000 / p50):
+content=0.219316 ms
+path=0.158545 ms
+
+FINAL FurtherAccelerated first-N (100k / limit 2000 / 31 rounds):
+full_p50=0.634802 ms
+content_first_n_p50=0.044166 ms
+path_first_n_p50=0.082733 ms
+legacy_path_content_full_intersection_p50=6.223159 ms
+adaptive_path_content_first_n_p50=0.126658 ms
+
+IMPROVEMENTS:
+content first-N: 4.97x faster (~79.9% latency reduction)
+path first-N: 1.92x faster (~47.8% latency reduction)
+path+content AND first-N: 49.13x faster (~98.0% latency reduction)
+
+100k filename-heavy build median:
+old=142.595 ms
+new=133.841 ms
+~6.1% faster
+
+SERIALIZED COMPATIBILITY:
+100k corpus, 20 segments
+old/new every .prseg2 size and SHA-256 identical
+BYTE_IDENTICAL=true
+
+FINAL 20K GATE5:
+GATE5_BUILD perf=667.076 ms vnext=655.686 ms
+GATE5_OPEN perf=20.296 ms vnext=19.205 ms
+base common perf=0.172025 ms vnext=0.729413 ms
+base medium perf=0.044165 ms vnext=0.027911 ms
+base rare perf=0.018367 ms vnext=0.004667 ms
+base zero perf=0.019329 ms vnext=0.007331 ms
+base japanese perf=0.024266 ms vnext=0.011677 ms
+base filename perf=0.098316 ms vnext=0.005508 ms
+delta1 perf=33.352 ms vnext=9.213 ms
+delta10 perf=62.016 ms vnext=24.310 ms
+delta100 perf=45.199 ms vnext=16.534 ms
+delta1000 perf=52.243 ms vnext=28.677 ms
+compaction perf=2482.103 ms vnext=753.008 ms
+
+REJECTED EXPERIMENTS:
+- global q3 density >=90% => exact scan every live document: slower on text-heavy, reverted
+- force generation-global rarest q3 anchor into all segments: not reliably faster, reverted
+
+FINAL SEARCH CORE HARD GATE:
+106/106 tests PASS
+cargo fmt --check PASS
+cargo clippy --all-targets -- -D warnings PASS
+
+FRONTEND:
+validation-only strict TypeScript check PASS
+
+BRIDGE/TAURI:
+rustfmt parse/check PASS
+full offline Cargo compile BLOCKED before source compile by missing ignore crate
+Windows native validation harness includes async-shadow and duplicate-coalescing tests

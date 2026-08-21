@@ -1,0 +1,10 @@
+{
+  "date": "2026-08-15",
+  "workload": "10000 small text files, build-disk-parallel, adaptive, segment_docs=5000, build_workers=4, scan_workers=4",
+  "baseline_elapsed_ms": [39.359, 44.015, 43.100, 31.970, 43.978],
+  "progress_fix_elapsed_ms": [37.934, 38.598, 32.366, 29.767, 35.711],
+  "baseline_median_ms": 43.100,
+  "progress_fix_median_ms": 35.711,
+  "median_speedup": 1.2069,
+  "index_byte_identical": true
+}

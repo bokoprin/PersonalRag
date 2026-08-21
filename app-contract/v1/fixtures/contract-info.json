@@ -1,0 +1,9 @@
+{
+  "name": "personalrag-app-contract",
+  "version": 1,
+  "capabilities": [
+    "portable-search",
+    "portable-index",
+    "snippet-batch"
+  ]
+}

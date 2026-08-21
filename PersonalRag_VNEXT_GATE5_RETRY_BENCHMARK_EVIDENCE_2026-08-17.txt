@@ -1,0 +1,213 @@
+=== 20k final paired run files ===
+--- /mnt/data/personalrag-gate5-retry/gate5_20k_fastopen_final3/run1.txt
+GATE5_BUILD docs=20000 perf_ms=669.486 perf_bytes=78002393 vnext_ms=907.814 vnext_bytes=53935691 vnext_segments=4
+GATE5_OPEN docs=20000 perf_p50_ms=18.588 vnext_p50_ms=21.641
+GATE5_QUERY phase=base label=q1 hits=20000 perf_p50_ms=0.186226 perf_p95_ms=0.262689 vnext_p50_ms=0.171734 vnext_p95_ms=0.196982
+GATE5_QUERY phase=base label=q2 hits=19777 perf_p50_ms=0.204423 perf_p95_ms=0.222460 vnext_p50_ms=0.168800 vnext_p95_ms=0.171905
+GATE5_QUERY phase=base label=common hits=19675 perf_p50_ms=0.139417 perf_p95_ms=0.201889 vnext_p50_ms=0.533351 vnext_p95_ms=0.815268
+GATE5_QUERY phase=base label=medium hits=207 perf_p50_ms=0.045247 perf_p95_ms=0.099197 vnext_p50_ms=0.027381 vnext_p95_ms=0.034111
+GATE5_QUERY phase=base label=rare hits=2 perf_p50_ms=0.017786 perf_p95_ms=0.018798 vnext_p50_ms=0.004587 vnext_p95_ms=0.005008
+GATE5_QUERY phase=base label=zero hits=0 perf_p50_ms=0.018978 perf_p95_ms=0.019569 vnext_p50_ms=0.007260 vnext_p95_ms=0.007411
+GATE5_QUERY phase=base label=japanese hits=94 perf_p50_ms=0.023455 perf_p95_ms=0.024606 vnext_p50_ms=0.011226 vnext_p95_ms=0.011417
+GATE5_QUERY phase=base label=long hits=1 perf_p50_ms=0.019068 perf_p95_ms=0.019799 vnext_p50_ms=0.011136 vnext_p95_ms=0.011337
+GATE5_QUERY phase=base label=boundary hits=1 perf_p50_ms=0.019589 perf_p95_ms=0.020250 vnext_p50_ms=0.008433 vnext_p95_ms=0.008843
+GATE5_QUERY phase=base label=filename hits=67 perf_p50_ms=0.125416 perf_p95_ms=0.297371 vnext_p50_ms=0.005529 vnext_p95_ms=0.007632
+GATE5_QUERY phase=base label=path_zero hits=0 perf_p50_ms=0.060189 perf_p95_ms=0.142341 vnext_p50_ms=0.000391 vnext_p95_ms=0.000411
+GATE5_DELTA generation=1 changes=1 perf_ms=33.440 vnext_ms=14.992 perf_deltas=1 vnext_layers=2 segments=5
+GATE5_DELTA generation=2 changes=10 perf_ms=56.881 vnext_ms=21.273 perf_deltas=2 vnext_layers=3 segments=6
+GATE5_DELTA generation=3 changes=100 perf_ms=36.650 vnext_ms=22.798 perf_deltas=3 vnext_layers=4 segments=7
+GATE5_DELTA generation=4 changes=1000 perf_ms=49.022 vnext_ms=18.335 perf_deltas=4 vnext_layers=5 segments=8
+GATE5_COMPACTION perf_ms=2798.867 vnext_ms=824.934 perf_generation=4 vnext_generation=5 vnext_source_layers=5 vnext_compacted_segments=4 gc_ms=25.506 gc_components=5 gc_manifests=5 gc_reclaimed_bytes=56375874 store_before_gc=108325448 store_after_gc=51949574
+GATE5_QUERY phase=compacted label=q1 hits=20000 perf_p50_ms=0.182190 perf_p95_ms=0.330169 vnext_p50_ms=0.173336 vnext_p95_ms=0.193567
+GATE5_QUERY phase=compacted label=q2 hits=19788 perf_p50_ms=0.215469 perf_p95_ms=0.235409 vnext_p50_ms=0.172416 vnext_p95_ms=0.200807
+GATE5_QUERY phase=compacted label=common hits=19690 perf_p50_ms=0.176371 perf_p95_ms=0.208999 vnext_p50_ms=0.657324 vnext_p95_ms=0.736531
+GATE5_QUERY phase=compacted label=medium hits=196 perf_p50_ms=0.055092 perf_p95_ms=0.129271 vnext_p50_ms=0.026890 vnext_p95_ms=0.110624
+GATE5_QUERY phase=compacted label=rare hits=2 perf_p50_ms=0.018117 perf_p95_ms=0.018978 vnext_p50_ms=0.004637 vnext_p95_ms=0.005248
+GATE5_QUERY phase=compacted label=zero hits=0 perf_p50_ms=0.019669 perf_p95_ms=0.020981 vnext_p50_ms=0.007311 vnext_p95_ms=0.007501
+GATE5_QUERY phase=compacted label=japanese hits=1199 perf_p50_ms=0.053779 perf_p95_ms=0.057746 vnext_p50_ms=0.035663 vnext_p95_ms=0.039559
+GATE5_QUERY phase=compacted label=long hits=1 perf_p50_ms=0.019659 perf_p95_ms=0.023385 vnext_p50_ms=0.011066 vnext_p95_ms=0.011577
+GATE5_QUERY phase=compacted label=boundary hits=1 perf_p50_ms=0.019959 perf_p95_ms=0.020911 vnext_p50_ms=0.008653 vnext_p95_ms=0.008963
+GATE5_QUERY phase=compacted label=filename hits=63 perf_p50_ms=0.068431 perf_p95_ms=0.114810 vnext_p50_ms=0.005498 vnext_p95_ms=0.006680
+GATE5_QUERY phase=compacted label=path_zero hits=0 perf_p50_ms=0.077935 perf_p95_ms=0.172515 vnext_p50_ms=0.000391 vnext_p95_ms=0.000421
+--- /mnt/data/personalrag-gate5-retry/gate5_20k_fastopen_final3/run2.txt
+GATE5_BUILD docs=20000 perf_ms=879.502 perf_bytes=78002393 vnext_ms=655.815 vnext_bytes=53935691 vnext_segments=4
+GATE5_OPEN docs=20000 perf_p50_ms=18.673 vnext_p50_ms=18.061
+GATE5_QUERY phase=base label=q1 hits=20000 perf_p50_ms=0.236651 perf_p95_ms=0.446061 vnext_p50_ms=0.169532 vnext_p95_ms=0.172415
+GATE5_QUERY phase=base label=q2 hits=19777 perf_p50_ms=0.203852 perf_p95_ms=0.218123 vnext_p50_ms=0.168129 vnext_p95_ms=0.171795
+GATE5_QUERY phase=base label=common hits=19675 perf_p50_ms=0.207948 perf_p95_ms=0.355016 vnext_p50_ms=0.580951 vnext_p95_ms=0.735680
+GATE5_QUERY phase=base label=medium hits=207 perf_p50_ms=0.045157 perf_p95_ms=0.050134 vnext_p50_ms=0.026870 vnext_p95_ms=0.048602
+GATE5_QUERY phase=base label=rare hits=2 perf_p50_ms=0.017806 perf_p95_ms=0.018568 vnext_p50_ms=0.004887 vnext_p95_ms=0.005028
+GATE5_QUERY phase=base label=zero hits=0 perf_p50_ms=0.019298 perf_p95_ms=0.020010 vnext_p50_ms=0.007311 vnext_p95_ms=0.007491
+GATE5_QUERY phase=base label=japanese hits=94 perf_p50_ms=0.023915 perf_p95_ms=0.031647 vnext_p50_ms=0.011327 vnext_p95_ms=0.012478
+GATE5_QUERY phase=base label=long hits=1 perf_p50_ms=0.018968 perf_p95_ms=0.019809 vnext_p50_ms=0.011267 vnext_p95_ms=0.011457
+GATE5_QUERY phase=base label=boundary hits=1 perf_p50_ms=0.019789 perf_p95_ms=0.020500 vnext_p50_ms=0.008512 vnext_p95_ms=0.008633
+GATE5_QUERY phase=base label=filename hits=67 perf_p50_ms=0.095211 perf_p95_ms=0.290591 vnext_p50_ms=0.005548 vnext_p95_ms=0.006099
+GATE5_QUERY phase=base label=path_zero hits=0 perf_p50_ms=0.075392 perf_p95_ms=0.105586 vnext_p50_ms=0.000401 vnext_p95_ms=0.000411
+GATE5_DELTA generation=1 changes=1 perf_ms=537.618 vnext_ms=18.981 perf_deltas=1 vnext_layers=2 segments=5
+GATE5_DELTA generation=2 changes=10 perf_ms=32.967 vnext_ms=15.118 perf_deltas=2 vnext_layers=3 segments=6
+GATE5_DELTA generation=3 changes=100 perf_ms=35.494 vnext_ms=13.209 perf_deltas=3 vnext_layers=4 segments=7
+GATE5_DELTA generation=4 changes=1000 perf_ms=52.830 vnext_ms=14.222 perf_deltas=4 vnext_layers=5 segments=8
+GATE5_COMPACTION perf_ms=2324.479 vnext_ms=651.681 perf_generation=4 vnext_generation=5 vnext_source_layers=5 vnext_compacted_segments=4 gc_ms=20.790 gc_components=5 gc_manifests=5 gc_reclaimed_bytes=56375874 store_before_gc=108325448 store_after_gc=51949574
+GATE5_QUERY phase=compacted label=q1 hits=20000 perf_p50_ms=0.168590 perf_p95_ms=0.227217 vnext_p50_ms=0.172957 vnext_p95_ms=0.234358
+GATE5_QUERY phase=compacted label=q2 hits=19788 perf_p50_ms=0.208890 perf_p95_ms=0.226866 vnext_p50_ms=0.172655 vnext_p95_ms=0.186466
+GATE5_QUERY phase=compacted label=common hits=19690 perf_p50_ms=0.258993 perf_p95_ms=0.311181 vnext_p50_ms=0.774808 vnext_p95_ms=0.982485
+GATE5_QUERY phase=compacted label=medium hits=196 perf_p50_ms=0.043114 perf_p95_ms=0.051116 vnext_p50_ms=0.026679 vnext_p95_ms=0.034792
+GATE5_QUERY phase=compacted label=rare hits=2 perf_p50_ms=0.017887 perf_p95_ms=0.019218 vnext_p50_ms=0.004617 vnext_p95_ms=0.005959
+GATE5_QUERY phase=compacted label=zero hits=0 perf_p50_ms=0.019178 perf_p95_ms=0.019890 vnext_p50_ms=0.007351 vnext_p95_ms=0.008313
+GATE5_QUERY phase=compacted label=japanese hits=1199 perf_p50_ms=0.052918 perf_p95_ms=0.062612 vnext_p50_ms=0.035582 vnext_p95_ms=0.040751
+GATE5_QUERY phase=compacted label=long hits=1 perf_p50_ms=0.018878 perf_p95_ms=0.021021 vnext_p50_ms=0.011697 vnext_p95_ms=0.013390
+GATE5_QUERY phase=compacted label=boundary hits=1 perf_p50_ms=0.019389 perf_p95_ms=0.020190 vnext_p50_ms=0.008583 vnext_p95_ms=0.008923
+GATE5_QUERY phase=compacted label=filename hits=63 perf_p50_ms=0.091766 perf_p95_ms=0.263320 vnext_p50_ms=0.005248 vnext_p95_ms=0.006530
+GATE5_QUERY phase=compacted label=path_zero hits=0 perf_p50_ms=0.078596 perf_p95_ms=0.105256 vnext_p50_ms=0.000401 vnext_p95_ms=0.000440
+--- /mnt/data/personalrag-gate5-retry/gate5_20k_fastopen_final3/run3.txt
+GATE5_BUILD docs=20000 perf_ms=670.937 perf_bytes=78002393 vnext_ms=728.916 vnext_bytes=53935691 vnext_segments=4
+GATE5_OPEN docs=20000 perf_p50_ms=20.281 vnext_p50_ms=19.039
+GATE5_QUERY phase=base label=q1 hits=20000 perf_p50_ms=0.209260 perf_p95_ms=0.465500 vnext_p50_ms=0.169901 vnext_p95_ms=0.179756
+GATE5_QUERY phase=base label=q2 hits=19777 perf_p50_ms=0.203402 perf_p95_ms=0.216961 vnext_p50_ms=0.168500 vnext_p95_ms=0.189350
+GATE5_QUERY phase=base label=common hits=19675 perf_p50_ms=0.255138 perf_p95_ms=0.596213 vnext_p50_ms=0.766936 vnext_p95_ms=1.091597
+GATE5_QUERY phase=base label=medium hits=207 perf_p50_ms=0.045387 perf_p95_ms=0.056143 vnext_p50_ms=0.026449 vnext_p95_ms=0.028422
+GATE5_QUERY phase=base label=rare hits=2 perf_p50_ms=0.017916 perf_p95_ms=0.019789 vnext_p50_ms=0.004637 vnext_p95_ms=0.004687
+GATE5_QUERY phase=base label=zero hits=0 perf_p50_ms=0.019489 perf_p95_ms=0.020020 vnext_p50_ms=0.007230 vnext_p95_ms=0.007571
+GATE5_QUERY phase=base label=japanese hits=94 perf_p50_ms=0.024045 perf_p95_ms=0.027521 vnext_p50_ms=0.011277 vnext_p95_ms=0.011738
+GATE5_QUERY phase=base label=long hits=1 perf_p50_ms=0.019318 perf_p95_ms=0.019639 vnext_p50_ms=0.011177 vnext_p95_ms=0.011357
+GATE5_QUERY phase=base label=boundary hits=1 perf_p50_ms=0.019409 perf_p95_ms=0.020621 vnext_p50_ms=0.008443 vnext_p95_ms=0.008503
+GATE5_QUERY phase=base label=filename hits=67 perf_p50_ms=0.106278 perf_p95_ms=0.145125 vnext_p50_ms=0.005749 vnext_p95_ms=0.006920
+GATE5_QUERY phase=base label=path_zero hits=0 perf_p50_ms=0.069192 perf_p95_ms=0.135801 vnext_p50_ms=0.000401 vnext_p95_ms=0.000441
+GATE5_DELTA generation=1 changes=1 perf_ms=42.893 vnext_ms=10.034 perf_deltas=1 vnext_layers=2 segments=5
+GATE5_DELTA generation=2 changes=10 perf_ms=41.460 vnext_ms=14.078 perf_deltas=2 vnext_layers=3 segments=6
+GATE5_DELTA generation=3 changes=100 perf_ms=35.430 vnext_ms=11.953 perf_deltas=3 vnext_layers=4 segments=7
+GATE5_DELTA generation=4 changes=1000 perf_ms=50.018 vnext_ms=26.094 perf_deltas=4 vnext_layers=5 segments=8
+GATE5_COMPACTION perf_ms=2850.115 vnext_ms=726.019 perf_generation=4 vnext_generation=5 vnext_source_layers=5 vnext_compacted_segments=4 gc_ms=22.494 gc_components=5 gc_manifests=5 gc_reclaimed_bytes=56375874 store_before_gc=108325448 store_after_gc=51949574
+GATE5_QUERY phase=compacted label=q1 hits=20000 perf_p50_ms=0.194358 perf_p95_ms=0.240176 vnext_p50_ms=0.174588 vnext_p95_ms=0.198023
+GATE5_QUERY phase=compacted label=q2 hits=19788 perf_p50_ms=0.214367 perf_p95_ms=0.227177 vnext_p50_ms=0.174067 vnext_p95_ms=0.183481
+GATE5_QUERY phase=compacted label=common hits=19690 perf_p50_ms=0.205284 perf_p95_ms=0.226556 vnext_p50_ms=0.560681 vnext_p95_ms=0.817001
+GATE5_QUERY phase=compacted label=medium hits=196 perf_p50_ms=0.043143 perf_p95_ms=0.054190 vnext_p50_ms=0.025778 vnext_p95_ms=0.027882
+GATE5_QUERY phase=compacted label=rare hits=2 perf_p50_ms=0.018237 perf_p95_ms=0.019258 vnext_p50_ms=0.004697 vnext_p95_ms=0.005488
+GATE5_QUERY phase=compacted label=zero hits=0 perf_p50_ms=0.019209 perf_p95_ms=0.019989 vnext_p50_ms=0.007391 vnext_p95_ms=0.009014
+GATE5_QUERY phase=compacted label=japanese hits=1199 perf_p50_ms=0.053630 perf_p95_ms=0.057725 vnext_p50_ms=0.035883 vnext_p95_ms=0.037886
+GATE5_QUERY phase=compacted label=long hits=1 perf_p50_ms=0.019079 perf_p95_ms=0.020440 vnext_p50_ms=0.011057 vnext_p95_ms=0.011367
+GATE5_QUERY phase=compacted label=boundary hits=1 perf_p50_ms=0.019639 perf_p95_ms=0.020190 vnext_p50_ms=0.008623 vnext_p95_ms=0.009123
+GATE5_QUERY phase=compacted label=filename hits=63 perf_p50_ms=0.105637 perf_p95_ms=0.153127 vnext_p50_ms=0.005248 vnext_p95_ms=0.007822
+GATE5_QUERY phase=compacted label=path_zero hits=0 perf_p50_ms=0.062653 perf_p95_ms=0.110543 vnext_p50_ms=0.000391 vnext_p95_ms=0.000431
+=== 50k final mixed run ===
+GATE5_BUILD docs=50000 perf_ms=7685.208 perf_bytes=194601317 vnext_ms=2659.241 vnext_bytes=134554910 vnext_segments=10
+GATE5_OPEN docs=50000 perf_p50_ms=53.198 vnext_p50_ms=51.602
+GATE5_QUERY phase=base label=q1 hits=50000 perf_p50_ms=0.292573 perf_p95_ms=0.442415 vnext_p50_ms=0.441835 vnext_p95_ms=0.521653
+GATE5_QUERY phase=base label=q2 hits=49439 perf_p50_ms=0.511998 perf_p95_ms=0.564706 vnext_p50_ms=0.430147 vnext_p95_ms=0.455925
+GATE5_QUERY phase=base label=common hits=49187 perf_p50_ms=0.319894 perf_p95_ms=0.361636 vnext_p50_ms=2.387978 vnext_p95_ms=2.468418
+GATE5_QUERY phase=base label=medium hits=516 perf_p50_ms=0.117694 perf_p95_ms=0.150183 vnext_p50_ms=0.096122 vnext_p95_ms=0.102292
+GATE5_QUERY phase=base label=rare hits=2 perf_p50_ms=0.019829 perf_p95_ms=0.022072 vnext_p50_ms=0.010866 vnext_p95_ms=0.011948
+GATE5_QUERY phase=base label=zero hits=0 perf_p50_ms=0.107549 perf_p95_ms=0.218754 vnext_p50_ms=0.020680 vnext_p95_ms=0.083284
+GATE5_QUERY phase=base label=japanese hits=236 perf_p50_ms=0.040440 perf_p95_ms=0.048782 vnext_p50_ms=0.029704 vnext_p95_ms=0.032508
+GATE5_QUERY phase=base label=long hits=1 perf_p50_ms=0.021382 perf_p95_ms=0.021642 vnext_p50_ms=0.028262 vnext_p95_ms=0.030115
+GATE5_QUERY phase=base label=boundary hits=1 perf_p50_ms=0.040470 perf_p95_ms=0.154158 vnext_p50_ms=0.020230 vnext_p95_ms=0.021532
+GATE5_QUERY phase=base label=filename hits=167 perf_p50_ms=0.341176 perf_p95_ms=0.465950 vnext_p50_ms=0.014702 vnext_p95_ms=0.034962
+GATE5_QUERY phase=base label=path_zero hits=0 perf_p50_ms=0.216471 perf_p95_ms=0.328697 vnext_p50_ms=0.001432 vnext_p95_ms=0.001593
+GATE5_DELTA generation=1 changes=1 perf_ms=212.287 vnext_ms=9.856 perf_deltas=1 vnext_layers=2 segments=11
+GATE5_DELTA generation=2 changes=10 perf_ms=73.350 vnext_ms=11.297 perf_deltas=2 vnext_layers=3 segments=12
+GATE5_DELTA generation=3 changes=100 perf_ms=76.586 vnext_ms=12.223 perf_deltas=3 vnext_layers=4 segments=13
+GATE5_DELTA generation=4 changes=1000 perf_ms=83.311 vnext_ms=16.813 perf_deltas=4 vnext_layers=5 segments=14
+GATE5_COMPACTION perf_ms=6034.569 vnext_ms=2108.885 perf_generation=4 vnext_generation=5 vnext_source_layers=5 vnext_compacted_segments=10 gc_ms=62.840 gc_components=5 gc_manifests=5 gc_reclaimed_bytes=136996609 store_before_gc=269565402 store_after_gc=132568793
+GATE5_QUERY phase=compacted label=q1 hits=50000 perf_p50_ms=0.427543 perf_p95_ms=0.434103 vnext_p50_ms=0.429977 vnext_p95_ms=0.451048
+GATE5_QUERY phase=compacted label=q2 hits=49450 perf_p50_ms=0.513110 perf_p95_ms=0.543586 vnext_p50_ms=0.450818 vnext_p95_ms=0.551317
+GATE5_QUERY phase=compacted label=common hits=49202 perf_p50_ms=0.400473 perf_p95_ms=0.450498 vnext_p50_ms=2.501126 vnext_p95_ms=2.850683
+GATE5_QUERY phase=compacted label=medium hits=505 perf_p50_ms=0.151785 perf_p95_ms=0.205184 vnext_p50_ms=0.084845 vnext_p95_ms=0.098737
+GATE5_QUERY phase=compacted label=rare hits=2 perf_p50_ms=0.021051 perf_p95_ms=0.021632 vnext_p50_ms=0.010826 vnext_p95_ms=0.012028
+GATE5_QUERY phase=compacted label=zero hits=0 perf_p50_ms=0.022333 perf_p95_ms=0.022663 vnext_p50_ms=0.017996 vnext_p95_ms=0.019019
+GATE5_QUERY phase=compacted label=japanese hits=1341 perf_p50_ms=0.069403 perf_p95_ms=0.080219 vnext_p50_ms=0.078326 vnext_p95_ms=0.087380
+GATE5_QUERY phase=compacted label=long hits=1 perf_p50_ms=0.021071 perf_p95_ms=0.022193 vnext_p50_ms=0.027400 vnext_p95_ms=0.029534
+GATE5_QUERY phase=compacted label=boundary hits=1 perf_p50_ms=0.022774 perf_p95_ms=0.025437 vnext_p50_ms=0.021272 vnext_p95_ms=0.021782
+GATE5_QUERY phase=compacted label=filename hits=163 perf_p50_ms=0.184884 perf_p95_ms=0.230482 vnext_p50_ms=0.038377 vnext_p95_ms=0.057104
+GATE5_QUERY phase=compacted label=path_zero hits=0 perf_p50_ms=0.192836 perf_p95_ms=0.223772 vnext_p50_ms=0.001472 vnext_p95_ms=0.001622
+=== 100k partial scale smoke ===
+GATE5_BUILD docs=100000 perf_ms=3792.505 perf_bytes=389441369 vnext_ms=3190.372 vnext_bytes=269284229 vnext_segments=20
+GATE5_OPEN docs=100000 perf_p50_ms=89.777 vnext_p50_ms=86.933
+GATE5_QUERY phase=base label=q1 hits=100000 perf_p50_ms=0.596644 perf_p95_ms=0.596644 vnext_p50_ms=0.885923 vnext_p95_ms=0.885923
+GATE5_QUERY phase=base label=q2 hits=98927 perf_p50_ms=0.988044 perf_p95_ms=0.988044 vnext_p50_ms=0.904540 vnext_p95_ms=0.904540
+GATE5_QUERY phase=base label=common hits=98435 perf_p50_ms=0.671966 perf_p95_ms=0.671966 vnext_p50_ms=5.166355 vnext_p95_ms=5.166355
+GATE5_QUERY phase=base label=medium hits=1031 perf_p50_ms=0.284431 perf_p95_ms=0.284431 vnext_p50_ms=0.246125 vnext_p95_ms=0.246125
+GATE5_QUERY phase=base label=rare hits=4 perf_p50_ms=0.026650 perf_p95_ms=0.026650 vnext_p50_ms=0.022914 vnext_p95_ms=0.022914
+GATE5_QUERY phase=base label=zero hits=0 perf_p50_ms=0.029634 perf_p95_ms=0.029634 vnext_p50_ms=0.036404 vnext_p95_ms=0.036404
+GATE5_QUERY phase=base label=japanese hits=473 perf_p50_ms=0.094069 perf_p95_ms=0.094069 vnext_p50_ms=0.075852 vnext_p95_ms=0.075852
+GATE5_QUERY phase=base label=long hits=1 perf_p50_ms=0.025849 perf_p95_ms=0.025849 vnext_p50_ms=0.057134 vnext_p95_ms=0.057134
+GATE5_QUERY phase=base label=boundary hits=1 perf_p50_ms=0.030646 perf_p95_ms=0.030646 vnext_p50_ms=0.042403 vnext_p95_ms=0.042403
+GATE5_QUERY phase=base label=filename hits=334 perf_p50_ms=0.195329 perf_p95_ms=0.195329 vnext_p50_ms=0.089563 vnext_p95_ms=0.089563
+GATE5_QUERY phase=base label=path_zero hits=0 perf_p50_ms=0.122812 perf_p95_ms=0.122812 vnext_p50_ms=0.003815 vnext_p95_ms=0.003815
+GATE5_DELTA generation=1 changes=1 perf_ms=118.909 vnext_ms=8.864 perf_deltas=1 vnext_layers=2 segments=21
+GATE5_DELTA generation=2 changes=10 perf_ms=125.977 vnext_ms=10.270 perf_deltas=2 vnext_layers=3 segments=22
+GATE5_DELTA generation=3 changes=100 perf_ms=130.475 vnext_ms=19.278 perf_deltas=3 vnext_layers=4 segments=23
+GATE5_DELTA generation=4 changes=1000 perf_ms=133.592 vnext_ms=13.757 perf_deltas=4 vnext_layers=5 segments=24
+=== 100k filename runs ===
+--- /mnt/data/personalrag-gate5-retry/name100k_final3/run1.txt
+PERF_NAME100K docs=100000 segments=2 elapsed_ms=130.135 bytes=58777904
+VNEXT_NAME100K docs=100000 segments=2 elapsed_ms=110.240 bytes=14997704
+NAME_QUERY q=component_00042 hits=12 perf_p50_ms=0.048562 perf_p95_ms=0.049253 vnext_p50_ms=0.032068 vnext_p95_ms=0.039358
+NAME_QUERY q=group_0042 hits=25 perf_p50_ms=0.033850 perf_p95_ms=0.035122 vnext_p50_ms=0.039007 vnext_p95_ms=0.045868
+NAME_QUERY q=repeated_component_component_099999 hits=1 perf_p50_ms=0.011137 perf_p95_ms=0.011427 vnext_p50_ms=0.016354 vnext_p95_ms=0.019209
+NAME_QUERY q=png hits=100000 perf_p50_ms=0.501323 perf_p95_ms=0.518659 vnext_p50_ms=0.332403 vnext_p95_ms=0.345663
+NAME_QUERY q=missing_name_marker hits=0 perf_p50_ms=0.000190 perf_p95_ms=0.000201 vnext_p50_ms=0.000111 vnext_p95_ms=0.000130
+--- /mnt/data/personalrag-gate5-retry/name100k_final3/run2.txt
+PERF_NAME100K docs=100000 segments=2 elapsed_ms=121.920 bytes=58777904
+VNEXT_NAME100K docs=100000 segments=2 elapsed_ms=105.732 bytes=14997704
+NAME_QUERY q=component_00042 hits=12 perf_p50_ms=0.048372 perf_p95_ms=0.049003 vnext_p50_ms=0.031957 vnext_p95_ms=0.039288
+NAME_QUERY q=group_0042 hits=25 perf_p50_ms=0.033620 perf_p95_ms=0.034551 vnext_p50_ms=0.038988 vnext_p95_ms=0.043415
+NAME_QUERY q=repeated_component_component_099999 hits=1 perf_p50_ms=0.010636 perf_p95_ms=0.010876 vnext_p50_ms=0.016314 vnext_p95_ms=0.018567
+NAME_QUERY q=png hits=100000 perf_p50_ms=0.504538 perf_p95_ms=0.567211 vnext_p50_ms=0.278332 vnext_p95_ms=0.291452
+NAME_QUERY q=missing_name_marker hits=0 perf_p50_ms=0.000210 perf_p95_ms=0.000220 vnext_p50_ms=0.000110 vnext_p95_ms=0.000121
+--- /mnt/data/personalrag-gate5-retry/name100k_final3/run3.txt
+PERF_NAME100K docs=100000 segments=2 elapsed_ms=125.958 bytes=58777904
+VNEXT_NAME100K docs=100000 segments=2 elapsed_ms=127.567 bytes=14997704
+NAME_QUERY q=component_00042 hits=12 perf_p50_ms=0.048272 perf_p95_ms=0.048773 vnext_p50_ms=0.032057 vnext_p95_ms=0.045087
+NAME_QUERY q=group_0042 hits=25 perf_p50_ms=0.033350 perf_p95_ms=0.033640 vnext_p50_ms=0.038868 vnext_p95_ms=0.043454
+NAME_QUERY q=repeated_component_component_099999 hits=1 perf_p50_ms=0.010616 perf_p95_ms=0.010916 vnext_p50_ms=0.016355 vnext_p95_ms=0.018878
+NAME_QUERY q=png hits=100000 perf_p50_ms=0.502695 perf_p95_ms=0.528293 vnext_p50_ms=0.278393 vnext_p95_ms=0.294216
+NAME_QUERY q=missing_name_marker hits=0 perf_p50_ms=0.000190 perf_p95_ms=0.000200 vnext_p50_ms=0.000110 vnext_p95_ms=0.000130
+=== 50k RSS ===
+mode=unified docs=50000 elapsed_ms=5173.815 bytes=191441235
+	Command being timed: "./target/release/examples/unified_full_bench unified 50000 /tmp/pr-rss-perf50-final text"
+	User time (seconds): 15.89
+	System time (seconds): 2.98
+	Percent of CPU this job got: 255%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:07.39
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 372296
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 1
+	Minor (reclaiming a frame) page faults: 142764
+	Voluntary context switches: 105
+	Involuntary context switches: 365
+	Swaps: 0
+	File system inputs: 432
+	File system outputs: 374104
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+VNEXT_DURABLE_FULL docs=50000 segments=10 elapsed_ms=1772.781 bytes=132924638
+	Command being timed: "./target/release/examples/vnext_durable_full_bench 50000 /tmp/pr-rss-vnext50-final 5000"
+	User time (seconds): 1.90
+	System time (seconds): 0.48
+	Percent of CPU this job got: 119%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:02.00
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 229084
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 132963
+	Voluntary context switches: 135
+	Involuntary context switches: 50
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 259680
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

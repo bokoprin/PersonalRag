@@ -1,0 +1,16 @@
+{
+  "file_query": "ActionScript",
+  "include_path": true,
+  "content_query": "日本",
+  "extensions": [
+    "cpp",
+    "md"
+  ],
+  "path_scope": "src",
+  "match_case": false,
+  "whole_words": false,
+  "regex": false,
+  "sort_field": "path",
+  "sort_direction": "ascending",
+  "limit": 2000
+}

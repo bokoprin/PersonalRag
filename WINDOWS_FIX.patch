@@ -1,0 +1,212 @@
+diff -ruN --exclude target /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/bridge-core/src/engine.rs /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/bridge-core/src/engine.rs
+--- /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/bridge-core/src/engine.rs	2026-08-18 12:14:53.000000000 +0000
++++ /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/bridge-core/src/engine.rs	2026-08-21 07:29:10.254321738 +0000
+@@ -1107,9 +1107,7 @@
+                     content_path = Some(path);
+                     office_live.insert(file.display_path.clone(), cache_key);
+                 }
+-                Some(OfficePreparedContent::Extracted {
+-                    text, cache_key: _, ..
+-                }) => {
++                Some(OfficePreparedContent::Extracted { text, .. }) => {
+                     if !spool_created {
+                         fs::create_dir_all(spool_dir).map_err(|error| error.to_string())?;
+                         spool_created = true;
+@@ -1246,7 +1244,9 @@
+         .collect::<Vec<_>>();
+     initialize_vnext_generation_store(&store, &documents, VNEXT_SEGMENT_DOCS)
+         .map_err(|error| error.to_string())?;
+-    verify_vnext_generation_store(&store).map_err(|error| error.to_string())
++    verify_vnext_generation_store(&store)
++        .map(|_| ())
++        .map_err(|error| error.to_string())
+ }
+ 
+ fn publish_vnext_shadow_incremental(
+@@ -1265,7 +1265,9 @@
+             .map_err(|error| error.to_string())?;
+         let _ = gc_vnext_generation_store(&store, Duration::ZERO);
+     }
+-    verify_vnext_generation_store(&store).map_err(|error| error.to_string())
++    verify_vnext_generation_store(&store)
++        .map(|_| ())
++        .map_err(|error| error.to_string())
+ }
+ 
+ fn outcome_from_snapshot(
+@@ -2052,6 +2054,7 @@
+ mod policy_tests {
+     use std::{
+         fs,
++        path::{Path, PathBuf},
+         sync::{atomic::AtomicBool, Arc, Mutex},
+         thread,
+         time::{Duration, SystemTime},
+@@ -2068,7 +2071,7 @@
+         hydration_batch_budget, hydration_workers_for, vnext_store_dir,
+         IncrementalChangeSyncRequest, IncrementalSyncResult, IndexEngine, PortableEngine,
+         ProductionBackendMode, ProductionBackendTelemetry, SearchCatalogView,
+-        ShadowCompareExecutor, ShadowCompareJob, MIB,
++        ShadowCompareExecutor, ShadowCompareJob, ShadowCompareKey, MIB,
+     };
+ 
+     #[test]
+diff -ruN --exclude target /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/scripts/verify-and-build-windows.ps1 /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/scripts/verify-and-build-windows.ps1
+--- /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/scripts/verify-and-build-windows.ps1	2026-08-17 08:20:26.000000000 +0000
++++ /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/scripts/verify-and-build-windows.ps1	2026-08-21 07:33:09.712013088 +0000
+@@ -12,42 +12,52 @@
+     Write-Host "`n=== $Text ===" -ForegroundColor Cyan
+ }
+ 
++function Invoke-NativeChecked([string]$Command, [string[]]$Arguments) {
++    & $Command @Arguments
++    if ($LASTEXITCODE -ne 0) {
++        throw "Native command failed with exit code $LASTEXITCODE`: $Command $($Arguments -join ' ')"
++    }
++}
++
+ Step 'Tool versions'
+-node --version
+-npm --version
+-cargo --version
+-rustc --version
++Invoke-NativeChecked 'node' @('--version')
++Invoke-NativeChecked 'npm' @('--version')
++Invoke-NativeChecked 'cargo' @('--version')
++Invoke-NativeChecked 'rustc' @('--version')
+ 
+ Step 'Architecture boundary contract'
+ & (Join-Path $Root 'scripts\verify-boundaries.ps1')
++if ($LASTEXITCODE -ne 0) {
++    throw "Architecture boundary contract failed with exit code $LASTEXITCODE"
++}
+ 
+ Step 'Frontend install/test/build'
+ Push-Location $Frontend
+ try {
+-    npm ci
+-    npm test
+-    npm run build
++    Invoke-NativeChecked 'npm' @('ci')
++    Invoke-NativeChecked 'npm' @('test')
++    Invoke-NativeChecked 'npm' @('run', 'build')
+ } finally {
+     Pop-Location
+ }
+ 
+ Step 'Portable Search Core regression'
+-cargo fmt --manifest-path $SearchCore -- --check
+-cargo clippy --manifest-path $SearchCore --all-targets -- -D warnings
+-cargo test --manifest-path $SearchCore --locked
++Invoke-NativeChecked 'cargo' @('fmt', '--manifest-path', $SearchCore, '--', '--check')
++Invoke-NativeChecked 'cargo' @('clippy', '--manifest-path', $SearchCore, '--all-targets', '--', '-D', 'warnings')
++Invoke-NativeChecked 'cargo' @('test', '--manifest-path', $SearchCore, '--locked')
+ 
+ Step 'GUI bridge core regression'
+-cargo fmt --manifest-path $BridgeCore -- --check
+-cargo clippy --manifest-path $BridgeCore --all-targets -- -D warnings
+-cargo test --manifest-path $BridgeCore --locked
++Invoke-NativeChecked 'cargo' @('fmt', '--manifest-path', $BridgeCore, '--', '--check')
++Invoke-NativeChecked 'cargo' @('clippy', '--manifest-path', $BridgeCore, '--all-targets', '--', '-D', 'warnings')
++Invoke-NativeChecked 'cargo' @('test', '--manifest-path', $BridgeCore, '--locked')
+ 
+ Step 'Tauri bridge regression'
+-cargo fmt --manifest-path $Tauri -- --check
+-cargo clippy --manifest-path $Tauri --locked --all-targets -- -D warnings
+-cargo check --manifest-path $Tauri --locked
++Invoke-NativeChecked 'cargo' @('fmt', '--manifest-path', $Tauri, '--', '--check')
++Invoke-NativeChecked 'cargo' @('clippy', '--manifest-path', $Tauri, '--locked', '--all-targets', '--', '-D', 'warnings')
++Invoke-NativeChecked 'cargo' @('check', '--manifest-path', $Tauri, '--locked')
+ 
+ Step 'Windows release build'
+-cargo build --release --manifest-path $Tauri --locked
++Invoke-NativeChecked 'cargo' @('build', '--release', '--manifest-path', $Tauri, '--locked')
+ $Exe = Join-Path $Root 'src-tauri\target\release\personalrag-tauri.exe'
+ if (-not (Test-Path $Exe)) {
+     throw "Built executable not found: $Exe"
+diff -ruN --exclude target /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/search-core/src/vnext_generation_store.rs /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/search-core/src/vnext_generation_store.rs
+--- /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/search-core/src/vnext_generation_store.rs	2026-08-19 07:28:09.000000000 +0000
++++ /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/search-core/src/vnext_generation_store.rs	2026-08-21 07:29:10.078321734 +0000
+@@ -1,5 +1,7 @@
+ use std::collections::HashSet;
+-use std::fs::{self, File, OpenOptions};
++#[cfg(unix)]
++use std::fs::File;
++use std::fs::{self, OpenOptions};
+ use std::io::Write;
+ use std::path::{Component, Path, PathBuf};
+ use std::sync::{
+diff -ruN --exclude target /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/search-core/tests/production.rs /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/search-core/tests/production.rs
+--- /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/search-core/tests/production.rs	2026-08-18 12:11:13.000000000 +0000
++++ /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/search-core/tests/production.rs	2026-08-21 07:29:09.670762927 +0000
+@@ -793,6 +793,8 @@
+         with.search_content(b"::").unwrap(),
+         naive(&docs, b"::", false)
+     );
++    // Windows does not allow overwriting a file while an mmap-backed index still holds it open.
++    drop(with);
+ 
+     let sidecar = fixture.path().join("seg-00000.q2c");
+     let mut bytes = std::fs::read(&sidecar).unwrap();
+@@ -1166,6 +1168,9 @@
+         with.search_content(b"__missing_positional__").unwrap(),
+         Vec::<u32>::new()
+     );
++    // Release mmap-backed readers before intentionally corrupting the sidecar on Windows.
++    drop(session);
++    drop(with);
+ 
+     let sidecar = fixture.path().join(format!(
+         "seg-00000.{}",
+@@ -1257,6 +1262,9 @@
+         session.search_content(b"config").unwrap(),
+         naive(&docs, b"config", false)
+     );
++    // Release mmap-backed readers before intentionally corrupting the sidecar on Windows.
++    drop(session);
++    drop(with_pos2);
+ 
+     let sidecar = fixture.path().join("seg-00000.pos2");
+     make_writable(&sidecar).unwrap();
+@@ -1469,6 +1477,9 @@
+         expected.truncate(100);
+         assert_eq!(pos3.first_n(query, 100).unwrap(), expected);
+     }
++    // Release mmap-backed readers before intentionally corrupting the sidecar on Windows.
++    drop(pos3);
++    drop(lazy);
+ 
+     let sidecar = fixture.path().join("seg-00000.pos3");
+     make_writable(&sidecar).unwrap();
+diff -ruN --exclude target /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/src-tauri/src/main.rs /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/src-tauri/src/main.rs
+--- /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21_before_windows_fix/src-tauri/src/main.rs	2026-08-17 10:21:32.000000000 +0000
++++ /mnt/data/pr_fix/PersonalRag_FASTEST_2026-08-21/src-tauri/src/main.rs	2026-08-21 07:29:10.350321741 +0000
+@@ -6,8 +6,8 @@
+     path::{Path, PathBuf},
+     process::Command,
+     sync::{
+-        Arc, Mutex, RwLock,
+         atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering},
++        Arc, Mutex, RwLock,
+     },
+     thread,
+     time::{Instant, SystemTime, UNIX_EPOCH},
+@@ -15,12 +15,12 @@
+ 
+ use personalrag_gui_bridge_core::{
+     BackendReadiness, BackgroundRequest, BackgroundStatus, ContractInfo, DirectoryTrackingSnapshot,
+-    INGESTION_VERSION, IncrementalCatalogState, IncrementalChangeSyncRequest,
+-    IncrementalSyncRequest, IncrementalSyncResult, IndexBuildPhase, IndexEngine, IndexRequest,
+-    IndexResponse, PortableEngine, ProductionBackendMode, ProgressRateTracker, RebuildProgress,
+-    RebuildStatus, SearchBackendStatus, SearchCatalogView, SearchCoreBackendStatus, SearchEngine,
+-    SearchHit, SearchRequest, Settings, SnippetBatchRequest, SnippetBatchResult, SnippetHit,
+-    SnippetRequest, UsnCheckpoint, UsnScanResult,
++    IncrementalCatalogState, IncrementalChangeSyncRequest, IncrementalSyncRequest,
++    IncrementalSyncResult, IndexBuildPhase, IndexEngine, IndexRequest, IndexResponse,
++    PortableEngine, ProductionBackendMode, ProgressRateTracker, RebuildProgress, RebuildStatus,
++    SearchBackendStatus, SearchCatalogView, SearchCoreBackendStatus, SearchEngine, SearchHit,
++    SearchRequest, Settings, SnippetBatchRequest, SnippetBatchResult, SnippetHit, SnippetRequest,
++    UsnCheckpoint, UsnScanResult, INGESTION_VERSION,
+ };
+ use serde::{Deserialize, Serialize};
+ use tauri::{Manager, State};

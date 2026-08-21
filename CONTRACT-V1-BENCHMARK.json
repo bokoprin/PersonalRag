@@ -1,0 +1,23 @@
+{
+  "date": "2026-08-15",
+  "baseline": "PersonalRag_GUI_PortableCore_ProgressFix_2026-08-15",
+  "top_k_sort": {
+    "scenario": "50000 candidates, sort=size descending, limit=2000",
+    "baseline_median_ms": 17.680,
+    "optimized_median_ms": 13.794,
+    "improvement_percent": 21.98,
+    "speedup": 1.282,
+    "baseline_checksum": 52055000,
+    "optimized_checksum": 52055000
+  },
+  "snippet_batch": {
+    "scenario": "80 medium text files",
+    "sequential_median_ms": 83.102,
+    "batch_median_ms": 22.142,
+    "improvement_percent": 73.36,
+    "speedup": 3.753,
+    "tauri_ipc_before_max_calls": 100,
+    "tauri_ipc_after_calls": 1,
+    "max_workers": 4
+  }
+}

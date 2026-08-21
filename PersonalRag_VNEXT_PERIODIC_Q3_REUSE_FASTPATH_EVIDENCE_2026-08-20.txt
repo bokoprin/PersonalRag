@@ -1,0 +1,46 @@
+PersonalRag VNext Periodic Q3 Reuse FastPath - measurement evidence
+Date: 2026-08-20
+Baseline: VNextQ1FromQ2FastPath SHA-256 4a2b457f46c30bd588253e1dff2cecc5649c9f88287471e08c4e7f7a3e9e6621
+
+Environment:
+  Rust 1.97.1
+  taskset -c 0-3
+  cgroup cpu.max = 400000 100000
+  docs=20000, segment_docs=5000
+
+Final non-profile A/B:
+  512B  : base median 57.472 ms, candidate 56.596 ms, +1.52%, 6/11 wins
+  1KiB  : base median 76.432 ms, candidate 75.539 ms, +1.17%, 4/9 wins
+  2KiB  : base median 119.350 ms, candidate 105.960 ms, +11.22%, 7/9 wins
+  4KiB  : base median 164.454 ms, candidate 157.835 ms, +4.02%, 15/21 wins
+           pairwise improvement median +7.68%, mean +7.12%
+
+4KiB 21-pair raw base ms:
+  161.156 162.937 161.542 186.124 157.036 183.866 204.525 163.167 164.454 171.087 167.137 163.541 156.801 156.871 168.760 157.315 169.054 178.482 155.584 181.880 171.155
+4KiB 21-pair raw candidate ms:
+  162.311 148.664 145.175 143.513 165.953 158.570 170.725 164.126 151.818 157.879 144.982 155.106 141.955 157.835 149.114 148.295 158.934 147.067 158.032 183.212 165.956
+
+4KiB profile A/B (PR_PROFILE_BUILD=1 PR_PROFILE_Q3=1, 7 runs / 28 content segment samples):
+  end-to-end median: 189.329 -> 167.450 ms (+11.56%)
+  content q3 emit median: 29.7315 -> 7.854 ms (+73.58%)
+  candidate periodic skip: about 20.031M q3 occurrences / segment, 5000 blocks / segment in representative runs
+
+Durable byte identity:
+  PASS, all 6 files same names, sizes and SHA-256
+  CURRENT 0f8efc0100361ee96e4755f94397039f875bdffb0363cc10c31f2149b019b363
+  segment-00000.prseg2 0917d6164be3a3da8c2a26cfc372e68faa8d29035e89c79374ca189d3e2e6326
+  segment-00001.prseg2 3d831852b475b0616ecc6eb1020609aaf0cee4a522aaf31a3745b9b854dcb25a
+  segment-00002.prseg2 895d9ca33d92f76b0abd621f93647158c5500c648256c18123a0cf252c023f98
+  segment-00003.prseg2 3b0547fc3de87a29aaa232d0f72c518b0239de058051f44bae1f4134aa1c5ef4
+  manifest accc68ab9fa2d5aeda8414bd385ff17be982624b20208b176db32820b8de9f6b
+
+Final source quality gate before packaging:
+  cargo fmt -- --check                                  PASS
+  cargo clippy --offline --all-targets -- -D warnings  PASS
+  cargo test --offline                                  158 / 158 PASS
+  cargo build --offline --release                       PASS
+  pr_portable self-test                                 SELF_TEST_PASS
+
+bridge-core:
+  cargo check --offline stops before compilation because cached registry has no package `ignore`.
+  This is an environment/dependency-cache limitation and unchanged from the previous build.

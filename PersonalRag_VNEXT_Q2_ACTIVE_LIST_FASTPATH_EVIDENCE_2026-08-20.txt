@@ -1,0 +1,92 @@
+PersonalRag VNext Q2 Active-List FastPath Evidence
+Date: 2026-08-20
+
+BASELINE
+PersonalRag_GUI_PortableCore_VNextV6Xxh64FastPath_2026-08-20.zip
+SHA-256: 0fdb1a37bb1e3d980d206c9e9ed75a5a108bb1473360a2e3ab5380c358ef7c2d
+
+FINAL STATIC / REGRESSION GATE
+cargo fmt -- --check: PASS
+cargo clippy --offline --all-targets -- -D warnings: PASS
+cargo test --offline: 164 / 164 PASS
+cargo build --offline --release: PASS
+pr_portable self-test: SELF_TEST_PASS
+
+ADDED ORACLE TESTS
+- periodic_q2_active_lists_are_byte_identical_to_radix_oracle
+- periodic_q2_active_list_gate_requires_three_quarters_exact_proof
+
+TMPFS CPU PROFILE (CPU affinity 0-3, PR_PROFILE_BUILD=1, 7 runs each)
+baseline cq12_fused median: 7.4275 ms (n=28 segments)
+candidate cq12_fused median: 6.3970 ms (n=28 segments)
+cq12 reduction: 13.87%
+baseline end-to-end median: 72.229 ms (7 runs)
+candidate end-to-end median: 68.618 ms (7 runs)
+end-to-end reduction: 5.00%
+
+NORMAL DISK + sync_all(), 4KiB, alternating 21-pair A/B
+Baseline median: 148.061 ms
+Candidate median: 144.846 ms
+Median reduction: 2.17%
+Pairwise median reduction: 3.56%
+Candidate wins: 12 / 21
+Baseline mean: 153.849 ms
+Candidate mean: 146.190 ms
+
+RAW DISK A/B
+run	variant	elapsed_ms
+1	base	173.555
+1	cand	198.281
+2	cand	148.532
+2	base	163.149
+3	base	165.550
+3	cand	171.737
+4	cand	144.846
+4	base	164.912
+5	base	149.177
+5	cand	143.873
+6	cand	132.941
+6	base	148.061
+7	base	147.255
+7	cand	148.517
+8	cand	130.561
+8	base	151.480
+9	base	138.059
+9	cand	129.504
+10	cand	132.362
+10	base	156.410
+11	base	141.037
+11	cand	151.242
+12	cand	135.255
+12	base	142.298
+13	base	136.177
+13	cand	145.675
+14	cand	137.197
+14	base	146.714
+15	base	150.146
+15	cand	149.584
+16	cand	136.457
+16	base	244.997
+17	base	145.751
+17	cand	148.108
+18	cand	137.279
+18	base	149.886
+19	base	135.060
+19	cand	145.642
+20	cand	159.101
+20	base	143.921
+21	base	137.229
+21	cand	143.305
+
+DURABLE BYTE IDENTITY
+DURABLE_BYTE_IDENTITY=PASS
+Files compared: CURRENT + 4 .prseg2 + generation manifest
+All file names, lengths, and SHA-256 values matched.
+
+BASELINE/CANDIDATE FILE HASHES (same for both)
+0f8efc0100361ee96e4755f94397039f875bdffb0363cc10c31f2149b019b363  ./CURRENT
+dcc7165ae8a6cbcfa83ada7f1a1ce53c4ca06bb7dfb22504d9efdbd6faf4706e  ./components/base-g0000000000000000/segment-00000.prseg2
+48e826b3c30f5aef7f2947b2439825310e012c2b6df59d510279562724b6e045  ./components/base-g0000000000000000/segment-00001.prseg2
+d1886c45e4f811b5ed22d3831bf3f355ac53471c56f5bfdb2b7749e68ade2182  ./components/base-g0000000000000000/segment-00002.prseg2
+691c360dfb2ced8e972105af79bacb5652dbfa647cf7a67d8d1b3d2646687df7  ./components/base-g0000000000000000/segment-00003.prseg2
+accc68ab9fa2d5aeda8414bd385ff17be982624b20208b176db32820b8de9f6b  ./generations/g0000000000000000-base.manifest

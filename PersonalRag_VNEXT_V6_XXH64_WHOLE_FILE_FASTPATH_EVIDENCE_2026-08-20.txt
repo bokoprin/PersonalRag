@@ -1,0 +1,177 @@
+===== 4KiB 21-pair tmpfs A/B =====
+1	base	116.372
+1	cand	57.168
+2	cand	55.382
+2	base	112.080
+3	base	106.081
+3	cand	75.115
+4	cand	55.871
+4	base	104.031
+5	base	110.196
+5	cand	49.405
+6	cand	61.975
+6	base	98.808
+7	base	98.553
+7	cand	58.129
+8	cand	63.916
+8	base	104.629
+9	base	103.818
+9	cand	60.775
+10	cand	63.863
+10	base	113.409
+11	base	117.332
+11	cand	55.698
+12	cand	57.694
+12	base	97.123
+13	base	94.331
+13	cand	55.632
+14	cand	53.504
+14	base	122.949
+15	base	100.651
+15	cand	55.649
+16	cand	64.359
+16	base	102.912
+17	base	114.335
+17	cand	57.516
+18	cand	63.101
+18	base	118.145
+19	base	103.923
+19	cand	63.694
+20	cand	57.568
+20	base	108.891
+21	base	110.791
+21	cand	70.882
+
+===== payload 11-pair A/B =====
+512	1	base	55.886
+512	1	cand	43.387
+512	2	cand	42.961
+512	2	base	58.801
+512	3	base	51.301
+512	3	cand	42.693
+512	4	cand	42.406
+512	4	base	50.048
+512	5	base	50.274
+512	5	cand	42.151
+512	6	cand	36.507
+512	6	base	55.483
+512	7	base	50.422
+512	7	cand	42.522
+512	8	cand	39.224
+512	8	base	47.000
+512	9	base	55.856
+512	9	cand	42.525
+512	10	cand	49.303
+512	10	base	50.263
+512	11	base	50.611
+512	11	cand	42.643
+1024	1	base	62.566
+1024	1	cand	51.555
+1024	2	cand	51.610
+1024	2	base	81.653
+1024	3	base	75.210
+1024	3	cand	52.871
+1024	4	cand	51.727
+1024	4	base	70.460
+1024	5	base	63.571
+1024	5	cand	41.175
+1024	6	cand	52.673
+1024	6	base	71.055
+1024	7	base	50.325
+1024	7	cand	35.402
+1024	8	cand	50.183
+1024	8	base	74.720
+1024	9	base	50.576
+1024	9	cand	39.261
+1024	10	cand	38.349
+1024	10	base	49.748
+1024	11	base	49.667
+1024	11	cand	43.400
+2048	1	base	75.623
+2048	1	cand	58.425
+2048	2	cand	35.204
+2048	2	base	76.543
+2048	3	base	94.523
+2048	3	cand	38.785
+2048	4	cand	37.735
+2048	4	base	64.609
+2048	5	base	73.407
+2048	5	cand	41.393
+2048	6	cand	44.283
+2048	6	base	71.647
+2048	7	base	61.487
+2048	7	cand	47.409
+2048	8	cand	34.843
+2048	8	base	69.480
+2048	9	base	69.633
+2048	9	cand	47.156
+2048	10	cand	46.405
+2048	10	base	68.863
+2048	11	base	80.719
+2048	11	cand	43.849
+4096	1	base	114.506
+4096	1	cand	58.708
+4096	2	cand	74.685
+4096	2	base	131.034
+4096	3	base	102.476
+4096	3	cand	79.796
+4096	4	cand	56.194
+4096	4	base	109.274
+4096	5	base	99.957
+4096	5	cand	55.473
+4096	6	cand	50.292
+4096	6	base	98.221
+4096	7	base	127.264
+4096	7	cand	69.945
+4096	8	cand	57.685
+4096	8	base	115.100
+4096	9	base	135.993
+4096	9	cand	71.132
+4096	10	cand	61.748
+4096	10	base	103.767
+4096	11	base	103.812
+4096	11	cand	61.542
+
+===== normal disk 7-pair A/B =====
+1	base	271.801
+1	cand	231.956
+2	cand	229.365
+2	base	295.763
+3	base	299.437
+3	cand	228.064
+4	cand	216.567
+4	base	265.514
+5	base	256.523
+5	cand	230.842
+6	cand	216.011
+6	base	266.479
+7	base	276.990
+7	cand	216.984
+
+===== v6 build profile =====
+VNEXT_BUILD_PHASE segment=segment-00000.prseg2 docs=5000 cpu_budget=1 layout_ms=0.341 index_group_ms=17.552 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=4.362 cq3_ms=9.764 pq1_ms=0.881 pq2_ms=1.134 pq3_ms=1.408 encode_ms=0.044 checksum_ms=1.564 write_open_ms=0.025 write_stream_ms=12.674 write_sync_ms=0.002 write_rename_ms=0.024 write_ms=12.760 total_ms=32.262
+VNEXT_BUILD_PHASE segment=segment-00001.prseg2 docs=5000 cpu_budget=1 layout_ms=0.363 index_group_ms=18.545 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=5.358 cq3_ms=9.864 pq1_ms=0.943 pq2_ms=1.068 pq3_ms=1.309 encode_ms=0.034 checksum_ms=1.545 write_open_ms=0.011 write_stream_ms=12.446 write_sync_ms=0.000 write_rename_ms=0.007 write_ms=12.477 total_ms=32.965
+VNEXT_BUILD_PHASE segment=segment-00003.prseg2 docs=5000 cpu_budget=1 layout_ms=0.329 index_group_ms=23.122 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=5.251 cq3_ms=14.203 pq1_ms=1.123 pq2_ms=0.794 pq3_ms=1.748 encode_ms=0.026 checksum_ms=1.564 write_open_ms=0.020 write_stream_ms=10.077 write_sync_ms=0.001 write_rename_ms=0.010 write_ms=10.139 total_ms=35.182
+VNEXT_BUILD_PHASE segment=segment-00002.prseg2 docs=5000 cpu_budget=1 layout_ms=0.364 index_group_ms=31.193 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=5.283 cq3_ms=22.182 pq1_ms=1.052 pq2_ms=0.819 pq3_ms=1.855 encode_ms=0.028 checksum_ms=1.646 write_open_ms=0.011 write_stream_ms=9.919 write_sync_ms=0.001 write_rename_ms=0.010 write_ms=9.953 total_ms=43.186
+VNEXT_BUILD_PROFILE docs=20000 payload=4096 segments=4 elapsed_ms=79.373 bytes=87495475
+
+===== v6 q3 profile =====
+VNEXT_Q3_PHASE segment=segment-00002.prseg2 kind=content occurrences=20470000 radix_occurrences=436910 local_saved=20033090 local_blocks=5000 periodic_skip_occurrences=20031127 periodic_skip_blocks=5000 direct_blocks=0 sample_occurrences=65504 sample_duplicates=64101 unique_pairs=436910 emit_workers=1 shard_workers=1 emit_ms=7.645 shard_wall_ms=2.273 radix_prepare_cpu_ms=0.047 radix_count_cpu_ms=0.293 radix_prefix_cpu_ms=0.004 radix_scatter_cpu_ms=1.097 dedup_cpu_ms=0.124 encode_cpu_ms=0.681
+VNEXT_Q3_PHASE segment=segment-00002.prseg2 kind=path occurrences=90000 radix_occurrences=90000 local_saved=0 local_blocks=0 direct_blocks=0 sample_occurrences=0 sample_duplicates=0 unique_pairs=89840 emit_workers=1 shard_workers=1 emit_ms=0.946 shard_wall_ms=0.491 radix_prepare_cpu_ms=0.006 radix_count_cpu_ms=0.052 radix_prefix_cpu_ms=0.002 radix_scatter_cpu_ms=0.229 dedup_cpu_ms=0.031 encode_cpu_ms=0.163
+VNEXT_BUILD_PHASE segment=segment-00002.prseg2 docs=5000 cpu_budget=1 layout_ms=0.330 index_group_ms=18.995 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=5.311 cq3_ms=10.257 pq1_ms=0.999 pq2_ms=0.918 pq3_ms=1.507 encode_ms=0.025 checksum_ms=1.558 write_open_ms=0.019 write_stream_ms=9.213 write_sync_ms=0.002 write_rename_ms=0.023 write_ms=9.323 total_ms=30.233
+VNEXT_Q3_PHASE segment=segment-00003.prseg2 kind=content occurrences=20470000 radix_occurrences=437085 local_saved=20032915 local_blocks=5000 periodic_skip_occurrences=20031109 periodic_skip_blocks=5000 direct_blocks=0 sample_occurrences=65504 sample_duplicates=64104 unique_pairs=437085 emit_workers=1 shard_workers=1 emit_ms=14.750 shard_wall_ms=2.253 radix_prepare_cpu_ms=0.020 radix_count_cpu_ms=0.273 radix_prefix_cpu_ms=0.004 radix_scatter_cpu_ms=1.116 dedup_cpu_ms=0.124 encode_cpu_ms=0.690
+VNEXT_Q3_PHASE segment=segment-00003.prseg2 kind=path occurrences=90000 radix_occurrences=90000 local_saved=0 local_blocks=0 direct_blocks=0 sample_occurrences=0 sample_duplicates=0 unique_pairs=89901 emit_workers=1 shard_workers=1 emit_ms=0.415 shard_wall_ms=0.532 radix_prepare_cpu_ms=0.004 radix_count_cpu_ms=0.051 radix_prefix_cpu_ms=0.002 radix_scatter_cpu_ms=0.234 dedup_cpu_ms=0.047 encode_cpu_ms=0.185
+VNEXT_BUILD_PHASE segment=segment-00003.prseg2 docs=5000 cpu_budget=1 layout_ms=0.238 index_group_ms=24.146 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=4.510 cq3_ms=17.162 pq1_ms=0.954 pq2_ms=0.538 pq3_ms=0.981 encode_ms=0.027 checksum_ms=1.526 write_open_ms=0.010 write_stream_ms=9.403 write_sync_ms=0.002 write_rename_ms=0.012 write_ms=9.491 total_ms=35.429
+VNEXT_Q3_PHASE segment=segment-00001.prseg2 kind=content occurrences=20470000 radix_occurrences=437111 local_saved=20032889 local_blocks=5000 periodic_skip_occurrences=20031105 periodic_skip_blocks=5000 direct_blocks=0 sample_occurrences=65504 sample_duplicates=64104 unique_pairs=437111 emit_workers=1 shard_workers=1 emit_ms=8.236 shard_wall_ms=2.239 radix_prepare_cpu_ms=0.049 radix_count_cpu_ms=0.261 radix_prefix_cpu_ms=0.004 radix_scatter_cpu_ms=1.095 dedup_cpu_ms=0.125 encode_cpu_ms=0.681
+VNEXT_Q3_PHASE segment=segment-00001.prseg2 kind=path occurrences=90000 radix_occurrences=90000 local_saved=0 local_blocks=0 direct_blocks=0 sample_occurrences=0 sample_duplicates=0 unique_pairs=89863 emit_workers=1 shard_workers=1 emit_ms=1.003 shard_wall_ms=0.496 radix_prepare_cpu_ms=0.007 radix_count_cpu_ms=0.052 radix_prefix_cpu_ms=0.002 radix_scatter_cpu_ms=0.231 dedup_cpu_ms=0.030 encode_cpu_ms=0.165
+VNEXT_BUILD_PHASE segment=segment-00001.prseg2 docs=5000 cpu_budget=1 layout_ms=0.318 index_group_ms=23.710 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=9.541 cq3_ms=10.636 pq1_ms=1.079 pq2_ms=0.927 pq3_ms=1.525 encode_ms=0.027 checksum_ms=1.564 write_open_ms=0.016 write_stream_ms=11.989 write_sync_ms=0.001 write_rename_ms=0.012 write_ms=12.088 total_ms=37.709
+VNEXT_Q3_PHASE segment=segment-00000.prseg2 kind=content occurrences=20470000 radix_occurrences=435739 local_saved=20034261 local_blocks=5000 periodic_skip_occurrences=20031102 periodic_skip_blocks=5000 direct_blocks=0 sample_occurrences=65504 sample_duplicates=64122 unique_pairs=435739 emit_workers=1 shard_workers=1 emit_ms=17.082 shard_wall_ms=2.233 radix_prepare_cpu_ms=0.046 radix_count_cpu_ms=0.254 radix_prefix_cpu_ms=0.003 radix_scatter_cpu_ms=1.079 dedup_cpu_ms=0.143 encode_cpu_ms=0.685
+VNEXT_Q3_PHASE segment=segment-00000.prseg2 kind=path occurrences=90000 radix_occurrences=90000 local_saved=0 local_blocks=0 direct_blocks=0 sample_occurrences=0 sample_duplicates=0 unique_pairs=88628 emit_workers=1 shard_workers=1 emit_ms=0.652 shard_wall_ms=0.772 radix_prepare_cpu_ms=0.011 radix_count_cpu_ms=0.060 radix_prefix_cpu_ms=0.003 radix_scatter_cpu_ms=0.374 dedup_cpu_ms=0.053 encode_cpu_ms=0.259
+VNEXT_BUILD_PHASE segment=segment-00000.prseg2 docs=5000 cpu_budget=1 layout_ms=0.276 index_group_ms=32.841 cq1_ms=0.000 cq2_ms=0.000 cq12_fused_ms=10.065 cq3_ms=19.453 pq1_ms=1.039 pq2_ms=0.811 pq3_ms=1.468 encode_ms=0.052 checksum_ms=1.509 write_open_ms=0.019 write_stream_ms=10.455 write_sync_ms=0.002 write_rename_ms=0.020 write_ms=10.565 total_ms=45.246
+VNEXT_BUILD_PROFILE docs=20000 payload=4096 segments=4 elapsed_ms=75.121 bytes=87495475
+
+===== actual v5 compatibility =====
+actual v5 segment bytes=21869176
+actual v5 sha256=48e10f923e00ae1d1e4f62784be8e580848c76002f9f8d1522c2c002be95810e
+v6 converted-to-v5 sha256=48e10f923e00ae1d1e4f62784be8e580848c76002f9f8d1522c2c002be95810e
+BYTE_IDENTICAL=true

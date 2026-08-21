@@ -1,0 +1,10 @@
+{
+  "line_number": 12,
+  "before": [
+    "before"
+  ],
+  "hit_line": "token here",
+  "after": [
+    "after"
+  ]
+}

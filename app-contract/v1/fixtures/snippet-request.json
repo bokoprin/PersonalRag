@@ -1,0 +1,9 @@
+{
+  "path": "C:\\work\\src\\sample.cpp",
+  "query": "token",
+  "context": 1,
+  "maxHits": 10,
+  "matchCase": false,
+  "wholeWords": false,
+  "regex": false
+}

@@ -1,0 +1,40 @@
+# Rust build output
+**/target/
+
+# Node.js dependencies and build output
+**/node_modules/
+**/dist/
+**/build/
+
+# Local export and verification output
+/export/
+*.log
+*.tmp
+*.bak
+
+# Local databases and indexes
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment and local secret files
+.env
+.env.*
+!.env.example
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Native build artifacts outside target directories
+*.exe
+*.dll
+*.pdb
+*.obj
+*.lib
+*.o
+*.a
+*.so
+*.dylib

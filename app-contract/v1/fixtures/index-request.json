@@ -1,0 +1,20 @@
+{
+  "roots": [
+    "C:\\work"
+  ],
+  "maxBytes": 33554432,
+  "scannerMode": "auto",
+  "exclusions": {
+    "dev_caches": true,
+    "virtual_envs": true,
+    "node_modules": true,
+    "build_artifacts": true,
+    "vcs": true,
+    "use_gitignore": true,
+    "custom_directory_names": [],
+    "custom_relative_paths": [],
+    "custom_globs": [
+      "*.tmp"
+    ]
+  }
+}
