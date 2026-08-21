@@ -3,7 +3,7 @@ name: Windows build
 on:
   push:
     branches:
-      - fix/windows-build-20260821
+      - feat/build-stage-diagnostics
   workflow_dispatch:
 
 permissions:
@@ -35,24 +35,34 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Apply bridge-core Windows fixes
+      - name: Apply build-stage diagnostics feature
         shell: pwsh
         run: |
-          git apply --check ci/windows-build-fixes.patch 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            git apply ci/windows-build-fixes.patch
+          $applied = $false
+          $patches = Get-ChildItem ci/feature-patches/*.patch | Sort-Object Name
+          foreach ($patch in $patches) {
+            git apply --check $patch.FullName 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              git apply $patch.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Failed to apply $($patch.Name)" }
+              $applied = $true
+              continue
+            }
+            git apply --reverse --check $patch.FullName 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              throw "Patch neither applies nor is already applied: $($patch.Name)"
+            }
+          }
+          if ($applied) {
             cargo fmt --manifest-path bridge-core/Cargo.toml
+            cargo fmt --manifest-path src-tauri/Cargo.toml
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -- bridge-core/src/lib.rs bridge-core/src/engine.rs
-            git commit -m "Windowsビルドのbridge-core Clippyエラーを修正"
+            git add -- bridge-core/src/lib.rs bridge-core/src/engine.rs bridge-core/src/build_diagnostics.rs src-tauri/src/main.rs
+            git commit -m "インデックス作成のstage timing診断ログを追加"
             git push origin HEAD:${{ github.ref_name }}
           } else {
-            git apply --reverse --check ci/windows-build-fixes.patch 2>$null
-            if ($LASTEXITCODE -ne 0) {
-              throw "Windows build patch neither applies cleanly nor appears already applied"
-            }
-            Write-Host "Windows build source fixes are already applied."
+            Write-Host "Build-stage diagnostics source changes are already applied."
           }
 
       - name: Run full Windows verification and release build
