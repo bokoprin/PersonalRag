@@ -131,7 +131,7 @@ impl ShadowCompareExecutor {
                             .filter(|session| session.index().generation() == job.key.generation)
                             .map(Arc::new);
                         vnext =
-                            open_vnext_published_generation(&vnext_store_dir(&job.key.index_dir))
+                            open_vnext_published_generation(vnext_store_dir(&job.key.index_dir))
                                 .ok()
                                 .filter(|index| index.generation() == job.key.generation)
                                 .map(Arc::new);
@@ -1047,10 +1047,12 @@ fn office_extraction_service(
     max_file_bytes: u64,
 ) -> OfficeExtractionService {
     let tuning = recommend_system_build_tuning();
-    let mut config = OfficeExtractionConfig::default();
-    config.max_workers = tuning.logical_cpus.clamp(1, 4);
-    config.memory_budget_bytes =
-        (tuning.memory_budget_bytes / 8).clamp(64 * 1024 * 1024, 512 * 1024 * 1024);
+    let config = OfficeExtractionConfig {
+        max_workers: tuning.logical_cpus.clamp(1, 4),
+        memory_budget_bytes: (tuning.memory_budget_bytes / 8)
+            .clamp(64 * 1024 * 1024, 512 * 1024 * 1024),
+        ..Default::default()
+    };
     OfficeExtractionService::new(
         OfficeExtractionService::cache_root_for_index_path(index_or_build_dir),
         ExtractionBudget::from_max_file_bytes(max_file_bytes),

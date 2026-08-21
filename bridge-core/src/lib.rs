@@ -779,38 +779,6 @@ struct CandidateSearchRequest<'a> {
     generation_reader: Option<GenerationCandidateReader<'a>>,
 }
 
-fn smallest_rows_for_logical_hits(
-    logical_hits: Vec<u64>,
-    logical_to_row: &[u32],
-    limit: usize,
-) -> Result<Vec<u32>, String> {
-    use std::collections::BinaryHeap;
-
-    let mut rows = BinaryHeap::with_capacity(limit.saturating_add(1));
-    for logical_id in logical_hits {
-        let logical_index = usize::try_from(logical_id)
-            .map_err(|_| "logical document ID exceeds address space".to_owned())?;
-        let row = logical_to_row
-            .get(logical_index)
-            .copied()
-            .unwrap_or(u32::MAX);
-        if row == u32::MAX {
-            return Err(
-                "generation hit is missing from GUI logical catalog; rebuild index".to_owned(),
-            );
-        }
-        if rows.len() < limit {
-            rows.push(row);
-        } else if rows.peek().is_some_and(|largest| row < *largest) {
-            rows.pop();
-            rows.push(row);
-        }
-    }
-    let mut out = rows.into_vec();
-    out.sort_unstable();
-    Ok(out)
-}
-
 fn map_logical_hits_preserving_order(
     logical_hits: Vec<u64>,
     logical_to_row: &[u32],
