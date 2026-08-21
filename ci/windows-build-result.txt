@@ -1,5 +1,5 @@
-status=failure
-run_id=32484399446
-commit=3c96dd3f3e364f8837f2d4a98d7d9dc8eb50b3eb
-exe_exists=False
-exe_sha256=
+status=success
+run_id=32485514392
+commit=8c93ea9104953f7806295e4a032369620cc1185e
+exe_exists=True
+exe_sha256=047c8de0e21af08b1c105ccddb516e27a99cd770948bef90fcb4aaaaf0476914
