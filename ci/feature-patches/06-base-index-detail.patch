@@ -1,0 +1,303 @@
+--- a/search-core/src/builder.rs
++++ b/search-core/src/builder.rs
+@@ -207,6 +207,24 @@
+     pub current_path: Option<PathBuf>,
+ }
+ 
++#[derive(Clone, Copy, Debug, Default)]
++pub struct DiskPathBuildTimings {
++    pub hydration_wall: Duration,
++    pub hydration_read_work: Duration,
++    pub normalize_work: Duration,
++    pub segment_sample_work: Duration,
++    pub segment_core_work: Duration,
++    pub name_grams_work: Duration,
++    pub dedup_work: Duration,
++    pub content_grams_work: Duration,
++    pub content_post_work: Duration,
++    pub name_post_work: Duration,
++    pub segment_write_work: Duration,
++    pub acceleration_work: Duration,
++    pub manifest_write_wall: Duration,
++}
++
+ #[derive(Clone, Debug)]
+ pub struct DiskPathBuildReport {
+     pub build: BuildReport,
+@@ -220,6 +238,7 @@
+     pub processed_files: usize,
+     pub skipped_files: usize,
+     pub bytes_read: u64,
++    pub timings: DiskPathBuildTimings,
+ }
+@@ -358,6 +377,52 @@
+     }
+ }
+ 
++#[derive(Default)]
++struct BuildTimingAccumulator {
++    hydration_read_ns: AtomicU64,
++    normalize_ns: AtomicU64,
++    segment_sample_ns: AtomicU64,
++    segment_core_ns: AtomicU64,
++    name_grams_ns: AtomicU64,
++    dedup_ns: AtomicU64,
++    content_grams_ns: AtomicU64,
++    content_post_ns: AtomicU64,
++    name_post_ns: AtomicU64,
++    segment_write_ns: AtomicU64,
++    acceleration_ns: AtomicU64,
++}
++
++fn elapsed_ns(started: Instant) -> u64 {
++    started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64
++}
++
++fn record_elapsed(counter: &AtomicU64, started: Instant) {
++    counter.fetch_add(elapsed_ns(started), Ordering::Relaxed);
++}
++
++fn accumulated_duration(counter: &AtomicU64) -> Duration {
++    Duration::from_nanos(counter.load(Ordering::Relaxed))
++}
++
++impl BuildTimingAccumulator {
++    fn snapshot(&self, hydration_wall_ns: u64, manifest_write_ns: u64) -> DiskPathBuildTimings {
++        DiskPathBuildTimings {
++            hydration_wall: Duration::from_nanos(hydration_wall_ns),
++            hydration_read_work: accumulated_duration(&self.hydration_read_ns),
++            normalize_work: accumulated_duration(&self.normalize_ns),
++            segment_sample_work: accumulated_duration(&self.segment_sample_ns),
++            segment_core_work: accumulated_duration(&self.segment_core_ns),
++            name_grams_work: accumulated_duration(&self.name_grams_ns),
++            dedup_work: accumulated_duration(&self.dedup_ns),
++            content_grams_work: accumulated_duration(&self.content_grams_ns),
++            content_post_work: accumulated_duration(&self.content_post_ns),
++            name_post_work: accumulated_duration(&self.name_post_ns),
++            segment_write_work: accumulated_duration(&self.segment_write_ns),
++            acceleration_work: accumulated_duration(&self.acceleration_ns),
++            manifest_write_wall: Duration::from_nanos(manifest_write_ns),
++        }
++    }
++}
++
+ fn hydrate_disk_document<T: DiskPathSource>(
+     root: &Path,
+     canonical_root: &Path,
+     source: &T,
+     max_file_bytes: u64,
++    timings: Option<&BuildTimingAccumulator>,
+ ) -> Option<DocumentInput> {
+@@ -383,18 +448,20 @@
+-    let profile_build = profile_build_enabled();
+     let normalized_content = if source.index_content() {
+-        let read_started = profile_build.then(Instant::now);
++        let read_started = timings.map(|_| Instant::now());
+         let mut content = fs::read(source.content_path()).ok()?;
+-        if let Some(started) = read_started {
+-            PROFILE_HYDRATION_READ_NS.fetch_add(
+-                started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
+-                Ordering::Relaxed,
+-            );
++        if let (Some(timings), Some(started)) = (timings, read_started) {
++            record_elapsed(&timings.hydration_read_ns, started);
+         }
+-        let normalize_started = profile_build.then(Instant::now);
++        let normalize_started = timings.map(|_| Instant::now());
+         content.make_ascii_lowercase();
+-        if let Some(started) = normalize_started {
+-            PROFILE_HYDRATION_NORMALIZE_NS.fetch_add(
+-                started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
+-                Ordering::Relaxed,
+-            );
++        if let (Some(timings), Some(started)) = (timings, normalize_started) {
++            record_elapsed(&timings.normalize_ns, started);
+         }
+         content
+     } else {
+         Vec::new()
+     };
+-    let normalize_started = profile_build.then(Instant::now);
++    let normalize_started = timings.map(|_| Instant::now());
+     let normalized_name = fold_ascii(display.as_bytes());
+-    if let Some(started) = normalize_started {
+-        PROFILE_HYDRATION_NORMALIZE_NS.fetch_add(
+-            started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
+-            Ordering::Relaxed,
+-        );
++    if let (Some(timings), Some(started)) = (timings, normalize_started) {
++        record_elapsed(&timings.normalize_ns, started);
+     }
+@@ -408,8 +475,6 @@
+ }
+ 
+ static PROFILE_BUILD_ENABLED: OnceLock<bool> = OnceLock::new();
+-static PROFILE_HYDRATION_READ_NS: AtomicU64 = AtomicU64::new(0);
+-static PROFILE_HYDRATION_NORMALIZE_NS: AtomicU64 = AtomicU64::new(0);
+ 
+ fn profile_build_enabled() -> bool {
+@@ -439,6 +504,7 @@
+     max_file_bytes: u64,
+     workers: usize,
+     cancel: Option<&AtomicBool>,
++    timings: Option<&BuildTimingAccumulator>,
+     mut on_progress: F,
+ ) -> Result<Vec<Option<DocumentInput>>>
+@@ -487,6 +553,7 @@
+                 canonical_root,
+                 source,
+                 max_file_bytes,
++                timings,
+             ));
+@@ -521,6 +588,7 @@
+                         canonical_root,
+                         source,
+                         max_file_bytes,
++                        timings,
+                     ));
+@@ -612,6 +680,7 @@
+         max_file_bytes,
+         workers,
+         None,
++        None,
+         |_| {},
+     )
+ }
+@@ -674,6 +743,7 @@
+     build_workers: usize,
+     durable: bool,
+     retain_documents: bool,
++    timings: Option<&BuildTimingAccumulator>,
+ ) -> Result<(ManifestEntry, Option<Vec<DocumentInput>>)> {
+@@ -682,6 +752,9 @@
+     let sample_started = Instant::now();
+     let sample = sample_stats(&task.documents);
+     let sample_ms = sample_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.segment_sample_ns.fetch_add((sample_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -696,7 +769,11 @@
+     let collect_q2 = should_collect_q2_seed(acceleration, &task.documents);
+     let base_started = Instant::now();
+-    let mut data = build_segment_data_slice_impl(&task.documents, task.doc_base, kind, collect_q2)?;
++    let mut data = build_segment_data_slice_impl(
++        &task.documents, task.doc_base, kind, collect_q2, timings,
++    )?;
+     let base_ms = base_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.segment_core_ns.fetch_add((base_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -706,6 +783,9 @@
+     let written = write_segment(&path, &data, durable)?;
+     let base_write_ms = base_write_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.segment_write_ns.fetch_add((base_write_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -736,6 +816,9 @@
+     let accel_ms = if acceleration == AccelerationProfile::None {
+         0.0
+     } else {
+         accel_started.elapsed().as_secs_f64() * 1000.0
+     };
++    if let Some(timings) = timings {
++        timings.acceleration_ns.fetch_add((accel_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -1001,12 +1084,9 @@
+     fs::create_dir_all(output_dir)?;
+     let started = Instant::now();
+     let profile_build = profile_build_enabled();
+-    if profile_build {
+-        PROFILE_HYDRATION_READ_NS.store(0, Ordering::Relaxed);
+-        PROFILE_HYDRATION_NORMALIZE_NS.store(0, Ordering::Relaxed);
+-    }
++    let timings = BuildTimingAccumulator::default();
+     let mut hydration_wall_ns = 0u64;
+@@ -1037,6 +1117,7 @@
+                             build_workers,
+                             durable,
+                             retain_documents,
++                            Some(&timings),
+                         );
+@@ -1093,6 +1174,7 @@
+                     scan_workers,
+                     cancel,
++                    Some(&timings),
+                     |hydration| {
+@@ -1198,7 +1280,9 @@
+-    write_manifest(output_dir, options.mode, total_docs, &entries, durable)?;
++    let manifest_started = Instant::now();
++    write_manifest(output_dir, options.mode, total_docs, &entries, durable)?;
++    let manifest_write_ns = elapsed_ns(manifest_started);
+@@ -1224,9 +1308,9 @@
+             "BUILD_HYDRATION source_files={} docs={} read_ms={:.3} normalize_ms={:.3} wall_ms={:.3}",
+             source_files,
+             total_docs,
+-            PROFILE_HYDRATION_READ_NS.load(Ordering::Relaxed) as f64 / 1_000_000.0,
+-            PROFILE_HYDRATION_NORMALIZE_NS.load(Ordering::Relaxed) as f64 / 1_000_000.0,
++            timings.hydration_read_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0,
++            timings.normalize_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0,
+             hydration_wall_ns as f64 / 1_000_000.0,
+         );
+@@ -1242,6 +1326,7 @@
+             skipped_files: progress.skipped_files,
+             bytes_read: progress.bytes_read,
++            timings: timings.snapshot(hydration_wall_ns, manifest_write_ns),
+         },
+@@ -1305,6 +1390,7 @@
+             1,
+             self.durable,
+             false,
++            None,
+         )?;
+@@ -1438,11 +1524,12 @@
+     let mut data = build_segment_data_slice_impl(
+         segment_docs,
+         begin,
+         kind,
+         should_collect_q2_seed(acceleration, segment_docs),
++        None,
+     )?;
+@@ -1507,6 +1594,7 @@
+     doc_base: usize,
+     kind: BuilderKind,
+     collect_q2: bool,
++    timings: Option<&BuildTimingAccumulator>,
+ ) -> Result<SegmentData> {
+@@ -1532,6 +1620,9 @@
+     }
+     let name_grams_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.name_grams_ns.fetch_add((name_grams_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -1569,6 +1660,9 @@
+     }
+     let dedup_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.dedup_ns.fetch_add((dedup_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -1640,6 +1734,9 @@
+     }
+     let content_grams_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.content_grams_ns.fetch_add((content_grams_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -1653,6 +1750,9 @@
+     };
+     let content_post_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.content_post_ns.fetch_add((content_post_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+@@ -1667,6 +1767,9 @@
+     };
+     let name_post_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
++    if let Some(timings) = timings {
++        timings.name_post_ns.fetch_add((name_post_ms * 1_000_000.0) as u64, Ordering::Relaxed);
++    }
+--- a/search-core/src/lib.rs
++++ b/search-core/src/lib.rs
+@@ -19,7 +19,7 @@
+ pub use builder::{
+     BuildMode, BuildOptions, BuildReport, BuildTuning, DiskPathBuildConfig, DiskPathBuildProgress,
+-    DiskPathBuildReport, DiskPathInput, build_disk_corpus, build_disk_corpus_parallel,
++    DiskPathBuildReport, DiskPathBuildTimings, DiskPathInput, build_disk_corpus, build_disk_corpus_parallel,
+     build_disk_index_pipelined, build_disk_index_pipelined_benchmark,
