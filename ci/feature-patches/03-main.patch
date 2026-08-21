@@ -1,0 +1,382 @@
+--- a/src-tauri/src/main.rs
++++ b/src-tauri/src/main.rs
+@@ -16,11 +16,11 @@
+ use personalrag_gui_bridge_core::{
+     BackendReadiness, BackgroundRequest, BackgroundStatus, ContractInfo, DirectoryTrackingSnapshot,
+     IncrementalCatalogState, IncrementalChangeSyncRequest, IncrementalSyncRequest,
+-    IncrementalSyncResult, IndexBuildPhase, IndexEngine, IndexRequest, IndexResponse,
+-    PortableEngine, ProductionBackendMode, ProgressRateTracker, RebuildProgress, RebuildStatus,
+-    SearchBackendStatus, SearchCatalogView, SearchCoreBackendStatus, SearchEngine, SearchHit,
+-    SearchRequest, Settings, SnippetBatchRequest, SnippetBatchResult, SnippetHit, SnippetRequest,
+-    UsnCheckpoint, UsnScanResult, INGESTION_VERSION,
++    IncrementalSyncResult, IndexBuildDiagnosticLog, IndexBuildPhase, IndexEngine, IndexRequest,
++    IndexResponse, PortableEngine, ProductionBackendMode, ProgressRateTracker, RebuildProgress,
++    RebuildStatus, SearchBackendStatus, SearchCatalogView, SearchCoreBackendStatus, SearchEngine,
++    SearchHit, SearchRequest, Settings, SnippetBatchRequest, SnippetBatchResult, SnippetHit,
++    SnippetRequest, UsnCheckpoint, UsnScanResult, INGESTION_VERSION,
+ };
+ use serde::{Deserialize, Serialize};
+ use tauri::{Manager, State};
+@@ -30,6 +30,7 @@
+ const CHANGE_TRACKER_FILE: &str = "change-tracker-v1.json";
+ const CHANGE_TRACKER_VERSION: u32 = 1;
+ const INDEX_PIPELINE_VERSION: u32 = 2;
++const DIAGNOSTICS_DIR: &str = "diagnostics";
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+ struct Catalog {
+@@ -131,6 +132,10 @@
+         .as_millis()
+ }
+ 
++fn now_millis_u64() -> u64 {
++    u64::try_from(now_millis()).unwrap_or(u64::MAX)
++}
++
+ fn persist_settings(path: &Path, settings: &Settings) -> Result<(), String> {
+     if let Some(parent) = path.parent() {
+         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+@@ -382,8 +387,9 @@
+         }
+     }
+ 
+-    let job_id = format!("portable-{}", now_millis());
+-    let started_at = now_millis().to_string();
++    let started_at_ms = now_millis_u64();
++    let job_id = format!("portable-{started_at_ms}");
++    let started_at = started_at_ms.to_string();
+     *state
+         .rebuild
+         .lock()
+@@ -412,6 +418,16 @@
+     let build_job_id = job_id.clone();
+     thread::spawn(move || {
+         let started = Instant::now();
++        let diagnostics_dir = app_data_dir.join(DIAGNOSTICS_DIR);
++        let mut diagnostics = IndexBuildDiagnosticLog::new(
++            build_job_id.clone(),
++            &root,
++            force_full,
++            settings.scanner_mode.clone(),
++            settings.search_core_backend.clone(),
++            settings.max_bytes,
++            started_at_ms,
++        );
+         let build_dir = app_data_dir.join(format!("portable-index-build-{build_job_id}"));
+         let result = (|| -> Result<Catalog, String> {
+             if build_dir.exists() {
+@@ -434,16 +450,30 @@
+                             status.progress.unchanged_files = previous_catalog.paths.len();
+                             status.progress.current_path = Some("NTFS USN Journal".to_owned());
+                         });
+-                        match engine.scan_changes(
++                        let journal_scan_started = Instant::now();
++                        let journal_scan = engine.scan_changes(
+                             &root,
+                             tracker.checkpoint,
+                             &tracker.directories,
+                             settings.max_bytes,
+                             &settings.exclusions,
+-                        )? {
++                        );
++                        diagnostics.record_stage(
++                            "journal.scan_changes",
++                            journal_scan_started.elapsed().as_secs_f64() * 1_000.0,
++                        );
++                        match journal_scan? {
+                             UsnScanResult::NoChanges { checkpoint } => {
++                                diagnostics.mode = "incremental_usn_no_changes".to_owned();
++                                diagnostics.source_files = previous_catalog.paths.len();
++                                diagnostics.indexed_files = previous_catalog.paths.len();
+                                 tracker.checkpoint = checkpoint;
++                                let tracker_save_started = Instant::now();
+                                 save_change_tracker(&index_dir, &tracker)?;
++                                diagnostics.record_stage(
++                                    "journal.save_change_tracker",
++                                    tracker_save_started.elapsed().as_secs_f64() * 1_000.0,
++                                );
+                                 *catalog_cache
+                                     .lock()
+                                     .map_err(|_| "catalog lock poisoned".to_owned())? =
+@@ -488,7 +518,8 @@
+                                         status.progress.elapsed_ms = elapsed;
+                                     });
+                                 };
+-                                match engine.sync_incremental_changes(
++                                let journal_sync_started = Instant::now();
++                                let journal_sync = engine.sync_incremental_changes(
+                                     IncrementalChangeSyncRequest {
+                                         root: &root,
+                                         upserts: &changes.upserts,
+@@ -499,13 +530,29 @@
+                                     },
+                                     cancel.as_ref(),
+                                     &mut on_fast_progress,
+-                                )? {
++                                );
++                                diagnostics.record_stage(
++                                    "journal.incremental_sync",
++                                    journal_sync_started.elapsed().as_secs_f64() * 1_000.0,
++                                );
++                                match journal_sync? {
+                                     IncrementalSyncResult::Applied(build)
+                                     | IncrementalSyncResult::Unchanged(build) => {
++                                        diagnostics.mode = "incremental_usn".to_owned();
++                                        diagnostics.source_files = build.source_files;
++                                        diagnostics.processed_files = build.processed_files;
++                                        diagnostics.indexed_files = build.indexed_files;
++                                        diagnostics.skipped_files = build.skipped_files;
++                                        diagnostics.bytes_read = build.bytes_read;
+                                         let processed = build.processed_files;
+                                         let source_files = build.source_files;
+                                         let catalog = catalog_from_build(&root, &settings, build)?;
++                                        let catalog_save_started = Instant::now();
+                                         save_catalog(&index_dir, &catalog)?;
++                                        diagnostics.record_stage(
++                                            "journal.save_catalog",
++                                            catalog_save_started.elapsed().as_secs_f64() * 1_000.0,
++                                        );
+                                         let next_tracker = change_tracker_from_parts(
+                                             &root,
+                                             &settings,
+@@ -513,7 +560,12 @@
+                                             next_checkpoint,
+                                             next_directories,
+                                         )?;
++                                        let tracker_save_started = Instant::now();
+                                         save_change_tracker(&index_dir, &next_tracker)?;
++                                        diagnostics.record_stage(
++                                            "journal.save_change_tracker",
++                                            tracker_save_started.elapsed().as_secs_f64() * 1_000.0,
++                                        );
+                                         *catalog_cache
+                                             .lock()
+                                             .map_err(|_| "catalog lock poisoned".to_owned())? =
+@@ -557,7 +609,12 @@
+                 }
+             }
+ 
++            let checkpoint_started = Instant::now();
+             let scan_checkpoint = engine.capture_change_checkpoint(&root).ok().flatten();
++            diagnostics.record_stage(
++                "scan.capture_checkpoint",
++                checkpoint_started.elapsed().as_secs_f64() * 1_000.0,
++            );
+             update_rebuild(&rebuild, |status| {
+                 status.state = "scanning".to_owned();
+                 status.progress.phase = "scanning".to_owned();
+@@ -602,14 +659,24 @@
+                         status.progress.prepared_bytes = 0;
+                     });
+                 });
+-            let scan = engine.scan(
++            let full_scan_started = Instant::now();
++            let scan_result = engine.scan(
+                 &root,
+                 settings.max_bytes,
+                 &settings.scanner_mode,
+                 &settings.exclusions,
+                 Arc::clone(&cancel),
+                 scan_progress,
+-            )?;
++            );
++            diagnostics.record_stage(
++                "scan.full",
++                full_scan_started.elapsed().as_secs_f64() * 1_000.0,
++            );
++            let scan = scan_result?;
++            diagnostics.discovered_files = scan.progress.discovered_entries;
++            diagnostics.source_files = scan.files.len();
++            diagnostics.pruned_files = scan.progress.pruned_entries;
++            diagnostics.error_files = scan.progress.error_entries;
+             if cancel.load(AtomicOrdering::Acquire) {
+                 return Err("cancelled".to_owned());
+             }
+@@ -673,7 +740,8 @@
+                         let write_guard = index_access
+                             .write()
+                             .map_err(|_| "index access lock poisoned".to_owned())?;
+-                        match engine.sync_incremental(
++                        let incremental_sync_started = Instant::now();
++                        let incremental_sync = engine.sync_incremental(
+                             IncrementalSyncRequest {
+                                 root: &root,
+                                 files: &scan.files,
+@@ -683,9 +751,20 @@
+                             },
+                             cancel.as_ref(),
+                             &mut on_build_progress,
+-                        )? {
++                        );
++                        diagnostics.record_stage(
++                            "incremental.sync_after_scan",
++                            incremental_sync_started.elapsed().as_secs_f64() * 1_000.0,
++                        );
++                        match incremental_sync? {
+                             IncrementalSyncResult::Applied(build)
+                             | IncrementalSyncResult::Unchanged(build) => {
++                                diagnostics.mode = "incremental_full_scan".to_owned();
++                                diagnostics.source_files = build.source_files;
++                                diagnostics.processed_files = build.processed_files;
++                                diagnostics.indexed_files = build.indexed_files;
++                                diagnostics.skipped_files = build.skipped_files;
++                                diagnostics.bytes_read = build.bytes_read;
+                                 if cancel.load(AtomicOrdering::Acquire) {
+                                     return Err("cancelled".to_owned());
+                                 }
+@@ -704,7 +783,12 @@
+                                     status.progress.current_path = None;
+                                 });
+                                 let catalog = catalog_from_build(&root, &settings, build)?;
++                                let catalog_save_started = Instant::now();
+                                 save_catalog(&index_dir, &catalog)?;
++                                diagnostics.record_stage(
++                                    "incremental.save_catalog",
++                                    catalog_save_started.elapsed().as_secs_f64() * 1_000.0,
++                                );
+                                 if let (Some(checkpoint), Some(directories)) =
+                                     (scan_checkpoint, scan_directory_tracking.clone())
+                                 {
+@@ -715,7 +799,12 @@
+                                         checkpoint,
+                                         directories,
+                                     )?;
++                                    let tracker_save_started = Instant::now();
+                                     save_change_tracker(&index_dir, &tracker)?;
++                                    diagnostics.record_stage(
++                                        "incremental.save_change_tracker",
++                                        tracker_save_started.elapsed().as_secs_f64() * 1_000.0,
++                                    );
+                                 } else {
+                                     remove_change_tracker(&index_dir);
+                                 }
+@@ -740,14 +829,30 @@
+                 }
+             }
+ 
+-            let build = engine.build(
++            diagnostics.mode = "full_rebuild".to_owned();
++            let engine_build_started = Instant::now();
++            let build_result = engine.build(
+                 &root,
+                 scan.files,
+                 &build_dir,
+                 settings.max_bytes,
+                 cancel.as_ref(),
+                 &mut on_build_progress,
+-            )?;
++            );
++            let engine_build_ms = engine_build_started.elapsed().as_secs_f64() * 1_000.0;
++            let build = match build_result {
++                Ok(build) => build,
++                Err(error) => {
++                    diagnostics.record_stage("build.failed_wall", engine_build_ms);
++                    return Err(error);
++                }
++            };
++            diagnostics.extend_stages(build.stage_timings.clone());
++            diagnostics.source_files = build.source_files;
++            diagnostics.processed_files = build.processed_files;
++            diagnostics.indexed_files = build.indexed_files;
++            diagnostics.skipped_files = build.skipped_files;
++            diagnostics.bytes_read = build.bytes_read;
+             if cancel.load(AtomicOrdering::Acquire) {
+                 return Err("cancelled".to_owned());
+             }
+@@ -770,7 +875,12 @@
+                 status.progress.phase = "verifying".to_owned();
+                 status.progress.current_path = None;
+             });
++            let catalog_save_started = Instant::now();
+             save_catalog(&build_dir, &catalog)?;
++            diagnostics.record_stage(
++                "build.save_catalog",
++                catalog_save_started.elapsed().as_secs_f64() * 1_000.0,
++            );
+             if let (Some(checkpoint), Some(directories)) =
+                 (scan_checkpoint, scan_directory_tracking)
+             {
+@@ -781,18 +891,28 @@
+                     checkpoint,
+                     directories,
+                 )?;
++                let tracker_save_started = Instant::now();
+                 save_change_tracker(&build_dir, &tracker)?;
++                diagnostics.record_stage(
++                    "build.save_change_tracker",
++                    tracker_save_started.elapsed().as_secs_f64() * 1_000.0,
++                );
+             }
+ 
+             update_rebuild(&rebuild, |status| {
+                 status.progress.phase = "publishing".to_owned();
+                 status.progress.current_path = None;
+             });
++            let publish_started = Instant::now();
+             let _write_guard = index_access
+                 .write()
+                 .map_err(|_| "index access lock poisoned".to_owned())?;
+             engine.invalidate_search_cache()?;
+             publish_index(&build_dir, &index_dir)?;
++            diagnostics.record_stage(
++                "build.publish_index",
++                publish_started.elapsed().as_secs_f64() * 1_000.0,
++            );
+             *catalog_cache
+                 .lock()
+                 .map_err(|_| "catalog lock poisoned".to_owned())? = Some(Arc::new(catalog.clone()));
+@@ -800,8 +920,10 @@
+         })();
+ 
+         let elapsed = started.elapsed().as_secs_f64() * 1_000.0;
++        let finished_at_ms = now_millis_u64();
+         match result {
+             Ok(_catalog) => {
++                diagnostics.finish("completed", finished_at_ms, elapsed, None);
+                 update_rebuild(&rebuild, |status| {
+                     status.state = "completed".to_owned();
+                     status.progress.phase = "completed".to_owned();
+@@ -810,33 +932,39 @@
+                     status.progress.remaining_files = Some(0);
+                     status.progress.queue_files = 0;
+                     status.progress.eta_ms = Some(0.0);
+-                    status.progress.estimated_completion_at_ms = Some(now_millis() as f64);
++                    status.progress.estimated_completion_at_ms = Some(finished_at_ms as f64);
+                     status.progress.current_path = None;
+-                    status.finished_at = Some(now_millis().to_string());
++                    status.finished_at = Some(finished_at_ms.to_string());
+                     status.error = None;
+                 });
+             }
+             Err(error) if error == "cancelled" => {
++                diagnostics.finish("cancelled", finished_at_ms, elapsed, None);
+                 let _ = fs::remove_dir_all(&build_dir);
+                 update_rebuild(&rebuild, |status| {
+                     status.state = "cancelled".to_owned();
+                     status.progress.elapsed_ms = elapsed;
+                     status.progress.current_path = None;
+-                    status.finished_at = Some(now_millis().to_string());
++                    status.finished_at = Some(finished_at_ms.to_string());
+                     status.error = None;
+                 });
+             }
+             Err(error) => {
++                diagnostics.finish("failed", finished_at_ms, elapsed, Some(error.clone()));
+                 let _ = fs::remove_dir_all(&build_dir);
+                 update_rebuild(&rebuild, |status| {
+                     status.state = "failed".to_owned();
+                     status.progress.elapsed_ms = elapsed;
+                     status.progress.current_path = None;
+-                    status.finished_at = Some(now_millis().to_string());
++                    status.finished_at = Some(finished_at_ms.to_string());
+                     status.error = Some(error.clone());
+                 });
+             }
+         }
++        match diagnostics.write_json(&diagnostics_dir) {
++            Ok(path) => eprintln!("INDEX_BUILD_DIAGNOSTIC path={}", path.display()),
++            Err(error) => eprintln!("INDEX_BUILD_DIAGNOSTIC_WRITE_FAILED error={error}"),
++        }
+     });
+ 
+     Ok((
