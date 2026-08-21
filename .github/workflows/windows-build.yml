@@ -1,0 +1,85 @@
+name: Windows build
+
+on:
+  push:
+    branches:
+      - fix/windows-build-20260821
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
+          rustup default 1.97.1
+          rustc --version
+          cargo --version
+
+      - name: Apply bridge-core Windows fixes
+        shell: pwsh
+        run: |
+          git apply --check ci/windows-build-fixes.patch 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            git apply ci/windows-build-fixes.patch
+            cargo fmt --manifest-path bridge-core/Cargo.toml
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- bridge-core/src/lib.rs bridge-core/src/engine.rs
+            git commit -m "Windowsビルドのbridge-core Clippyエラーを修正"
+            git push origin HEAD:${{ github.ref_name }}
+          } else {
+            git apply --reverse --check ci/windows-build-fixes.patch 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows build patch neither applies cleanly nor appears already applied"
+            }
+            Write-Host "Windows build source fixes are already applied."
+          }
+
+      - name: Run full Windows verification and release build
+        shell: powershell
+        run: |
+          .\scripts\verify-and-build-windows.ps1
+
+      - name: Verify executable and calculate SHA-256
+        shell: pwsh
+        run: |
+          $exe = "src-tauri\target\release\personalrag-tauri.exe"
+          if (-not (Test-Path $exe)) {
+            throw "Built executable not found: $exe"
+          }
+          $hash = (Get-FileHash -Algorithm SHA256 $exe).Hash.ToLowerInvariant()
+          "PERSONALRAG_EXE_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PersonalRag Windows executable SHA-256: $hash" | Out-File -FilePath windows-build-info.txt -Encoding utf8
+          "### Windows release build" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- executable: ``personalrag-tauri.exe``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          "- SHA-256: ``$hash``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Upload Windows executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersonalRag-Windows-x64
+          path: |
+            src-tauri/target/release/personalrag-tauri.exe
+            windows-build-info.txt
+          if-no-files-found: error
+          retention-days: 7
