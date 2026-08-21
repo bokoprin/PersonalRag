@@ -65,6 +65,18 @@ jobs:
             Write-Host "Build-stage diagnostics source changes are already applied."
           }
 
+      - name: Refresh Tauri lockfile after bridge dependency change
+        shell: pwsh
+        run: |
+          cargo check --manifest-path src-tauri/Cargo.toml
+          if (-not (git diff --quiet -- src-tauri/Cargo.lock)) {
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- src-tauri/Cargo.lock
+            git commit -m "stage診断依存に合わせてTauri lockfileを更新"
+            git push origin HEAD:${{ github.ref_name }}
+          }
+
       - name: Run full Windows verification and release build
         shell: powershell
         run: |
