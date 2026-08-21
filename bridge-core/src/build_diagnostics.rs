@@ -5,7 +5,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-pub const INDEX_BUILD_DIAGNOSTIC_SCHEMA_VERSION: u32 = 1;
+pub const INDEX_BUILD_DIAGNOSTIC_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -39,7 +39,11 @@ pub struct IndexBuildDiagnosticLog {
     pub started_at_unix_ms: u64,
     pub finished_at_unix_ms: Option<u64>,
     pub total_ms: f64,
-    pub discovered_files: usize,
+    pub discovered_entries: usize,
+    pub discovered_file_entries: usize,
+    pub discovered_directory_entries: usize,
+    pub discovered_other_entries: usize,
+    pub unselected_file_entries: usize,
     pub source_files: usize,
     pub processed_files: usize,
     pub indexed_files: usize,
@@ -75,7 +79,11 @@ impl IndexBuildDiagnosticLog {
             started_at_unix_ms,
             finished_at_unix_ms: None,
             total_ms: 0.0,
-            discovered_files: 0,
+            discovered_entries: 0,
+            discovered_file_entries: 0,
+            discovered_directory_entries: 0,
+            discovered_other_entries: 0,
+            unselected_file_entries: 0,
             source_files: 0,
             processed_files: 0,
             indexed_files: 0,
@@ -152,6 +160,11 @@ mod tests {
             100,
         );
         log.mode = "full_rebuild".to_owned();
+        log.discovered_entries = 14;
+        log.discovered_file_entries = 10;
+        log.discovered_directory_entries = 3;
+        log.discovered_other_entries = 1;
+        log.unselected_file_entries = 0;
         log.source_files = 10;
         log.indexed_files = 9;
         log.error_files = 1;
@@ -166,6 +179,14 @@ mod tests {
         let persisted: IndexBuildDiagnosticLog =
             serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
         assert_eq!(persisted, log);
+        let json: serde_json::Value = serde_json::from_slice(&fs::read(&history).unwrap()).unwrap();
+        assert_eq!(json["schemaVersion"], 2);
+        assert_eq!(json["discoveredEntries"], 14);
+        assert_eq!(json["discoveredFileEntries"], 10);
+        assert_eq!(json["discoveredDirectoryEntries"], 3);
+        assert_eq!(json["discoveredOtherEntries"], 1);
+        assert_eq!(json["unselectedFileEntries"], 0);
+        assert!(json.get("discoveredFiles").is_none());
         let latest: IndexBuildDiagnosticLog =
             serde_json::from_slice(&fs::read(diagnostics.join("index-build-latest.json")).unwrap())
                 .unwrap();

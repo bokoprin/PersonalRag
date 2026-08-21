@@ -84,11 +84,21 @@ impl ScannerMode {
 #[derive(Debug, Clone, Default)]
 pub struct ScanProgress {
     pub discovered_entries: usize,
+    pub file_entries: usize,
+    pub directory_entries: usize,
+    pub other_entries: usize,
     pub selected_files: usize,
     pub pruned_entries: usize,
     pub error_entries: usize,
     pub selected_bytes: u64,
     pub current_path: Option<PathBuf>,
+}
+
+impl ScanProgress {
+    #[must_use]
+    pub fn unselected_file_entries(&self) -> usize {
+        self.file_entries.saturating_sub(self.selected_files)
+    }
 }
 
 #[derive(Debug)]
@@ -332,6 +342,9 @@ pub fn scan_files(
     }
     let files = Arc::new(Mutex::new(Vec::<ScannedFile>::new()));
     let discovered = Arc::new(AtomicUsize::new(0));
+    let file_entries = Arc::new(AtomicUsize::new(0));
+    let directory_entries = Arc::new(AtomicUsize::new(0));
+    let other_entries = Arc::new(AtomicUsize::new(0));
     let selected = Arc::new(AtomicUsize::new(0));
     let pruned = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
@@ -354,6 +367,9 @@ pub fn scan_files(
 
     let progress_snapshot = || ScanProgress {
         discovered_entries: discovered.load(AtomicOrdering::Relaxed),
+        file_entries: file_entries.load(AtomicOrdering::Relaxed),
+        directory_entries: directory_entries.load(AtomicOrdering::Relaxed),
+        other_entries: other_entries.load(AtomicOrdering::Relaxed),
         selected_files: selected.load(AtomicOrdering::Relaxed),
         pruned_entries: pruned.load(AtomicOrdering::Relaxed),
         error_entries: errors.load(AtomicOrdering::Relaxed),
@@ -374,6 +390,13 @@ pub fn scan_files(
                 }
             };
             let count = discovered.fetch_add(1, AtomicOrdering::Relaxed) + 1;
+            if entry.file_type().is_some_and(|kind| kind.is_file()) {
+                file_entries.fetch_add(1, AtomicOrdering::Relaxed);
+            } else if entry.file_type().is_some_and(|kind| kind.is_dir()) {
+                directory_entries.fetch_add(1, AtomicOrdering::Relaxed);
+            } else {
+                other_entries.fetch_add(1, AtomicOrdering::Relaxed);
+            }
             if count.is_multiple_of(256) {
                 if let Ok(mut path) = current_path.lock() {
                     *path = Some(entry.path().to_path_buf());
@@ -425,6 +448,9 @@ pub fn scan_files(
     } else {
         let files_for_walk = Arc::clone(&files);
         let discovered_for_walk = Arc::clone(&discovered);
+        let file_entries_for_walk = Arc::clone(&file_entries);
+        let directory_entries_for_walk = Arc::clone(&directory_entries);
+        let other_entries_for_walk = Arc::clone(&other_entries);
         let selected_for_walk = Arc::clone(&selected);
         let pruned_for_walk = Arc::clone(&pruned);
         let errors_for_walk = Arc::clone(&errors);
@@ -440,6 +466,9 @@ pub fn scan_files(
         walker.build_parallel().run(|| {
             let files = Arc::clone(&files_for_walk);
             let discovered = Arc::clone(&discovered_for_walk);
+            let file_entries = Arc::clone(&file_entries_for_walk);
+            let directory_entries = Arc::clone(&directory_entries_for_walk);
+            let other_entries = Arc::clone(&other_entries_for_walk);
             let selected = Arc::clone(&selected_for_walk);
             let pruned = Arc::clone(&pruned_for_walk);
             let errors = Arc::clone(&errors_for_walk);
@@ -465,6 +494,13 @@ pub fn scan_files(
                     }
                 };
                 let count = discovered.fetch_add(1, AtomicOrdering::Relaxed) + 1;
+                if entry.file_type().is_some_and(|kind| kind.is_file()) {
+                    file_entries.fetch_add(1, AtomicOrdering::Relaxed);
+                } else if entry.file_type().is_some_and(|kind| kind.is_dir()) {
+                    directory_entries.fetch_add(1, AtomicOrdering::Relaxed);
+                } else {
+                    other_entries.fetch_add(1, AtomicOrdering::Relaxed);
+                }
                 let report_path = count
                     .is_multiple_of(1024)
                     .then(|| entry.path().to_path_buf());
@@ -519,6 +555,9 @@ pub fn scan_files(
                     }
                     on_progress(ScanProgress {
                         discovered_entries: count,
+                        file_entries: file_entries.load(AtomicOrdering::Relaxed),
+                        directory_entries: directory_entries.load(AtomicOrdering::Relaxed),
+                        other_entries: other_entries.load(AtomicOrdering::Relaxed),
                         selected_files: selected.load(AtomicOrdering::Relaxed),
                         pruned_entries: pruned.load(AtomicOrdering::Relaxed),
                         error_entries: errors.load(AtomicOrdering::Relaxed),
@@ -557,6 +596,49 @@ pub fn scan_files(
         progress: final_progress,
         directory_tracking,
     })
+}
+
+#[cfg(test)]
+mod scan_breakdown_tests {
+    use std::{
+        fs,
+        sync::{atomic::AtomicBool, Arc},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::*;
+
+    #[test]
+    fn walkdir_scan_reports_discovered_entry_types() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("personalrag-scan-breakdown-{unique}"));
+        let child = root.join("child");
+        fs::create_dir_all(&child).unwrap();
+        fs::write(root.join("a.txt"), b"a").unwrap();
+        fs::write(child.join("b.txt"), b"b").unwrap();
+
+        let report = scan_files(
+            &root,
+            0,
+            ScannerMode::WalkDir,
+            &ScanExclusions::default(),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(|_| {}),
+        )
+        .unwrap();
+
+        assert_eq!(report.progress.discovered_entries, 4);
+        assert_eq!(report.progress.file_entries, 2);
+        assert_eq!(report.progress.directory_entries, 2);
+        assert_eq!(report.progress.other_entries, 0);
+        assert_eq!(report.progress.selected_files, 2);
+        assert_eq!(report.progress.unselected_file_entries(), 0);
+        assert_eq!(report.files.len(), 2);
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 #[derive(Debug, Clone)]

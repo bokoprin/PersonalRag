@@ -673,7 +673,11 @@ fn start_rebuild(
                 full_scan_started.elapsed().as_secs_f64() * 1_000.0,
             );
             let scan = scan_result?;
-            diagnostics.discovered_files = scan.progress.discovered_entries;
+            diagnostics.discovered_entries = scan.progress.discovered_entries;
+            diagnostics.discovered_file_entries = scan.progress.file_entries;
+            diagnostics.discovered_directory_entries = scan.progress.directory_entries;
+            diagnostics.discovered_other_entries = scan.progress.other_entries;
+            diagnostics.unselected_file_entries = scan.progress.unselected_file_entries();
             diagnostics.source_files = scan.files.len();
             diagnostics.pruned_files = scan.progress.pruned_entries;
             diagnostics.error_files = scan.progress.error_entries;

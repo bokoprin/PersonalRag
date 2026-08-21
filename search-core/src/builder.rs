@@ -868,16 +868,29 @@ fn should_collect_q2_seed(profile: AccelerationProfile, documents: &[DocumentInp
     }
 }
 
-fn build_owned_segment_profile(
-    task: SegmentBuildTask,
-    output_dir: &Path,
+struct OwnedSegmentBuildConfig<'a> {
+    output_dir: &'a Path,
     mode: BuildMode,
     acceleration: AccelerationProfile,
     build_workers: usize,
     durable: bool,
     retain_documents: bool,
-    timings: Option<&BuildTimingAccumulator>,
+    timings: Option<&'a BuildTimingAccumulator>,
+}
+
+fn build_owned_segment_profile(
+    task: SegmentBuildTask,
+    config: OwnedSegmentBuildConfig<'_>,
 ) -> Result<(ManifestEntry, Option<Vec<DocumentInput>>)> {
+    let OwnedSegmentBuildConfig {
+        output_dir,
+        mode,
+        acceleration,
+        build_workers,
+        durable,
+        retain_documents,
+        timings,
+    } = config;
     let profile_build = profile_build_enabled();
     let total_started = Instant::now();
     let sample_started = Instant::now();
@@ -1316,13 +1329,15 @@ where
                         let segment_index = task.segment_index;
                         let result = build_owned_segment_profile(
                             task,
-                            output_dir,
-                            options.mode,
-                            acceleration,
-                            build_workers,
-                            durable,
-                            retain_documents,
-                            Some(timings.as_ref()),
+                            OwnedSegmentBuildConfig {
+                                output_dir,
+                                mode: options.mode,
+                                acceleration,
+                                build_workers,
+                                durable,
+                                retain_documents,
+                                timings: Some(timings.as_ref()),
+                            },
                         );
                         if result_tx.send((segment_index, result)).is_err() {
                             return;
@@ -1660,13 +1675,15 @@ impl<'a> UnifiedIndexAssembler<'a> {
         };
         let (entry, _) = build_owned_segment_profile(
             task,
-            &self.output_dir,
-            self.options.mode,
-            self.acceleration,
-            1,
-            self.durable,
-            false,
-            None,
+            OwnedSegmentBuildConfig {
+                output_dir: &self.output_dir,
+                mode: self.options.mode,
+                acceleration: self.acceleration,
+                build_workers: 1,
+                durable: self.durable,
+                retain_documents: false,
+                timings: None,
+            },
         )?;
         self.entries.push(entry);
         Ok(())
