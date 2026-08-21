@@ -1,3 +1,4 @@
+mod build_diagnostics;
 mod build_order;
 mod change_tracker;
 mod contract_v1;
@@ -8,6 +9,7 @@ mod office_cache;
 mod progress_rate;
 mod windows_native_scanner;
 
+pub use build_diagnostics::*;
 pub use change_tracker::*;
 pub use contract_v1::*;
 pub use engine::*;
