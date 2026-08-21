@@ -1625,6 +1625,55 @@ impl IndexEngine for PortableEngine {
             "build.base_index",
             base_index_started.elapsed().as_secs_f64() * 1000.0,
         ));
+        let base_detail = report.timings;
+        for (name, elapsed) in [
+            (
+                "build.base_index.hydration_wall",
+                base_detail.hydration_wall,
+            ),
+            (
+                "build.base_index.segment_sample_work",
+                base_detail.segment_sample_work,
+            ),
+            (
+                "build.base_index.segment_core_work",
+                base_detail.segment_core_work,
+            ),
+            (
+                "build.base_index.name_grams_work",
+                base_detail.name_grams_work,
+            ),
+            ("build.base_index.dedup_work", base_detail.dedup_work),
+            (
+                "build.base_index.content_grams_work",
+                base_detail.content_grams_work,
+            ),
+            (
+                "build.base_index.content_post_work",
+                base_detail.content_post_work,
+            ),
+            (
+                "build.base_index.name_post_work",
+                base_detail.name_post_work,
+            ),
+            (
+                "build.base_index.segment_write_work",
+                base_detail.segment_write_work,
+            ),
+            (
+                "build.base_index.acceleration_work",
+                base_detail.acceleration_work,
+            ),
+            (
+                "build.base_index.manifest_write_wall",
+                base_detail.manifest_write_wall,
+            ),
+        ] {
+            stage_timings.push(IndexBuildStageTiming::new(
+                name,
+                elapsed.as_secs_f64() * 1000.0,
+            ));
+        }
         if cancel.load(std::sync::atomic::Ordering::Acquire) {
             return Err("cancelled".to_owned());
         }
@@ -2379,6 +2428,12 @@ mod policy_tests {
             "build.sort",
             "build.prepare_inputs",
             "build.base_index",
+            "build.base_index.hydration_wall",
+            "build.base_index.segment_core_work",
+            "build.base_index.content_grams_work",
+            "build.base_index.segment_write_work",
+            "build.base_index.acceleration_work",
+            "build.base_index.manifest_write_wall",
             "build.verify_base",
             "build.initialize_generation",
             "build.verify_generation",

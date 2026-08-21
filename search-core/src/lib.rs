@@ -17,8 +17,8 @@ mod vnext_segment;
 
 pub use builder::{
     BuildMode, BuildOptions, BuildReport, BuildTuning, DiskPathBuildConfig, DiskPathBuildProgress,
-    DiskPathBuildReport, DiskPathInput, build_disk_corpus, build_disk_corpus_parallel,
-    build_disk_index_pipelined, build_disk_index_pipelined_benchmark,
+    DiskPathBuildReport, DiskPathBuildTimings, DiskPathInput, build_disk_corpus,
+    build_disk_corpus_parallel, build_disk_index_pipelined, build_disk_index_pipelined_benchmark,
     build_disk_path_inputs_index_pipelined, build_disk_path_inputs_index_unified,
     build_disk_path_inputs_index_unified_observed, build_disk_path_inputs_index_unified_retained,
     build_disk_paths_index_pipelined, build_index, build_index_benchmark, build_index_unified,
