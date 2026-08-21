@@ -2120,7 +2120,7 @@ mod policy_tests {
         DocumentInput, LogicalDocument, MergedIndex, VNextDocumentInput,
     };
 
-    use crate::{IncrementalCatalogState, SearchOptions};
+    use crate::{IncrementalCatalogState, ScannedFile, SearchOptions};
 
     use super::{
         hydration_batch_budget, hydration_workers_for, vnext_store_dir,
