@@ -1,6 +1,9 @@
 name: Warm Cold Profile Gate
 
 on:
+  push:
+    branches:
+      - perf/warm-critical-cold-hydration-ab
   pull_request:
     branches: [main]
 
