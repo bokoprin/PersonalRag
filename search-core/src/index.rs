@@ -3853,12 +3853,31 @@ pub fn build_q2_sidecars(root: impl AsRef<Path>, durable: bool) -> Result<Q2Side
     Ok(report)
 }
 
+const VERIFY_WORKER_CAP: usize = 8;
+
+fn verify_worker_count(logical_cpus: usize) -> usize {
+    logical_cpus.clamp(1, VERIFY_WORKER_CAP)
+}
+
 pub fn verify_index(root: impl AsRef<Path>) -> Result<()> {
-    let workers = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .min(4);
+    let logical_cpus = std::thread::available_parallelism().map_or(1, usize::from);
+    let workers = verify_worker_count(logical_cpus);
     let _ = PersistentIndex::open_with_workers(root, true, workers)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod verify_worker_tests {
+    use super::{VERIFY_WORKER_CAP, verify_worker_count};
+
+    #[test]
+    fn verify_worker_count_scales_above_legacy_cap_and_stays_bounded() {
+        assert_eq!(verify_worker_count(0), 1);
+        assert_eq!(verify_worker_count(1), 1);
+        assert_eq!(verify_worker_count(4), 4);
+        assert_eq!(verify_worker_count(8), 8);
+        assert_eq!(verify_worker_count(usize::MAX), VERIFY_WORKER_CAP);
+    }
 }
 
 #[cfg(test)]
