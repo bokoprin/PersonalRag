@@ -1662,6 +1662,30 @@ impl IndexEngine for PortableEngine {
                 base_detail.segment_write_work,
             ),
             (
+                "build.base_index.segment_write_prepare_work",
+                base_detail.segment_write_prepare_work,
+            ),
+            (
+                "build.base_index.segment_write_open_work",
+                base_detail.segment_write_open_work,
+            ),
+            (
+                "build.base_index.segment_write_body_work",
+                base_detail.segment_write_body_work,
+            ),
+            (
+                "build.base_index.segment_write_metadata_work",
+                base_detail.segment_write_metadata_work,
+            ),
+            (
+                "build.base_index.segment_write_sync_work",
+                base_detail.segment_write_sync_work,
+            ),
+            (
+                "build.base_index.segment_write_finalize_work",
+                base_detail.segment_write_finalize_work,
+            ),
+            (
                 "build.base_index.acceleration_work",
                 base_detail.acceleration_work,
             ),
@@ -2438,6 +2462,12 @@ mod policy_tests {
             "build.base_index.segment_core_work",
             "build.base_index.content_grams_work",
             "build.base_index.segment_write_work",
+            "build.base_index.segment_write_prepare_work",
+            "build.base_index.segment_write_open_work",
+            "build.base_index.segment_write_body_work",
+            "build.base_index.segment_write_metadata_work",
+            "build.base_index.segment_write_sync_work",
+            "build.base_index.segment_write_finalize_work",
             "build.base_index.acceleration_work",
             "build.base_index.manifest_write_wall",
             "build.verify_base",

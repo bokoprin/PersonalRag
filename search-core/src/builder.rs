@@ -219,6 +219,12 @@ pub struct DiskPathBuildTimings {
     pub content_post_work: Duration,
     pub name_post_work: Duration,
     pub segment_write_work: Duration,
+    pub segment_write_prepare_work: Duration,
+    pub segment_write_open_work: Duration,
+    pub segment_write_body_work: Duration,
+    pub segment_write_metadata_work: Duration,
+    pub segment_write_sync_work: Duration,
+    pub segment_write_finalize_work: Duration,
     pub acceleration_work: Duration,
     /// Manifest serialization/write wall time after segment workers complete.
     pub manifest_write_wall: Duration,
@@ -815,6 +821,12 @@ struct BuildTimingAccumulator {
     content_post_ns: AtomicU64,
     name_post_ns: AtomicU64,
     segment_write_ns: AtomicU64,
+    segment_write_prepare_ns: AtomicU64,
+    segment_write_open_ns: AtomicU64,
+    segment_write_body_ns: AtomicU64,
+    segment_write_metadata_ns: AtomicU64,
+    segment_write_sync_ns: AtomicU64,
+    segment_write_finalize_ns: AtomicU64,
     acceleration_ns: AtomicU64,
 }
 
@@ -845,6 +857,12 @@ impl BuildTimingAccumulator {
             content_post_work: accumulated_duration(&self.content_post_ns),
             name_post_work: accumulated_duration(&self.name_post_ns),
             segment_write_work: accumulated_duration(&self.segment_write_ns),
+            segment_write_prepare_work: accumulated_duration(&self.segment_write_prepare_ns),
+            segment_write_open_work: accumulated_duration(&self.segment_write_open_ns),
+            segment_write_body_work: accumulated_duration(&self.segment_write_body_ns),
+            segment_write_metadata_work: accumulated_duration(&self.segment_write_metadata_ns),
+            segment_write_sync_work: accumulated_duration(&self.segment_write_sync_ns),
+            segment_write_finalize_work: accumulated_duration(&self.segment_write_finalize_ns),
             acceleration_work: accumulated_duration(&self.acceleration_ns),
             manifest_write_wall,
         }
@@ -924,6 +942,21 @@ fn build_owned_segment_profile(
     let base_write_ms = base_write_elapsed.as_secs_f64() * 1000.0;
     if let Some(timings) = timings {
         add_duration(&timings.segment_write_ns, base_write_elapsed);
+        add_duration(
+            &timings.segment_write_prepare_ns,
+            written.write_breakdown.prepare,
+        );
+        add_duration(&timings.segment_write_open_ns, written.write_breakdown.open);
+        add_duration(&timings.segment_write_body_ns, written.write_breakdown.body);
+        add_duration(
+            &timings.segment_write_metadata_ns,
+            written.write_breakdown.metadata,
+        );
+        add_duration(&timings.segment_write_sync_ns, written.write_breakdown.sync);
+        add_duration(
+            &timings.segment_write_finalize_ns,
+            written.write_breakdown.finalize,
+        );
     }
     let accel_started = Instant::now();
     if acceleration != AccelerationProfile::None {
@@ -959,6 +992,17 @@ fn build_owned_segment_profile(
         add_duration(&timings.acceleration_ns, accel_elapsed);
     }
     if profile_build {
+        eprintln!(
+            "BUILD_SEGMENT_WRITE segment={} prepare_ms={:.3} open_ms={:.3} body_ms={:.3} metadata_ms={:.3} sync_ms={:.3} finalize_ms={:.3} total_ms={:.3}",
+            task.segment_index,
+            written.write_breakdown.prepare.as_secs_f64() * 1000.0,
+            written.write_breakdown.open.as_secs_f64() * 1000.0,
+            written.write_breakdown.body.as_secs_f64() * 1000.0,
+            written.write_breakdown.metadata.as_secs_f64() * 1000.0,
+            written.write_breakdown.sync.as_secs_f64() * 1000.0,
+            written.write_breakdown.finalize.as_secs_f64() * 1000.0,
+            base_write_ms,
+        );
         eprintln!(
             "BUILD_SEGMENT_WALL segment={} docs={} sample_ms={:.3} base_ms={:.3} base_write_ms={:.3} accel_ms={:.3} total_ms={:.3}",
             task.segment_index,
@@ -2722,13 +2766,25 @@ fn stream_u64_values(
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct SegmentWriteBreakdown {
+    prepare: Duration,
+    open: Duration,
+    body: Duration,
+    metadata: Duration,
+    sync: Duration,
+    finalize: Duration,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct WrittenSegmentMeta {
     checksum: u64,
     bytes: u64,
+    write_breakdown: SegmentWriteBreakdown,
 }
 
 fn write_segment(path: &Path, data: &SegmentData, durable: bool) -> Result<WrittenSegmentMeta> {
+    let prepare_started = Instant::now();
     let sizes = section_sizes(data);
     let mut offsets = [(0u64, 0u64); SECTION_COUNT];
     let mut cursor = HEADER_SIZE as u64;
@@ -2762,12 +2818,16 @@ fn write_segment(path: &Path, data: &SegmentData, durable: bool) -> Result<Writt
         write_u64(&mut header, 40 + index * 16, size);
     }
     write_u32(&mut header, 480, Q3DirKind::Prefix10 as u32);
+    let prepare = prepare_started.elapsed();
 
+    let open_started = Instant::now();
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
         .open(path)?;
+    let open = open_started.elapsed();
+    let body_started = Instant::now();
     let mut hash = FNV_OFFSET;
     write_hashed(&mut file, &mut hash, &header)?;
     let mut position = HEADER_SIZE as u64;
@@ -2840,16 +2900,36 @@ fn write_segment(path: &Path, data: &SegmentData, durable: bool) -> Result<Writt
     }
     file.write_all(FOOTER_MAGIC)?;
     file.write_all(&hash.to_le_bytes())?;
+    let body = body_started.elapsed();
+
+    let metadata_started = Instant::now();
     if file.metadata()?.len() != final_size {
         return Err(SearchError::Format("segment final size mismatch".into()));
     }
-    if durable {
+    let metadata = metadata_started.elapsed();
+
+    let sync = if durable {
+        let sync_started = Instant::now();
         file.sync_all()?;
-    }
+        sync_started.elapsed()
+    } else {
+        Duration::ZERO
+    };
+
+    let finalize_started = Instant::now();
     set_read_only(path)?;
+    let finalize = finalize_started.elapsed();
     Ok(WrittenSegmentMeta {
         checksum: hash,
         bytes: final_size,
+        write_breakdown: SegmentWriteBreakdown {
+            prepare,
+            open,
+            body,
+            metadata,
+            sync,
+            finalize,
+        },
     })
 }
 
