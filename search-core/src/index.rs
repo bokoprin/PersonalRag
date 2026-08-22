@@ -3856,7 +3856,7 @@ pub fn build_q2_sidecars(root: impl AsRef<Path>, durable: bool) -> Result<Q2Side
 const VERIFY_WORKER_CAP: usize = 8;
 
 fn verify_worker_count(logical_cpus: usize) -> usize {
-    logical_cpus.max(1).min(VERIFY_WORKER_CAP)
+    logical_cpus.clamp(1, VERIFY_WORKER_CAP)
 }
 
 pub fn verify_index(root: impl AsRef<Path>) -> Result<()> {
