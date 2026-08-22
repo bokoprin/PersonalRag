@@ -16,7 +16,10 @@ fn temp_root() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    std::env::temp_dir().join(format!("personalrag-build-tune-{}-{nonce}", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "personalrag-build-tune-{}-{nonce}",
+        std::process::id()
+    ))
 }
 
 fn update_hash(hash: &mut u64, bytes: &[u8]) {
@@ -57,7 +60,9 @@ fn make_content(file_index: usize, target_bytes: usize) -> Vec<u8> {
     while text.len() < target_bytes {
         let module = file_index % 997;
         let symbol = (file_index.wrapping_mul(31).wrapping_add(line * 17)) % 8191;
-        let value = file_index.wrapping_mul(1_103_515_245).wrapping_add(line * 12_345);
+        let value = file_index
+            .wrapping_mul(1_103_515_245)
+            .wrapping_add(line * 12_345);
         let _ = writeln!(
             text,
             "pub fn module_{module:04}_symbol_{symbol:04}(input: usize) -> usize {{ let value = input.wrapping_mul(31).wrapping_add({value}); value ^ 0x5a5a5a5a }} // file={file_index} line={line}"
