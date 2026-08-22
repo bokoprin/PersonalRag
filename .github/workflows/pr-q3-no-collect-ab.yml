@@ -1,4 +1,4 @@
-name: PR q3 no-collect A-B
+name: PR q3 scratch reuse A-B
 
 on:
   pull_request:
@@ -22,9 +22,9 @@ jobs:
       - name: Apply candidate transform
         shell: pwsh
         run: |
-          python ci/apply_q3_no_collect.py
-          if ($LASTEXITCODE -ne 0) { throw 'q3 no-collect transform failed' }
-          Remove-Item ci/apply_q3_no_collect.py
+          python ci/apply_q3_scratch_reuse.py
+          if ($LASTEXITCODE -ne 0) { throw 'q3 scratch reuse transform failed' }
+          Remove-Item ci/apply_q3_scratch_reuse.py
           cargo fmt --manifest-path search-core/Cargo.toml
           if ($LASTEXITCODE -ne 0) { throw 'candidate fmt failed' }
           git diff --check
@@ -64,7 +64,7 @@ jobs:
         run: |
           $candidate = Join-Path $PWD 'target-candidate/release/pr_ab_core.exe'
           $baseline = Join-Path $PWD 'target-baseline/release/pr_ab_core.exe'
-          $log = Join-Path $PWD 'q3-no-collect-ab.txt'
+          $log = Join-Path $PWD 'q3-scratch-reuse-ab.txt'
           function Run-One([string]$exe, [string]$label) {
             $env:PR_AB_LABEL = $label
             $line = & $exe
@@ -104,7 +104,7 @@ jobs:
       - name: Upload benchmark log
         uses: actions/upload-artifact@v4
         with:
-          name: PersonalRag-q3-no-collect-ab
-          path: q3-no-collect-ab.txt
+          name: PersonalRag-q3-scratch-reuse-ab
+          path: q3-scratch-reuse-ab.txt
           if-no-files-found: error
           retention-days: 7
