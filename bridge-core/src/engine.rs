@@ -15,14 +15,15 @@ use personalrag_portable_search::{
     apply_update_plan, build_disk_path_inputs_index_unified,
     build_disk_path_inputs_index_unified_retained, compact_generation_unified,
     compact_vnext_generation_store, fold_ascii, gc_vnext_generation_store,
-    initialize_generation_from_built_index, initialize_vnext_generation_store,
+    initialize_generation_from_verified_built_index, initialize_vnext_generation_store,
     open_vnext_published_generation, plan_incremental_update, publish_incremental_update_unified,
-    publish_vnext_incremental_generation, recommend_system_build_tuning, verify_generation,
-    verify_index, verify_positional2_sidecars, verify_positional3_sidecars,
-    verify_positional_sidecars, verify_vnext_generation_store, AccelerationProfile, BuildMode,
-    BuildOptions, ChangeBatch, ChangeKind, DiskPathBuildConfig, DiskPathInput, DocumentChange,
-    DocumentInput, IncrementalPolicy, LogicalDocumentIdentity, MergedIndex, MergedSearchSession,
-    PosCodec, VNextDocumentInput, VNextGenerationIndex,
+    publish_vnext_incremental_generation, recommend_system_build_tuning,
+    verify_built_index_for_generation_adoption, verify_generation, verify_generation_structure,
+    verify_positional2_sidecars, verify_positional3_sidecars, verify_positional_sidecars,
+    verify_vnext_generation_store, AccelerationProfile, BuildMode, BuildOptions, ChangeBatch,
+    ChangeKind, DiskPathBuildConfig, DiskPathInput, DocumentChange, DocumentInput,
+    IncrementalPolicy, LogicalDocumentIdentity, MergedIndex, MergedSearchSession, PosCodec,
+    VNextDocumentInput, VNextGenerationIndex,
 };
 
 use crate::{
@@ -1691,7 +1692,8 @@ impl IndexEngine for PortableEngine {
 
         on_progress(terminal_progress(IndexBuildPhase::Verifying, "verify"));
         let verify_base_started = Instant::now();
-        verify_index(&base_index_path).map_err(|error| error.to_string())?;
+        let verified_built_index = verify_built_index_for_generation_adoption(&base_index_path)
+            .map_err(|error| error.to_string())?;
         if PRODUCTION_ACCELERATION_PROFILE == AccelerationProfile::Full {
             verify_positional_sidecars(&base_index_path, PosCodec::production())
                 .map_err(|error| error.to_string())?;
@@ -1712,14 +1714,18 @@ impl IndexEngine for PortableEngine {
             })
             .collect::<Vec<_>>();
         let generation_publish_started = Instant::now();
-        initialize_generation_from_built_index(build_dir, &base_index_path, &identities)
-            .map_err(|error| error.to_string())?;
+        initialize_generation_from_verified_built_index(
+            build_dir,
+            verified_built_index,
+            &identities,
+        )
+        .map_err(|error| error.to_string())?;
         stage_timings.push(IndexBuildStageTiming::new(
             "build.initialize_generation",
             generation_publish_started.elapsed().as_secs_f64() * 1000.0,
         ));
         let generation_verify_started = Instant::now();
-        verify_generation(build_dir).map_err(|error| error.to_string())?;
+        verify_generation_structure(build_dir).map_err(|error| error.to_string())?;
         stage_timings.push(IndexBuildStageTiming::new(
             "build.verify_generation",
             generation_verify_started.elapsed().as_secs_f64() * 1000.0,
