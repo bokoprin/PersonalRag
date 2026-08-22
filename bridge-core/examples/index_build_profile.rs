@@ -41,6 +41,16 @@ impl ProfileMode {
     }
 }
 
+struct RunBuildConfig<'a> {
+    root: &'a Path,
+    inputs: &'a [DiskPathInput],
+    output: PathBuf,
+    options: &'a BuildOptions,
+    hydration_workers: usize,
+    max_file_bytes: u64,
+    hydration_batch_bytes: u64,
+}
+
 fn duration_ms(value: Duration) -> f64 {
     value.as_secs_f64() * 1000.0
 }
@@ -100,17 +110,17 @@ fn report_json(
     })
 }
 
-fn run_build(
-    label: &str,
-    root: &Path,
-    inputs: &[DiskPathInput],
-    output: &Path,
-    options: &BuildOptions,
-    hydration_workers: usize,
-    max_file_bytes: u64,
-    hydration_batch_bytes: u64,
-) -> Result<Value, Box<dyn Error>> {
-    prepare_output(output)?;
+fn run_build(label: &str, config: RunBuildConfig<'_>) -> Result<Value, Box<dyn Error>> {
+    let RunBuildConfig {
+        root,
+        inputs,
+        output,
+        options,
+        hydration_workers,
+        max_file_bytes,
+        hydration_batch_bytes,
+    } = config;
+    prepare_output(&output)?;
     println!(
         "PROFILE_RUN_BEGIN label={label} hydration_workers={hydration_workers} output={}",
         output.display()
@@ -120,7 +130,7 @@ fn run_build(
     let report = build_disk_path_inputs_index_unified(
         root,
         inputs.to_vec(),
-        output,
+        &output,
         DiskPathBuildConfig {
             max_docs: None,
             max_file_bytes,
@@ -135,7 +145,7 @@ fn run_build(
     let call_wall = started.elapsed();
 
     let verify_started = Instant::now();
-    verify_index(output)?;
+    verify_index(&output)?;
     let verify_wall = verify_started.elapsed();
 
     let payload = report_json(label, &report, call_wall, verify_wall);
@@ -233,34 +243,40 @@ fn run() -> Result<(), Box<dyn Error>> {
     let measured = match mode {
         ProfileMode::Cold => run_build(
             "cold",
-            &root,
-            &inputs,
-            &output_root.join("cold"),
-            &options,
-            hydration_workers,
-            max_file_bytes,
-            hydration_batch_bytes,
+            RunBuildConfig {
+                root: &root,
+                inputs: &inputs,
+                output: output_root.join("cold"),
+                options: &options,
+                hydration_workers,
+                max_file_bytes,
+                hydration_batch_bytes,
+            },
         )?,
         ProfileMode::Warm => {
             let _prime = run_build(
                 "warm-prime",
-                &root,
-                &inputs,
-                &output_root.join("warm-prime"),
-                &options,
-                hydration_workers,
-                max_file_bytes,
-                hydration_batch_bytes,
+                RunBuildConfig {
+                    root: &root,
+                    inputs: &inputs,
+                    output: output_root.join("warm-prime"),
+                    options: &options,
+                    hydration_workers,
+                    max_file_bytes,
+                    hydration_batch_bytes,
+                },
             )?;
             run_build(
                 "warm-measured",
-                &root,
-                &inputs,
-                &output_root.join("warm-measured"),
-                &options,
-                hydration_workers,
-                max_file_bytes,
-                hydration_batch_bytes,
+                RunBuildConfig {
+                    root: &root,
+                    inputs: &inputs,
+                    output: output_root.join("warm-measured"),
+                    options: &options,
+                    hydration_workers,
+                    max_file_bytes,
+                    hydration_batch_bytes,
+                },
             )?
         }
     };
