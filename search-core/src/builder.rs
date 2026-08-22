@@ -2055,6 +2055,7 @@ fn build_segment_data_slice_impl(
     let mut content_q3_pairs = Vec::<u64>::new();
     unit_text_off.push(0);
     unit_doc_off.push(0);
+    let mut q3_scratch = Vec::<u32>::new();
     // 2^24 q3 keys -> 2 MiB bitset. Reuse it for every ContentUnit and clear only touched
     // words, eliminating the per-unit O(n log n) q3 sort/dedup.
     let mut q3_seen = vec![0u64; 1usize << 18];
@@ -2072,6 +2073,7 @@ fn build_segment_data_slice_impl(
         let unit_id = u32::try_from(unit_index)
             .map_err(|_| SearchError::Format("content id overflow".into()))?;
         let mask_base = unit_index * 32;
+        q3_scratch.clear();
         q3_touched_words.clear();
         q2_touched_words.clear();
         let mut previous2 = 0u8;
@@ -2103,17 +2105,20 @@ fn build_segment_data_slice_impl(
                         q3_touched_words.push(word_index);
                     }
                     q3_seen[word_index] = word | bit;
-                    if use_packed_shards {
-                        let high = (key >> 16) as usize;
-                        let packed = ((key & 0xffff) << 16) | unit_id;
-                        content_q3_shards[high].push(packed);
-                    } else {
-                        content_q3_pairs.push((u64::from(key) << 32) | u64::from(unit_id));
-                    }
+                    q3_scratch.push(key);
                 }
             }
             previous2 = previous1;
             previous1 = byte;
+        }
+        for &key in &q3_scratch {
+            if use_packed_shards {
+                let high = (key >> 16) as usize;
+                let packed = ((key & 0xffff) << 16) | unit_id;
+                content_q3_shards[high].push(packed);
+            } else {
+                content_q3_pairs.push((u64::from(key) << 32) | u64::from(unit_id));
+            }
         }
         for &word_index in &q3_touched_words {
             q3_seen[word_index] = 0;
