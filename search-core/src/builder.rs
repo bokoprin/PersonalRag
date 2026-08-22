@@ -2046,9 +2046,14 @@ fn build_segment_data_slice_impl(
     let phase_started = Instant::now();
 
     let mut unit_text_off = Vec::with_capacity(unit_sources.len() + 1);
-    let mut texts = Vec::new();
+    let total_text_bytes = unit_sources.iter().try_fold(0usize, |total, &source| {
+        total
+            .checked_add(docs[source].normalized_content.len())
+            .ok_or_else(|| SearchError::Format("text blob size overflow".into()))
+    })?;
+    let mut texts = Vec::with_capacity(total_text_bytes);
     let mut unit_doc_off = Vec::with_capacity(unit_sources.len() + 1);
-    let mut unit_docs_flat = Vec::new();
+    let mut unit_docs_flat = Vec::with_capacity(doc_count);
     let mut content_q1mask = vec![0u8; unit_sources.len() * 32];
     let use_packed_shards = unit_sources.len() <= u16::MAX as usize;
     let mut content_q3_shards = (0..256).map(|_| Vec::<u32>::new()).collect::<Vec<_>>();
