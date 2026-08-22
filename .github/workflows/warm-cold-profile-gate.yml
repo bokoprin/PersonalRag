@@ -27,3 +27,17 @@ jobs:
       - name: Full Windows regression and release build
         shell: pwsh
         run: ./scripts/verify-and-build-windows.ps1
+
+      - name: Warm and cold profile harness smoke
+        shell: pwsh
+        run: |
+          $corpus = Join-Path $env:RUNNER_TEMP 'personalrag-profile-corpus'
+          $warmOut = Join-Path $env:RUNNER_TEMP 'personalrag-profile-warm'
+          $coldOut = Join-Path $env:RUNNER_TEMP 'personalrag-profile-cold'
+          New-Item -ItemType Directory -Force -Path $corpus | Out-Null
+          1..64 | ForEach-Object {
+            $body = ('PersonalRag warm cold profile content {0} ' -f $_) * 128
+            Set-Content -LiteralPath (Join-Path $corpus ('file-{0:D3}.txt' -f $_)) -Value $body -Encoding utf8
+          }
+          ./scripts/profile-index-build.ps1 -Mode Warm -Root $corpus -HydrationWorkers 2 -BuildWorkers 2 -SegmentDocs 32 -OutputRoot $warmOut
+          ./scripts/profile-index-build.ps1 -Mode Cold -Root $corpus -HydrationWorkers 1 -BuildWorkers 2 -SegmentDocs 32 -OutputRoot $coldOut
