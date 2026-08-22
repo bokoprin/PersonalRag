@@ -1,23 +1,19 @@
 use std::{
     env,
     error::Error,
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::AtomicBool,
-    },
+    sync::{atomic::AtomicBool, Arc},
     time::{Duration, Instant},
 };
 
-use personalrag_gui_bridge_core::{ScanExclusions, ScannerMode, scan_files};
+use personalrag_gui_bridge_core::{scan_files, ScanExclusions, ScannerMode};
 use personalrag_portable_search::{
+    build_disk_path_inputs_index_unified, recommend_system_build_tuning, verify_index,
     AccelerationProfile, BuildMode, BuildOptions, DiskPathBuildConfig, DiskPathBuildReport,
-    DiskPathInput, build_disk_path_inputs_index_unified, recommend_system_build_tuning,
-    verify_index,
+    DiskPathInput,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const MIB: u64 = 1024 * 1024;
 const DEFAULT_MAX_FILE_BYTES: u64 = 32 * MIB;
@@ -223,7 +219,10 @@ fn run() -> Result<(), Box<dyn Error>> {
         "selectedBytes": scan_progress.selected_bytes,
         "note": "PR_PROFILE_BUILD=1 adds per-segment BUILD_SEGMENT_WALL detail; summed worker timings can exceed wall time."
     });
-    println!("PROFILE_CONFIG_JSON {}", serde_json::to_string(&configuration)?);
+    println!(
+        "PROFILE_CONFIG_JSON {}",
+        serde_json::to_string(&configuration)?
+    );
 
     let options = BuildOptions {
         mode: BuildMode::Adaptive,
