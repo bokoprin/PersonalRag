@@ -1,23 +1,19 @@
-name: Segment Write Buffered CI
+name: Apply Buffered Segment Writer
 
 on:
-  push:
-    branches:
-      - perf/segment-write-buffered
   pull_request:
     branches:
-      - main
       - perf/segment-write-buffered
 
 permissions:
   contents: write
 
 jobs:
-  windows-ab-regression:
+  apply-and-verify:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - name: Checkout
+      - name: Checkout feature branch
         uses: actions/checkout@v4
         with:
           ref: perf/segment-write-buffered
@@ -35,10 +31,6 @@ jobs:
         with:
           toolchain: 1.97.1
 
-      - name: Gate 0 - full Windows regression before product change
-        shell: pwsh
-        run: ./scripts/verify-and-build-windows.ps1
-
       - name: Create deterministic A/B corpus
         shell: pwsh
         run: |
@@ -52,7 +44,7 @@ jobs:
           }
           "PR_AB_CORPUS=$corpus" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Baseline profile
+      - name: Baseline warm profile
         shell: pwsh
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'personalrag-write-ab-baseline'
@@ -61,76 +53,13 @@ jobs:
           "PR_AB_BASELINE_OUT=$out" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "PR_AB_BASELINE_LOG=$log" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Apply buffered segment writer
+      - name: Apply buffered writer
         shell: pwsh
         run: |
-          $path = 'search-core/src/builder.rs'
-          $text = Get-Content -LiteralPath $path -Raw
-          function Replace-Exact([string]$old, [string]$new) {
-            if (-not $script:text.Contains($old)) { throw "Expected source fragment not found: $old" }
-            $script:text = $script:text.Replace($old, $new)
-          }
-
-          Replace-Exact 'use std::io::{Read, Write};' 'use std::io::{BufWriter, Read, Write};'
-          Replace-Exact 'const MIB: u64 = 1024 * 1024;' "const MIB: u64 = 1024 * 1024;`nconst SEGMENT_WRITE_BUFFER_BYTES: usize = 1024 * 1024;"
-          Replace-Exact @'
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(path)?;
-    let open = open_started.elapsed();
-'@ @'
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(path)?;
-    let open = open_started.elapsed();
-    let mut file = BufWriter::with_capacity(SEGMENT_WRITE_BUFFER_BYTES, file);
-'@
-          Replace-Exact @'
-    file.write_all(FOOTER_MAGIC)?;
-    file.write_all(&hash.to_le_bytes())?;
-    let body = body_started.elapsed();
-'@ @'
-    file.write_all(FOOTER_MAGIC)?;
-    file.write_all(&hash.to_le_bytes())?;
-    file.flush()?;
-    let body = body_started.elapsed();
-'@
-          Replace-Exact 'if file.metadata()?.len() != final_size {' 'if file.get_ref().metadata()?.len() != final_size {'
-          Replace-Exact @'
-    let sync = if durable {
-        let sync_started = Instant::now();
-        file.sync_all()?;
-        sync_started.elapsed()
-    } else {
-'@ @'
-    let sync = if durable {
-        let sync_started = Instant::now();
-        file.get_ref().sync_all()?;
-        sync_started.elapsed()
-    } else {
-'@
-          Replace-Exact 'fn write_hashed(file: &mut File, hash: &mut u64, bytes: &[u8]) -> Result<()> {' 'fn write_hashed<W: Write>(file: &mut W, hash: &mut u64, bytes: &[u8]) -> Result<()> {'
-          Replace-Exact 'fn write_padding(file: &mut File, hash: &mut u64, count: usize) -> Result<()> {' 'fn write_padding<W: Write>(file: &mut W, hash: &mut u64, count: usize) -> Result<()> {'
-          Replace-Exact @'
-fn stream_u32_values(
-    file: &mut File,
-'@ @'
-fn stream_u32_values<W: Write>(
-    file: &mut W,
-'@
-          Replace-Exact @'
-fn stream_u64_values(
-    file: &mut File,
-'@ @'
-fn stream_u64_values<W: Write>(
-    file: &mut W,
-'@
-          [System.IO.File]::WriteAllText((Resolve-Path $path), $text, [System.Text.UTF8Encoding]::new($false))
+          python scripts/apply-segment-write-buffered.py
           cargo fmt --manifest-path search-core/Cargo.toml
+          git diff --check
+          git status --short
 
       - name: Targeted Search Core tests and clippy
         shell: pwsh
@@ -138,7 +67,7 @@ fn stream_u64_values<W: Write>(
           cargo test --manifest-path search-core/Cargo.toml
           cargo clippy --manifest-path search-core/Cargo.toml --all-targets -- -D warnings
 
-      - name: Candidate profile
+      - name: Candidate warm profile
         shell: pwsh
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'personalrag-write-ab-candidate'
@@ -158,8 +87,10 @@ fn stream_u64_values<W: Write>(
             }
             return $map
           }
-          $baseline = Get-TreeHashes $env:PR_AB_BASELINE_OUT
-          $candidate = Get-TreeHashes $env:PR_AB_CANDIDATE_OUT
+          $baselineRoot = Join-Path $env:PR_AB_BASELINE_OUT 'warm-measured'
+          $candidateRoot = Join-Path $env:PR_AB_CANDIDATE_OUT 'warm-measured'
+          $baseline = Get-TreeHashes $baselineRoot
+          $candidate = Get-TreeHashes $candidateRoot
           $baselineKeys = @($baseline.Keys | Sort-Object)
           $candidateKeys = @($candidate.Keys | Sort-Object)
           if (($baselineKeys -join "`n") -ne ($candidateKeys -join "`n")) {
@@ -172,38 +103,41 @@ fn stream_u64_values<W: Write>(
           }
           Write-Host "SEGMENT_WRITE_BUFFER_BYTE_IDENTITY_PASS files=$($baselineKeys.Count)"
 
-      - name: Print synthetic A/B summary
+      - name: Print A/B summary
         shell: pwsh
         run: |
           function Get-Measured([string]$path) {
             $line = Get-Content -LiteralPath $path | Where-Object { $_ -like 'PROFILE_RUN_JSON *' } | Select-Object -Last 1
-            if (-not $line) { return $null }
+            if (-not $line) { throw "PROFILE_RUN_JSON missing: $path" }
             return ($line.Substring('PROFILE_RUN_JSON '.Length) | ConvertFrom-Json)
           }
           $b = Get-Measured $env:PR_AB_BASELINE_LOG
           $c = Get-Measured $env:PR_AB_CANDIDATE_LOG
-          if ($b -and $c) {
-            [ordered]@{
-              baselineBuildMs = $b.buildElapsedMs
-              candidateBuildMs = $c.buildElapsedMs
-              baselineWriteBodyMs = $b.segmentWriteBodyWorkMs
-              candidateWriteBodyMs = $c.segmentWriteBodyWorkMs
-              baselineWriteSyncMs = $b.segmentWriteSyncWorkMs
-              candidateWriteSyncMs = $c.segmentWriteSyncWorkMs
-            } | ConvertTo-Json -Compress | ForEach-Object { Write-Host "SEGMENT_WRITE_BUFFER_AB_JSON $_" }
-          }
+          [ordered]@{
+            baselineBuildMs = $b.buildElapsedMs
+            candidateBuildMs = $c.buildElapsedMs
+            baselineWriteMs = $b.timings.segmentWriteWorkMs
+            candidateWriteMs = $c.timings.segmentWriteWorkMs
+            baselineWriteBodyMs = $b.timings.segmentWriteBodyWorkMs
+            candidateWriteBodyMs = $c.timings.segmentWriteBodyWorkMs
+            baselineWriteSyncMs = $b.timings.segmentWriteSyncWorkMs
+            candidateWriteSyncMs = $c.timings.segmentWriteSyncWorkMs
+          } | ConvertTo-Json -Compress | ForEach-Object { Write-Host "SEGMENT_WRITE_BUFFER_AB_JSON $_" }
 
       - name: Final full Windows regression and release build
         shell: pwsh
         run: ./scripts/verify-and-build-windows.ps1
 
-      - name: Commit validated product diff
+      - name: Commit exact validated product tree
         shell: pwsh
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add search-core/src/builder.rs
-          git rm .github/workflows/segment-write-buffered-ci.yml
+          git rm -f .github/workflows/segment-write-buffered-ci.yml
+          git rm -f scripts/apply-segment-write-buffered.py
           git rm -f ci/segment-write-buffered-trigger.txt 2>$null
-          git commit -m 'segment writeを1MiBバッファリングしてOS write回数を削減'
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "segment writeを1MiBバッファリングしてOS write回数を削減"
           git push origin HEAD:perf/segment-write-buffered
+          git rev-parse HEAD
