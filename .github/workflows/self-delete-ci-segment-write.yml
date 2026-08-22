@@ -1,7 +1,7 @@
 name: Self Delete Segment Write CI Branch
 
 on:
-  push:
+  pull_request:
     branches:
       - ci/segment-write-breakdown-run
 
@@ -12,7 +12,9 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete temporary CI branch
+      - name: Delete temporary cleanup branches
         env:
           GH_TOKEN: ${{ github.token }}
-        run: git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git --delete ci/segment-write-breakdown-run
+        run: |
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git --delete ci/segment-write-breakdown-run || true
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git --delete cleanup/segment-write-ci-pr || true
