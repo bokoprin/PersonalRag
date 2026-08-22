@@ -63,6 +63,7 @@ $previousProfileBuild = $env:PR_PROFILE_BUILD
 $env:PR_PROFILE_BUILD = '1'
 $currentRun = ''
 $segments = [System.Collections.Generic.List[object]]::new()
+$phases = [System.Collections.Generic.List[object]]::new()
 $captured = [System.Collections.Generic.List[string]]::new()
 
 try {
@@ -75,6 +76,21 @@ try {
 
             if ($line -match '^PROFILE_RUN_BEGIN label=([^ ]+)') {
                 $currentRun = $Matches[1]
+                return
+            }
+            if ($line -match '^BUILD_PHASE base=(\d+) docs=(\d+) units=(\d+) name_grams_ms=([0-9.]+) dedup_ms=([0-9.]+) content_grams_ms=([0-9.]+) content_post_ms=([0-9.]+) name_post_ms=([0-9.]+) total_ms=([0-9.]+)') {
+                $phases.Add([pscustomobject]@{
+                    Label = $currentRun
+                    Base = [uint64]$Matches[1]
+                    Docs = [int]$Matches[2]
+                    Units = [int]$Matches[3]
+                    NameGramsMs = [double]$Matches[4]
+                    DedupMs = [double]$Matches[5]
+                    ContentGramsMs = [double]$Matches[6]
+                    ContentPostMs = [double]$Matches[7]
+                    NamePostMs = [double]$Matches[8]
+                    TotalMs = [double]$Matches[9]
+                })
                 return
             }
             if ($line -match '^BUILD_SEGMENT_WALL segment=(\d+) docs=(\d+) sample_ms=([0-9.]+) base_ms=([0-9.]+) base_write_ms=([0-9.]+) accel_ms=([0-9.]+) total_ms=([0-9.]+)') {
@@ -111,16 +127,22 @@ function Get-Percentile([object[]]$Rows, [string]$Property, [double]$Percentile)
     return [double]$values[$index]
 }
 
+function Get-Slowest([object[]]$Rows, [string]$Property) {
+    if ($Rows.Count -eq 0) {
+        return $null
+    }
+    return $Rows | Sort-Object $Property -Descending | Select-Object -First 1
+}
+
 $targetLabel = if ($Mode -eq 'Warm') { 'warm-measured' } else { 'cold' }
 $measuredSegments = @($segments | Where-Object { $_.Label -eq $targetLabel })
+$measuredPhases = @($phases | Where-Object { $_.Label -eq $targetLabel })
 if ($measuredSegments.Count -eq 0) {
     throw "No BUILD_SEGMENT_WALL rows captured for $targetLabel. PR_PROFILE_BUILD output is required."
 }
-
-$slowestTotal = $measuredSegments | Sort-Object TotalMs -Descending | Select-Object -First 1
-$slowestBase = $measuredSegments | Sort-Object BaseMs -Descending | Select-Object -First 1
-$slowestWrite = $measuredSegments | Sort-Object WriteMs -Descending | Select-Object -First 1
-$slowestAccel = $measuredSegments | Sort-Object AccelMs -Descending | Select-Object -First 1
+if ($measuredPhases.Count -eq 0) {
+    throw "No BUILD_PHASE rows captured for $targetLabel. PR_PROFILE_BUILD output is required."
+}
 
 $critical = [ordered]@{
     mode = $Mode.ToLowerInvariant()
@@ -129,15 +151,26 @@ $critical = [ordered]@{
     segmentCount = $measuredSegments.Count
     totalMsP50 = Get-Percentile $measuredSegments 'TotalMs' 0.50
     totalMsP95 = Get-Percentile $measuredSegments 'TotalMs' 0.95
-    slowestTotal = $slowestTotal
-    slowestBase = $slowestBase
-    slowestWrite = $slowestWrite
-    slowestAcceleration = $slowestAccel
-    interpretation = 'Segment rows are wall times for individual workers. Aggregated *_work metrics are summed worker time and can exceed end-to-end wall time.'
+    slowestTotal = Get-Slowest $measuredSegments 'TotalMs'
+    slowestBase = Get-Slowest $measuredSegments 'BaseMs'
+    slowestWrite = Get-Slowest $measuredSegments 'WriteMs'
+    slowestAcceleration = Get-Slowest $measuredSegments 'AccelMs'
+    segmentCore = [ordered]@{
+        phaseCount = $measuredPhases.Count
+        coreTotalMsP50 = Get-Percentile $measuredPhases 'TotalMs' 0.50
+        coreTotalMsP95 = Get-Percentile $measuredPhases 'TotalMs' 0.95
+        slowestCore = Get-Slowest $measuredPhases 'TotalMs'
+        slowestContentGrams = Get-Slowest $measuredPhases 'ContentGramsMs'
+        slowestContentPost = Get-Slowest $measuredPhases 'ContentPostMs'
+        slowestDedup = Get-Slowest $measuredPhases 'DedupMs'
+        slowestNameGrams = Get-Slowest $measuredPhases 'NameGramsMs'
+        slowestNamePost = Get-Slowest $measuredPhases 'NamePostMs'
+    }
+    interpretation = 'BUILD_SEGMENT_WALL/BUILD_PHASE are per-segment wall measurements. DiskPathBuildReport *_work fields are summed worker time and can exceed end-to-end wall time.'
     logPath = $LogPath
 }
 
-$criticalJson = $critical | ConvertTo-Json -Depth 5 -Compress
+$criticalJson = $critical | ConvertTo-Json -Depth 7 -Compress
 Write-Host "CRITICAL_PATH_JSON $criticalJson"
 
 if ($Mode -eq 'Cold') {
