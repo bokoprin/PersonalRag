@@ -1,0 +1,23 @@
+name: Cleanup Segment Write CI Branches
+
+on:
+  pull_request:
+    branches:
+      - ci/segment-write-buffered-run2
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Delete temporary branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git --delete ci/segment-write-buffered-run || true
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git --delete ci/segment-write-buffered-run2 || true
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git --delete cleanup/segment-write-buffered-ci || true
