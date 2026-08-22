@@ -1,1 +1,1 @@
-trigger same-run q1 A-B benchmark
+trigger q3 posting scratch A-B benchmark
