@@ -206,6 +206,24 @@ pub struct DiskPathBuildProgress {
     pub current_path: Option<PathBuf>,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DiskPathBuildTimings {
+    /// End-to-end hydration wall time. This can overlap segment building.
+    pub hydration_wall: Duration,
+    /// Summed worker time across all segments; may exceed wall time when workers overlap.
+    pub segment_sample_work: Duration,
+    pub segment_core_work: Duration,
+    pub name_grams_work: Duration,
+    pub dedup_work: Duration,
+    pub content_grams_work: Duration,
+    pub content_post_work: Duration,
+    pub name_post_work: Duration,
+    pub segment_write_work: Duration,
+    pub acceleration_work: Duration,
+    /// Manifest serialization/write wall time after segment workers complete.
+    pub manifest_write_wall: Duration,
+}
+
 #[derive(Clone, Debug)]
 pub struct DiskPathBuildReport {
     pub build: BuildReport,
@@ -219,6 +237,7 @@ pub struct DiskPathBuildReport {
     pub processed_files: usize,
     pub skipped_files: usize,
     pub bytes_read: u64,
+    pub timings: DiskPathBuildTimings,
 }
 
 /// A file selected by an application-owned scanner.
@@ -786,6 +805,52 @@ struct SegmentBuildTask {
     segment_index: usize,
 }
 
+#[derive(Default)]
+struct BuildTimingAccumulator {
+    segment_sample_ns: AtomicU64,
+    segment_core_ns: AtomicU64,
+    name_grams_ns: AtomicU64,
+    dedup_ns: AtomicU64,
+    content_grams_ns: AtomicU64,
+    content_post_ns: AtomicU64,
+    name_post_ns: AtomicU64,
+    segment_write_ns: AtomicU64,
+    acceleration_ns: AtomicU64,
+}
+
+fn add_duration(counter: &AtomicU64, elapsed: Duration) {
+    counter.fetch_add(
+        elapsed.as_nanos().min(u128::from(u64::MAX)) as u64,
+        Ordering::Relaxed,
+    );
+}
+
+fn accumulated_duration(counter: &AtomicU64) -> Duration {
+    Duration::from_nanos(counter.load(Ordering::Relaxed))
+}
+
+impl BuildTimingAccumulator {
+    fn snapshot(
+        &self,
+        hydration_wall_ns: u64,
+        manifest_write_wall: Duration,
+    ) -> DiskPathBuildTimings {
+        DiskPathBuildTimings {
+            hydration_wall: Duration::from_nanos(hydration_wall_ns),
+            segment_sample_work: accumulated_duration(&self.segment_sample_ns),
+            segment_core_work: accumulated_duration(&self.segment_core_ns),
+            name_grams_work: accumulated_duration(&self.name_grams_ns),
+            dedup_work: accumulated_duration(&self.dedup_ns),
+            content_grams_work: accumulated_duration(&self.content_grams_ns),
+            content_post_work: accumulated_duration(&self.content_post_ns),
+            name_post_work: accumulated_duration(&self.name_post_ns),
+            segment_write_work: accumulated_duration(&self.segment_write_ns),
+            acceleration_work: accumulated_duration(&self.acceleration_ns),
+            manifest_write_wall,
+        }
+    }
+}
+
 fn should_collect_q2_seed(profile: AccelerationProfile, documents: &[DocumentInput]) -> bool {
     match profile {
         AccelerationProfile::Full | AccelerationProfile::Balanced => documents
@@ -803,20 +868,38 @@ fn should_collect_q2_seed(profile: AccelerationProfile, documents: &[DocumentInp
     }
 }
 
-fn build_owned_segment_profile(
-    task: SegmentBuildTask,
-    output_dir: &Path,
+struct OwnedSegmentBuildConfig<'a> {
+    output_dir: &'a Path,
     mode: BuildMode,
     acceleration: AccelerationProfile,
     build_workers: usize,
     durable: bool,
     retain_documents: bool,
+    timings: Option<&'a BuildTimingAccumulator>,
+}
+
+fn build_owned_segment_profile(
+    task: SegmentBuildTask,
+    config: OwnedSegmentBuildConfig<'_>,
 ) -> Result<(ManifestEntry, Option<Vec<DocumentInput>>)> {
+    let OwnedSegmentBuildConfig {
+        output_dir,
+        mode,
+        acceleration,
+        build_workers,
+        durable,
+        retain_documents,
+        timings,
+    } = config;
     let profile_build = profile_build_enabled();
     let total_started = Instant::now();
     let sample_started = Instant::now();
     let sample = sample_stats(&task.documents);
-    let sample_ms = sample_started.elapsed().as_secs_f64() * 1000.0;
+    let sample_elapsed = sample_started.elapsed();
+    let sample_ms = sample_elapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.segment_sample_ns, sample_elapsed);
+    }
     let kind = match mode {
         BuildMode::Direct => BuilderKind::Direct,
         BuildMode::Dedup => BuilderKind::Dedup,
@@ -826,13 +909,22 @@ fn build_owned_segment_profile(
     let count = task.documents.len();
     let collect_q2 = should_collect_q2_seed(acceleration, &task.documents);
     let base_started = Instant::now();
-    let mut data = build_segment_data_slice_impl(&task.documents, task.doc_base, kind, collect_q2)?;
-    let base_ms = base_started.elapsed().as_secs_f64() * 1000.0;
+    let mut data =
+        build_segment_data_slice_impl(&task.documents, task.doc_base, kind, collect_q2, timings)?;
+    let base_elapsed = base_started.elapsed();
+    let base_ms = base_elapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.segment_core_ns, base_elapsed);
+    }
     let file = format!("seg-{:05}.prseg", task.segment_index);
     let path = output_dir.join(&file);
     let base_write_started = Instant::now();
     let written = write_segment(&path, &data, durable)?;
-    let base_write_ms = base_write_started.elapsed().as_secs_f64() * 1000.0;
+    let base_write_elapsed = base_write_started.elapsed();
+    let base_write_ms = base_write_elapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.segment_write_ns, base_write_elapsed);
+    }
     let accel_started = Instant::now();
     if acceleration != AccelerationProfile::None {
         let report = build_accelerators_from_memory(MemoryAccelerationRequest {
@@ -857,11 +949,15 @@ fn build_owned_segment_profile(
             );
         }
     }
-    let accel_ms = if acceleration == AccelerationProfile::None {
-        0.0
+    let accel_elapsed = if acceleration == AccelerationProfile::None {
+        Duration::ZERO
     } else {
-        accel_started.elapsed().as_secs_f64() * 1000.0
+        accel_started.elapsed()
     };
+    let accel_ms = accel_elapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.acceleration_ns, accel_elapsed);
+    }
     if profile_build {
         eprintln!(
             "BUILD_SEGMENT_WALL segment={} docs={} sample_ms={:.3} base_ms={:.3} base_write_ms={:.3} accel_ms={:.3} total_ms={:.3}",
@@ -1196,6 +1292,7 @@ where
         PROFILE_HYDRATION_READ_NS.store(0, Ordering::Relaxed);
         PROFILE_HYDRATION_NORMALIZE_NS.store(0, Ordering::Relaxed);
     }
+    let timings = Arc::new(BuildTimingAccumulator::default());
     let mut hydration_wall_ns = 0u64;
     let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let scan_workers = scan_workers.max(1);
@@ -1220,6 +1317,7 @@ where
                 task_senders.push(task_tx);
                 let ready_tx = ready_tx.clone();
                 let result_tx = result_tx.clone();
+                let timings = Arc::clone(&timings);
                 scope.spawn(move || {
                     loop {
                         if ready_tx.send(worker_id).is_err() {
@@ -1231,12 +1329,15 @@ where
                         let segment_index = task.segment_index;
                         let result = build_owned_segment_profile(
                             task,
-                            output_dir,
-                            options.mode,
-                            acceleration,
-                            build_workers,
-                            durable,
-                            retain_documents,
+                            OwnedSegmentBuildConfig {
+                                output_dir,
+                                mode: options.mode,
+                                acceleration,
+                                build_workers,
+                                durable,
+                                retain_documents,
+                                timings: Some(timings.as_ref()),
+                            },
                         );
                         if result_tx.send((segment_index, result)).is_err() {
                             return;
@@ -1416,7 +1517,9 @@ where
             ))
         })?;
 
+    let manifest_write_started = Instant::now();
     write_manifest(output_dir, options.mode, total_docs, &entries, durable)?;
+    let manifest_write_wall = manifest_write_started.elapsed();
     let index_bytes = entries.iter().map(|entry| entry.bytes).sum::<u64>();
     let build = BuildReport {
         docs: total_docs,
@@ -1450,6 +1553,7 @@ where
             processed_files: progress.processed_files,
             skipped_files: progress.skipped_files,
             bytes_read: progress.bytes_read,
+            timings: timings.snapshot(hydration_wall_ns, manifest_write_wall),
         },
         retained_documents,
     })
@@ -1571,12 +1675,15 @@ impl<'a> UnifiedIndexAssembler<'a> {
         };
         let (entry, _) = build_owned_segment_profile(
             task,
-            &self.output_dir,
-            self.options.mode,
-            self.acceleration,
-            1,
-            self.durable,
-            false,
+            OwnedSegmentBuildConfig {
+                output_dir: &self.output_dir,
+                mode: self.options.mode,
+                acceleration: self.acceleration,
+                build_workers: 1,
+                durable: self.durable,
+                retain_documents: false,
+                timings: None,
+            },
         )?;
         self.entries.push(entry);
         Ok(())
@@ -1791,6 +1898,7 @@ fn build_one_segment_profile(
         begin,
         kind,
         should_collect_q2_seed(acceleration, segment_docs),
+        None,
     )?;
     let file = format!("seg-{segment_index:05}.prseg");
     let path = output_dir.join(&file);
@@ -1869,6 +1977,7 @@ fn build_segment_data_slice_impl(
     doc_base: usize,
     kind: BuilderKind,
     collect_q2: bool,
+    timings: Option<&BuildTimingAccumulator>,
 ) -> Result<SegmentData> {
     let doc_count = docs.len();
     let profile_build = profile_build_enabled();
@@ -1891,7 +2000,11 @@ fn build_segment_data_slice_impl(
             grams.push(direct_grams(&doc.normalized_name, true));
         }
     }
-    let name_grams_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
+    let name_gramselapsed = phase_started.elapsed();
+    let name_grams_ms = name_gramselapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.name_grams_ns, name_gramselapsed);
+    }
     let phase_started = Instant::now();
 
     let mut doc_unit = vec![0u32; doc_count];
@@ -1925,7 +2038,11 @@ fn build_segment_data_slice_impl(
             *doc_unit_slot = unit;
         }
     }
-    let dedup_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
+    let dedupelapsed = phase_started.elapsed();
+    let dedup_ms = dedupelapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.dedup_ns, dedupelapsed);
+    }
     let phase_started = Instant::now();
 
     let mut unit_text_off = Vec::with_capacity(unit_sources.len() + 1);
@@ -1959,10 +2076,12 @@ fn build_segment_data_slice_impl(
         q3_scratch.clear();
         q3_touched_words.clear();
         q2_touched_words.clear();
+        let mut q1_seen = [0u64; 4];
         let mut previous2 = 0u8;
         let mut previous1 = 0u8;
         for (index, &byte) in content.iter().enumerate() {
-            content_q1mask[mask_base + usize::from(byte / 8)] |= 1u8 << (byte % 8);
+            let q1_word = usize::from(byte >> 6);
+            q1_seen[q1_word] |= 1u64 << (byte & 63);
             if index >= 1
                 && let (Some(seen), Some(pairs)) = (q2_seen.as_mut(), q2_pairs.as_mut())
             {
@@ -1994,6 +2113,10 @@ fn build_segment_data_slice_impl(
             previous2 = previous1;
             previous1 = byte;
         }
+        for (word_index, word) in q1_seen.into_iter().enumerate() {
+            let begin = mask_base + word_index * 8;
+            content_q1mask[begin..begin + 8].copy_from_slice(&word.to_le_bytes());
+        }
         for &key in &q3_scratch {
             if use_packed_shards {
                 let high = (key >> 16) as usize;
@@ -2012,7 +2135,11 @@ fn build_segment_data_slice_impl(
             }
         }
     }
-    let content_grams_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
+    let content_gramselapsed = phase_started.elapsed();
+    let content_grams_ms = content_gramselapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.content_grams_ns, content_gramselapsed);
+    }
     let phase_started = Instant::now();
     let content = if use_packed_shards {
         build_content_postings_from_packed_shards(
@@ -2023,14 +2150,22 @@ fn build_segment_data_slice_impl(
     } else {
         build_content_postings_from_pairs(unit_sources.len(), content_q1mask, content_q3_pairs)?
     };
-    let content_post_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
+    let content_postelapsed = phase_started.elapsed();
+    let content_post_ms = content_postelapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.content_post_ns, content_postelapsed);
+    }
     let phase_started = Instant::now();
     let name_index = if let Some(emitter) = name_posting_emitter {
         emitter.finish()?
     } else {
         build_raw_postings(name_grams.unwrap_or_default())?
     };
-    let name_post_ms = phase_started.elapsed().as_secs_f64() * 1000.0;
+    let name_postelapsed = phase_started.elapsed();
+    let name_post_ms = name_postelapsed.as_secs_f64() * 1000.0;
+    if let Some(timings) = timings {
+        add_duration(&timings.name_post_ns, name_postelapsed);
+    }
     if profile_build {
         eprintln!(
             "BUILD_PHASE base={} docs={} units={} name_grams_ms={:.3} dedup_ms={:.3} content_grams_ms={:.3} content_post_ms={:.3} name_post_ms={:.3} total_ms={:.3}",
@@ -2312,6 +2447,7 @@ fn build_content_postings_from_packed_shards(
         .map_err(|_| SearchError::Format("content universe overflow".into()))?;
     let mut full_dir = Vec::<u32>::new();
     let mut q3blob = Vec::<u8>::new();
+    let mut ids_scratch = Vec::<u32>::new();
     for (high, shard) in shards.iter_mut().enumerate() {
         shard.sort_unstable();
         let mut position = 0usize;
@@ -2321,12 +2457,10 @@ fn build_content_postings_from_packed_shards(
             while position < shard.len() && shard[position] >> 16 == suffix {
                 position += 1;
             }
-            let ids = shard[begin..position]
-                .iter()
-                .map(|packed| packed & 0xffff)
-                .collect::<Vec<_>>();
-            let (encoding, offset, bytes) = encode_q3(&ids, universe, &mut q3blob)?;
-            let count = u32::try_from(ids.len())
+            ids_scratch.clear();
+            ids_scratch.extend(shard[begin..position].iter().map(|packed| packed & 0xffff));
+            let (encoding, offset, bytes) = encode_q3(&ids_scratch, universe, &mut q3blob)?;
+            let count = u32::try_from(ids_scratch.len())
                 .map_err(|_| SearchError::Format("q3 posting count overflow".into()))?;
             if count > 0x3fff_ffff {
                 return Err(SearchError::Format(
@@ -2407,6 +2541,38 @@ fn append_varint(out: &mut Vec<u8>, mut value: u32) {
 }
 
 fn encode_q3(ids: &[u32], universe: u32, blob: &mut Vec<u8>) -> Result<(Q3Encoding, u32, u32)> {
+    let offset = u32::try_from(blob.len())
+        .map_err(|_| SearchError::Format("q3 payload exceeds 4GiB".into()))?;
+
+    // Selection priority is Inline -> Dense -> Block/Delta. Inline and Dense therefore do not
+    // need the delta-size and block-count analysis used only to choose between the sparse codecs.
+    if ids.len() <= 32 {
+        for &id in ids {
+            put_u32(blob, id);
+        }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        return Ok((Q3Encoding::InlineU32, offset, bytes));
+    }
+
+    let density = if universe == 0 {
+        0.0
+    } else {
+        ids.len() as f64 / f64::from(universe)
+    };
+    if density >= 0.20 {
+        let bytes = usize::try_from(u64::from(universe).div_ceil(8))
+            .map_err(|_| SearchError::Format("dense bitset too large".into()))?;
+        let mask_offset = blob.len();
+        blob.resize(mask_offset + bytes, 0);
+        for &id in ids {
+            blob[mask_offset + (id / 8) as usize] |= 1u8 << (id % 8);
+        }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        return Ok((Q3Encoding::DenseBitset, offset, bytes));
+    }
+
     let mut delta_bytes = 0usize;
     let mut previous = 0u32;
     for (index, &id) in ids.iter().enumerate() {
@@ -2424,62 +2590,32 @@ fn encode_q3(ids: &[u32], universe: u32, blob: &mut Vec<u8>) -> Result<(Q3Encodi
         }
     }
     let block_bytes = blocks * 36;
-    let density = if universe == 0 {
-        0.0
-    } else {
-        ids.len() as f64 / f64::from(universe)
-    };
-    let encoding = if ids.len() <= 32 {
-        Q3Encoding::InlineU32
-    } else if density >= 0.20 {
-        Q3Encoding::DenseBitset
-    } else if block_bytes * 4 <= delta_bytes * 5 {
-        Q3Encoding::Block256Bitmap
-    } else {
-        Q3Encoding::DeltaVarint
-    };
-    let offset = u32::try_from(blob.len())
-        .map_err(|_| SearchError::Format("q3 payload exceeds 4GiB".into()))?;
-    match encoding {
-        Q3Encoding::InlineU32 => {
-            for &id in ids {
-                put_u32(blob, id);
-            }
-        }
-        Q3Encoding::DeltaVarint => {
-            let mut previous = 0u32;
-            for (index, &id) in ids.iter().enumerate() {
-                append_varint(blob, if index == 0 { id } else { id - previous });
-                previous = id;
-            }
-        }
-        Q3Encoding::Block256Bitmap => {
-            let mut index = 0usize;
-            while index < ids.len() {
-                let block = ids[index] / 256;
-                put_u32(blob, block);
-                let mask_offset = blob.len();
-                blob.resize(mask_offset + 32, 0);
-                while index < ids.len() && ids[index] / 256 == block {
-                    let bit = ids[index] & 255;
-                    blob[mask_offset + (bit / 8) as usize] |= 1u8 << (bit % 8);
-                    index += 1;
-                }
-            }
-        }
-        Q3Encoding::DenseBitset => {
-            let bytes = usize::try_from(u64::from(universe).div_ceil(8))
-                .map_err(|_| SearchError::Format("dense bitset too large".into()))?;
+    if block_bytes * 4 <= delta_bytes * 5 {
+        let mut index = 0usize;
+        while index < ids.len() {
+            let block = ids[index] / 256;
+            put_u32(blob, block);
             let mask_offset = blob.len();
-            blob.resize(mask_offset + bytes, 0);
-            for &id in ids {
-                blob[mask_offset + (id / 8) as usize] |= 1u8 << (id % 8);
+            blob.resize(mask_offset + 32, 0);
+            while index < ids.len() && ids[index] / 256 == block {
+                let bit = ids[index] & 255;
+                blob[mask_offset + (bit / 8) as usize] |= 1u8 << (bit % 8);
+                index += 1;
             }
         }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        Ok((Q3Encoding::Block256Bitmap, offset, bytes))
+    } else {
+        let mut previous = 0u32;
+        for (index, &id) in ids.iter().enumerate() {
+            append_varint(blob, if index == 0 { id } else { id - previous });
+            previous = id;
+        }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        Ok((Q3Encoding::DeltaVarint, offset, bytes))
     }
-    let bytes = u32::try_from(blob.len() - offset as usize)
-        .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
-    Ok((encoding, offset, bytes))
 }
 
 fn compact_q3_directory(full: &[u32]) -> Result<Vec<u8>> {

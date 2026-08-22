@@ -4,6 +4,8 @@
   "capabilities": [
     "portable-search",
     "portable-index",
-    "snippet-batch"
+    "snippet-batch",
+    "search-core-backend-switch",
+    "vnext-shadow-compare"
   ]
 }

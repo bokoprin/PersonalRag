@@ -17,8 +17,8 @@ mod vnext_segment;
 
 pub use builder::{
     BuildMode, BuildOptions, BuildReport, BuildTuning, DiskPathBuildConfig, DiskPathBuildProgress,
-    DiskPathBuildReport, DiskPathInput, build_disk_corpus, build_disk_corpus_parallel,
-    build_disk_index_pipelined, build_disk_index_pipelined_benchmark,
+    DiskPathBuildReport, DiskPathBuildTimings, DiskPathInput, build_disk_corpus,
+    build_disk_corpus_parallel, build_disk_index_pipelined, build_disk_index_pipelined_benchmark,
     build_disk_path_inputs_index_pipelined, build_disk_path_inputs_index_unified,
     build_disk_path_inputs_index_unified_observed, build_disk_path_inputs_index_unified_retained,
     build_disk_paths_index_pipelined, build_index, build_index_benchmark, build_index_unified,
@@ -29,9 +29,10 @@ pub use format::{BuilderKind, Q3Encoding, SearchError};
 pub use generation::{
     CompactionAutoPolicy, CompactionDecision, CompactionMetrics, CompactionReasons,
     GenerationReport, LogicalDocument, LogicalDocumentIdentity, MergedIndex, MergedSearchSession,
-    compact_generation, compact_generation_unified, initialize_generation,
-    initialize_generation_from_built_index, publish_incremental_update,
-    publish_incremental_update_unified, verify_generation,
+    VerifiedBuiltIndex, compact_generation, compact_generation_unified, initialize_generation,
+    initialize_generation_from_built_index, initialize_generation_from_verified_built_index,
+    publish_incremental_update, publish_incremental_update_unified,
+    verify_built_index_for_generation_adoption, verify_generation, verify_generation_structure,
 };
 pub use index::{
     AccelerationProfile, ContentPlanMode, ContentQueryPlan, ContentSearchDiagnostics,

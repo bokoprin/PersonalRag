@@ -435,6 +435,8 @@ mod windows {
     #[derive(Default)]
     struct LocalProgressCounters {
         discovered: usize,
+        file_entries: usize,
+        directory_entries: usize,
         selected: usize,
         pruned: usize,
         selected_bytes: u64,
@@ -443,6 +445,14 @@ mod windows {
     impl LocalProgressCounters {
         fn record_discovered(&mut self) {
             self.discovered += 1;
+        }
+
+        fn record_file_entry(&mut self) {
+            self.file_entries += 1;
+        }
+
+        fn record_directory_entry(&mut self) {
+            self.directory_entries += 1;
         }
 
         fn record_selected(&mut self, bytes: u64) {
@@ -463,6 +473,18 @@ mod windows {
             if discovered != 0 {
                 shared.discovered.fetch_add(discovered, Ordering::Relaxed);
                 self.discovered = 0;
+            }
+            if self.file_entries != 0 {
+                shared
+                    .file_entries
+                    .fetch_add(self.file_entries, Ordering::Relaxed);
+                self.file_entries = 0;
+            }
+            if self.directory_entries != 0 {
+                shared
+                    .directory_entries
+                    .fetch_add(self.directory_entries, Ordering::Relaxed);
+                self.directory_entries = 0;
             }
             if self.selected != 0 {
                 shared.selected.fetch_add(self.selected, Ordering::Relaxed);
@@ -521,6 +543,9 @@ mod windows {
         directories: Arc<Mutex<Vec<TrackedDirectory>>>,
         tracking_complete: Arc<AtomicBool>,
         discovered: Arc<AtomicUsize>,
+        file_entries: Arc<AtomicUsize>,
+        directory_entries: Arc<AtomicUsize>,
+        other_entries: Arc<AtomicUsize>,
         selected: Arc<AtomicUsize>,
         pruned: Arc<AtomicUsize>,
         errors: Arc<AtomicUsize>,
@@ -617,6 +642,9 @@ mod windows {
     fn progress_snapshot(shared: &NativeShared) -> ScanProgress {
         ScanProgress {
             discovered_entries: shared.discovered.load(Ordering::Relaxed),
+            file_entries: shared.file_entries.load(Ordering::Relaxed),
+            directory_entries: shared.directory_entries.load(Ordering::Relaxed),
+            other_entries: shared.other_entries.load(Ordering::Relaxed),
             selected_files: shared.selected.load(Ordering::Relaxed),
             pruned_entries: shared.pruned.load(Ordering::Relaxed),
             error_entries: shared.errors.load(Ordering::Relaxed),
@@ -716,6 +744,7 @@ mod windows {
                 // Avoid UTF-16 decoding, String creation and PathBuf joins for these entries.
                 if !is_directory && max_file_bytes != 0 && record.end_of_file > max_file_bytes {
                     scratch.progress.record_discovered();
+                    scratch.progress.record_file_entry();
                     scratch.progress.record_pruned();
                     flush_progress_and_maybe_report(
                         &mut scratch.progress,
@@ -733,6 +762,11 @@ mod windows {
                 let name = OsString::from_wide(&scratch.name_utf16);
                 let display_name = name.to_string_lossy();
                 scratch.progress.record_discovered();
+                if is_directory {
+                    scratch.progress.record_directory_entry();
+                } else {
+                    scratch.progress.record_file_entry();
+                }
 
                 if is_directory {
                     if record.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
@@ -857,6 +891,9 @@ mod windows {
             directories: Arc::new(Mutex::new(Vec::new())),
             tracking_complete: Arc::new(AtomicBool::new(true)),
             discovered: Arc::new(AtomicUsize::new(1)), // Match WalkBuilder's root entry.
+            file_entries: Arc::new(AtomicUsize::new(0)),
+            directory_entries: Arc::new(AtomicUsize::new(1)),
+            other_entries: Arc::new(AtomicUsize::new(0)),
             selected: Arc::new(AtomicUsize::new(0)),
             pruned: Arc::new(AtomicUsize::new(0)),
             errors: Arc::new(AtomicUsize::new(0)),

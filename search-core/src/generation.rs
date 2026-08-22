@@ -63,6 +63,23 @@ impl LogicalDocumentIdentity {
     }
 }
 
+/// Proof that a portable base index completed a full read-back checksum verification.
+///
+/// The token has no public constructor and is consumed by generation adoption, preventing the
+/// high-throughput adoption path from accidentally skipping its one required full index verify.
+#[derive(Debug)]
+pub struct VerifiedBuiltIndex {
+    path: PathBuf,
+}
+
+pub fn verify_built_index_for_generation_adoption(
+    built_index: impl AsRef<Path>,
+) -> Result<VerifiedBuiltIndex> {
+    let path = built_index.as_ref().to_path_buf();
+    verify_index(&path)?;
+    Ok(VerifiedBuiltIndex { path })
+}
+
 #[derive(Clone, Debug)]
 pub struct GenerationReport {
     pub generation: Generation,
@@ -1190,8 +1207,23 @@ pub fn initialize_generation_from_built_index(
     built_index: impl AsRef<Path>,
     documents: &[LogicalDocumentIdentity],
 ) -> Result<GenerationReport> {
+    let verified = verify_built_index_for_generation_adoption(built_index)?;
+    initialize_generation_from_verified_built_index(root, verified, documents)
+}
+
+/// Adopt an index that has already passed a full read-back checksum verification.
+///
+/// `verified` is consumed so the fast path cannot be called with an arbitrary path. The adoption
+/// step only adds the logical map and generation metadata; it never rewrites the verified segment
+/// payloads. Call `verify_generation_structure` after publication to validate CURRENT, the
+/// generation manifest, the logical map checksum, and logical/physical document consistency.
+pub fn initialize_generation_from_verified_built_index(
+    root: impl AsRef<Path>,
+    verified: VerifiedBuiltIndex,
+    documents: &[LogicalDocumentIdentity],
+) -> Result<GenerationReport> {
     let root = root.as_ref();
-    let built_index = built_index.as_ref();
+    let built_index = verified.path.as_path();
     if root == built_index {
         return Err(SearchError::InvalidArgument(
             "generation root and built index must be different paths".into(),
@@ -1202,7 +1234,9 @@ pub fn initialize_generation_from_built_index(
             "generation store is already initialized".into(),
         ));
     }
-    verify_index(built_index)?;
+
+    // The checksum-heavy segment verification has already been performed to create `verified`.
+    // This cheap open revalidates the portable manifest shape and obtains the physical doc count.
     let physical = LazyPersistentIndex::open(built_index)?;
     let physical_docs = usize::try_from(physical.docs())
         .map_err(|_| SearchError::Format("physical document count too large".into()))?;
@@ -1225,7 +1259,6 @@ pub fn initialize_generation_from_built_index(
     }
 
     write_doc_map_identities(&built_index.join("logical-map.bin"), documents)?;
-    verify_index(built_index)?;
     sync_directory(built_index)?;
     fs::rename(built_index, &base_path)?;
     sync_directory(&root.join("components"))?;
@@ -1465,6 +1498,14 @@ fn compact_generation_profile(
 
 pub fn verify_generation(root: impl AsRef<Path>) -> Result<()> {
     let _ = MergedIndex::open(root, true)?;
+    Ok(())
+}
+
+/// Verify generation metadata and logical mapping without re-hashing already verified base
+/// segment payloads. This is intended for the immediate post-publication check after adopting a
+/// `VerifiedBuiltIndex`; `verify_generation` remains the full checksum verification API.
+pub fn verify_generation_structure(root: impl AsRef<Path>) -> Result<()> {
+    let _ = MergedIndex::open(root, false)?;
     Ok(())
 }
 
