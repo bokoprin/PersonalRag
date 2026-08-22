@@ -1,1 +1,1 @@
-rerun q3 encoding early fast path A-B benchmark
+materialize accepted q3 encoding fast path
