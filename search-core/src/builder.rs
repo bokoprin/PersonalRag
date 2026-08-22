@@ -2076,10 +2076,12 @@ fn build_segment_data_slice_impl(
         q3_scratch.clear();
         q3_touched_words.clear();
         q2_touched_words.clear();
+        let mut q1_seen = [0u64; 4];
         let mut previous2 = 0u8;
         let mut previous1 = 0u8;
         for (index, &byte) in content.iter().enumerate() {
-            content_q1mask[mask_base + usize::from(byte / 8)] |= 1u8 << (byte % 8);
+            let q1_word = usize::from(byte >> 6);
+            q1_seen[q1_word] |= 1u64 << (byte & 63);
             if index >= 1
                 && let (Some(seen), Some(pairs)) = (q2_seen.as_mut(), q2_pairs.as_mut())
             {
@@ -2110,6 +2112,10 @@ fn build_segment_data_slice_impl(
             }
             previous2 = previous1;
             previous1 = byte;
+        }
+        for (word_index, word) in q1_seen.into_iter().enumerate() {
+            let begin = mask_base + word_index * 8;
+            content_q1mask[begin..begin + 8].copy_from_slice(&word.to_le_bytes());
         }
         for &key in &q3_scratch {
             if use_packed_shards {
@@ -2441,6 +2447,7 @@ fn build_content_postings_from_packed_shards(
         .map_err(|_| SearchError::Format("content universe overflow".into()))?;
     let mut full_dir = Vec::<u32>::new();
     let mut q3blob = Vec::<u8>::new();
+    let mut ids_scratch = Vec::<u32>::new();
     for (high, shard) in shards.iter_mut().enumerate() {
         shard.sort_unstable();
         let mut position = 0usize;
@@ -2450,12 +2457,10 @@ fn build_content_postings_from_packed_shards(
             while position < shard.len() && shard[position] >> 16 == suffix {
                 position += 1;
             }
-            let ids = shard[begin..position]
-                .iter()
-                .map(|packed| packed & 0xffff)
-                .collect::<Vec<_>>();
-            let (encoding, offset, bytes) = encode_q3(&ids, universe, &mut q3blob)?;
-            let count = u32::try_from(ids.len())
+            ids_scratch.clear();
+            ids_scratch.extend(shard[begin..position].iter().map(|packed| packed & 0xffff));
+            let (encoding, offset, bytes) = encode_q3(&ids_scratch, universe, &mut q3blob)?;
+            let count = u32::try_from(ids_scratch.len())
                 .map_err(|_| SearchError::Format("q3 posting count overflow".into()))?;
             if count > 0x3fff_ffff {
                 return Err(SearchError::Format(
@@ -2536,6 +2541,38 @@ fn append_varint(out: &mut Vec<u8>, mut value: u32) {
 }
 
 fn encode_q3(ids: &[u32], universe: u32, blob: &mut Vec<u8>) -> Result<(Q3Encoding, u32, u32)> {
+    let offset = u32::try_from(blob.len())
+        .map_err(|_| SearchError::Format("q3 payload exceeds 4GiB".into()))?;
+
+    // Selection priority is Inline -> Dense -> Block/Delta. Inline and Dense therefore do not
+    // need the delta-size and block-count analysis used only to choose between the sparse codecs.
+    if ids.len() <= 32 {
+        for &id in ids {
+            put_u32(blob, id);
+        }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        return Ok((Q3Encoding::InlineU32, offset, bytes));
+    }
+
+    let density = if universe == 0 {
+        0.0
+    } else {
+        ids.len() as f64 / f64::from(universe)
+    };
+    if density >= 0.20 {
+        let bytes = usize::try_from(u64::from(universe).div_ceil(8))
+            .map_err(|_| SearchError::Format("dense bitset too large".into()))?;
+        let mask_offset = blob.len();
+        blob.resize(mask_offset + bytes, 0);
+        for &id in ids {
+            blob[mask_offset + (id / 8) as usize] |= 1u8 << (id % 8);
+        }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        return Ok((Q3Encoding::DenseBitset, offset, bytes));
+    }
+
     let mut delta_bytes = 0usize;
     let mut previous = 0u32;
     for (index, &id) in ids.iter().enumerate() {
@@ -2553,62 +2590,32 @@ fn encode_q3(ids: &[u32], universe: u32, blob: &mut Vec<u8>) -> Result<(Q3Encodi
         }
     }
     let block_bytes = blocks * 36;
-    let density = if universe == 0 {
-        0.0
-    } else {
-        ids.len() as f64 / f64::from(universe)
-    };
-    let encoding = if ids.len() <= 32 {
-        Q3Encoding::InlineU32
-    } else if density >= 0.20 {
-        Q3Encoding::DenseBitset
-    } else if block_bytes * 4 <= delta_bytes * 5 {
-        Q3Encoding::Block256Bitmap
-    } else {
-        Q3Encoding::DeltaVarint
-    };
-    let offset = u32::try_from(blob.len())
-        .map_err(|_| SearchError::Format("q3 payload exceeds 4GiB".into()))?;
-    match encoding {
-        Q3Encoding::InlineU32 => {
-            for &id in ids {
-                put_u32(blob, id);
-            }
-        }
-        Q3Encoding::DeltaVarint => {
-            let mut previous = 0u32;
-            for (index, &id) in ids.iter().enumerate() {
-                append_varint(blob, if index == 0 { id } else { id - previous });
-                previous = id;
-            }
-        }
-        Q3Encoding::Block256Bitmap => {
-            let mut index = 0usize;
-            while index < ids.len() {
-                let block = ids[index] / 256;
-                put_u32(blob, block);
-                let mask_offset = blob.len();
-                blob.resize(mask_offset + 32, 0);
-                while index < ids.len() && ids[index] / 256 == block {
-                    let bit = ids[index] & 255;
-                    blob[mask_offset + (bit / 8) as usize] |= 1u8 << (bit % 8);
-                    index += 1;
-                }
-            }
-        }
-        Q3Encoding::DenseBitset => {
-            let bytes = usize::try_from(u64::from(universe).div_ceil(8))
-                .map_err(|_| SearchError::Format("dense bitset too large".into()))?;
+    if block_bytes * 4 <= delta_bytes * 5 {
+        let mut index = 0usize;
+        while index < ids.len() {
+            let block = ids[index] / 256;
+            put_u32(blob, block);
             let mask_offset = blob.len();
-            blob.resize(mask_offset + bytes, 0);
-            for &id in ids {
-                blob[mask_offset + (id / 8) as usize] |= 1u8 << (id % 8);
+            blob.resize(mask_offset + 32, 0);
+            while index < ids.len() && ids[index] / 256 == block {
+                let bit = ids[index] & 255;
+                blob[mask_offset + (bit / 8) as usize] |= 1u8 << (bit % 8);
+                index += 1;
             }
         }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        Ok((Q3Encoding::Block256Bitmap, offset, bytes))
+    } else {
+        let mut previous = 0u32;
+        for (index, &id) in ids.iter().enumerate() {
+            append_varint(blob, if index == 0 { id } else { id - previous });
+            previous = id;
+        }
+        let bytes = u32::try_from(blob.len() - offset as usize)
+            .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
+        Ok((Q3Encoding::DeltaVarint, offset, bytes))
     }
-    let bytes = u32::try_from(blob.len() - offset as usize)
-        .map_err(|_| SearchError::Format("q3 encoded posting too large".into()))?;
-    Ok((encoding, offset, bytes))
 }
 
 fn compact_q3_directory(full: &[u32]) -> Result<Vec<u8>> {
