@@ -103,6 +103,12 @@ fn report_json(
             "contentPostWorkMs": duration_ms(timings.content_post_work),
             "namePostWorkMs": duration_ms(timings.name_post_work),
             "segmentWriteWorkMs": duration_ms(timings.segment_write_work),
+            "segmentWritePrepareWorkMs": duration_ms(timings.segment_write_prepare_work),
+            "segmentWriteOpenWorkMs": duration_ms(timings.segment_write_open_work),
+            "segmentWriteBodyWorkMs": duration_ms(timings.segment_write_body_work),
+            "segmentWriteMetadataWorkMs": duration_ms(timings.segment_write_metadata_work),
+            "segmentWriteSyncWorkMs": duration_ms(timings.segment_write_sync_work),
+            "segmentWriteFinalizeWorkMs": duration_ms(timings.segment_write_finalize_work),
             "accelerationWorkMs": duration_ms(timings.acceleration_work),
             "manifestWriteWallMs": duration_ms(timings.manifest_write_wall),
             "workerTimesAreSummed": true
