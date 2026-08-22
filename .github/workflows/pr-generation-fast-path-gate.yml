@@ -38,6 +38,11 @@ jobs:
       - name: Apply verified-generation fast path
         shell: pwsh
         run: |
+          if (Test-Path ci/fix_verified_generation_transform.py) {
+            python ci/fix_verified_generation_transform.py
+            if ($LASTEXITCODE -ne 0) { throw "transform selector fix failed" }
+            Remove-Item ci/fix_verified_generation_transform.py
+          }
           if (Test-Path ci/apply_verified_generation_fast_path.py) {
             python ci/apply_verified_generation_fast_path.py
             if ($LASTEXITCODE -ne 0) { throw "verified generation source transformation failed" }
