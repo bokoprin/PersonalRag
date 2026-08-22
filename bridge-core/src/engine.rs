@@ -18,7 +18,7 @@ use personalrag_portable_search::{
     initialize_generation_from_verified_built_index, initialize_vnext_generation_store,
     open_vnext_published_generation, plan_incremental_update, publish_incremental_update_unified,
     publish_vnext_incremental_generation, recommend_system_build_tuning,
-    verify_built_index_for_generation_adoption, verify_generation_structure,
+    verify_built_index_for_generation_adoption, verify_generation, verify_generation_structure,
     verify_positional2_sidecars, verify_positional3_sidecars, verify_positional_sidecars,
     verify_vnext_generation_store, AccelerationProfile, BuildMode, BuildOptions, ChangeBatch,
     ChangeKind, DiskPathBuildConfig, DiskPathInput, DocumentChange, DocumentInput,
