@@ -1,0 +1,110 @@
+name: PR q3 no-collect A-B
+
+on:
+  pull_request:
+    branches:
+      - perf/index-build-safe-speedups
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 1
+
+      - name: Apply candidate transform
+        shell: pwsh
+        run: |
+          python ci/apply_q3_no_collect.py
+          if ($LASTEXITCODE -ne 0) { throw 'q3 no-collect transform failed' }
+          Remove-Item ci/apply_q3_no_collect.py
+          cargo fmt --manifest-path search-core/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw 'candidate fmt failed' }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'candidate diff check failed' }
+
+      - name: Checkout baseline
+        uses: actions/checkout@v4
+        with:
+          ref: perf/index-build-safe-speedups
+          path: baseline
+          fetch-depth: 1
+
+      - name: Install Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup default 1.97.1
+          rustc --version
+          cargo --version
+
+      - name: Build identical A-B harness
+        shell: pwsh
+        run: |
+          Copy-Item search-core/src/bin/pr_ab_core.rs baseline/search-core/src/bin/pr_ab_core.rs -Force
+          $root = $PWD.Path
+          $env:CARGO_TARGET_DIR = Join-Path $root 'target-candidate'
+          cargo build --release --manifest-path search-core/Cargo.toml --bin pr_ab_core
+          if ($LASTEXITCODE -ne 0) { throw 'candidate A/B build failed' }
+          Push-Location baseline
+          $env:CARGO_TARGET_DIR = Join-Path $root 'target-baseline'
+          cargo build --release --manifest-path search-core/Cargo.toml --bin pr_ab_core
+          if ($LASTEXITCODE -ne 0) { throw 'baseline A/B build failed' }
+          Pop-Location
+
+      - name: Run alternating A-B benchmark
+        shell: pwsh
+        run: |
+          $candidate = Join-Path $PWD 'target-candidate/release/pr_ab_core.exe'
+          $baseline = Join-Path $PWD 'target-baseline/release/pr_ab_core.exe'
+          $log = Join-Path $PWD 'q3-no-collect-ab.txt'
+          function Run-One([string]$exe, [string]$label) {
+            $env:PR_AB_LABEL = $label
+            $line = & $exe
+            if ($LASTEXITCODE -ne 0) { throw "$label benchmark failed" }
+            $line | Tee-Object -FilePath $log -Append
+          }
+          Run-One $baseline 'baseline-warm'
+          Run-One $candidate 'candidate-warm'
+          for ($i = 0; $i -lt 7; $i++) {
+            if (($i % 2) -eq 0) {
+              Run-One $baseline "baseline-$i"
+              Run-One $candidate "candidate-$i"
+            } else {
+              Run-One $candidate "candidate-$i"
+              Run-One $baseline "baseline-$i"
+            }
+          }
+          $rows = Get-Content $log | ForEach-Object {
+            if ($_ -match '^AB label=([^ ]+) wall_ms=([0-9.]+).*byte_hash=([0-9a-f]+)$') {
+              [pscustomobject]@{ Label=$Matches[1]; Ms=[double]$Matches[2]; Hash=$Matches[3] }
+            }
+          }
+          $baseRows = @($rows | Where-Object { $_.Label -match '^baseline-[0-9]+$' })
+          $candRows = @($rows | Where-Object { $_.Label -match '^candidate-[0-9]+$' })
+          if ($baseRows.Count -ne 7 -or $candRows.Count -ne 7) { throw 'missing A/B samples' }
+          $hashes = @($baseRows.Hash + $candRows.Hash | Sort-Object -Unique)
+          if ($hashes.Count -ne 1) { throw "byte identity mismatch: $($hashes -join ', ')" }
+          $baseSorted = @($baseRows.Ms | Sort-Object)
+          $candSorted = @($candRows.Ms | Sort-Object)
+          $baseMedian = $baseSorted[3]
+          $candMedian = $candSorted[3]
+          $delta = (($candMedian / $baseMedian) - 1.0) * 100.0
+          $summary = 'AB_SUMMARY baseline_median_ms={0:F3} candidate_median_ms={1:F3} delta_pct={2:F3} byte_hash={3}' -f $baseMedian,$candMedian,$delta,$hashes[0]
+          $summary | Tee-Object -FilePath $log -Append
+          Write-Host $summary
+
+      - name: Upload benchmark log
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersonalRag-q3-no-collect-ab
+          path: q3-no-collect-ab.txt
+          if-no-files-found: error
+          retention-days: 7
