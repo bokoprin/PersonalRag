@@ -1,1 +1,1 @@
-trigger q3 posting scratch A-B benchmark
+trigger ASCII q3 compact A-B benchmark
