@@ -1,0 +1,72 @@
+name: Apply Segment Write Breakdown
+
+on:
+  pull_request:
+    branches:
+      - perf/segment-write-breakdown
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: perf/segment-write-breakdown
+          fetch-depth: 0
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Rust 1.97.1
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+
+      - name: Apply instrumentation and clean temporary files
+        shell: pwsh
+        run: |
+          python scripts/apply-segment-write-breakdown.py
+          cargo fmt --manifest-path search-core/Cargo.toml
+          cargo fmt --manifest-path bridge-core/Cargo.toml
+          git rm -f ci/segment-write-breakdown-gate.txt
+          git rm -f scripts/segment-write-breakdown.patch
+          git rm -f scripts/apply-segment-write-breakdown.py
+          git rm -f .github/workflows/apply-segment-write-breakdown.yml
+          git diff --check
+          git status --short
+
+      - name: Commit exact feature tree
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "segment writeのprepare/open/body/metadata/sync/finalize計測を追加"
+          git push origin HEAD:perf/segment-write-breakdown
+          git rev-parse HEAD
+
+      - name: Full Windows regression and release build
+        shell: pwsh
+        run: ./scripts/verify-and-build-windows.ps1
+
+      - name: Profile harness smoke with breakdown
+        shell: pwsh
+        run: |
+          $corpus = Join-Path $env:RUNNER_TEMP 'personalrag-write-breakdown-corpus'
+          $out = Join-Path $env:RUNNER_TEMP 'personalrag-write-breakdown-out'
+          New-Item -ItemType Directory -Force -Path $corpus | Out-Null
+          1..64 | ForEach-Object {
+            $body = ('PersonalRag segment write breakdown {0} ' -f $_) * 128
+            Set-Content -LiteralPath (Join-Path $corpus ('file-{0:D3}.txt' -f $_)) -Value $body -Encoding utf8
+          }
+          $env:PR_PROFILE_BUILD = '1'
+          cargo run --release --manifest-path bridge-core/Cargo.toml --example index_build_profile -- Warm $corpus $out 2 2 32
