@@ -2447,6 +2447,7 @@ fn build_content_postings_from_packed_shards(
         .map_err(|_| SearchError::Format("content universe overflow".into()))?;
     let mut full_dir = Vec::<u32>::new();
     let mut q3blob = Vec::<u8>::new();
+    let mut ids_scratch = Vec::<u32>::new();
     for (high, shard) in shards.iter_mut().enumerate() {
         shard.sort_unstable();
         let mut position = 0usize;
@@ -2456,12 +2457,10 @@ fn build_content_postings_from_packed_shards(
             while position < shard.len() && shard[position] >> 16 == suffix {
                 position += 1;
             }
-            let ids = shard[begin..position]
-                .iter()
-                .map(|packed| packed & 0xffff)
-                .collect::<Vec<_>>();
-            let (encoding, offset, bytes) = encode_q3(&ids, universe, &mut q3blob)?;
-            let count = u32::try_from(ids.len())
+            ids_scratch.clear();
+            ids_scratch.extend(shard[begin..position].iter().map(|packed| packed & 0xffff));
+            let (encoding, offset, bytes) = encode_q3(&ids_scratch, universe, &mut q3blob)?;
+            let count = u32::try_from(ids_scratch.len())
                 .map_err(|_| SearchError::Format("q3 posting count overflow".into()))?;
             if count > 0x3fff_ffff {
                 return Err(SearchError::Format(
