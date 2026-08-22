@@ -8,12 +8,47 @@ use personalrag_portable_search::{
     PersistentIndex, build_disk_path_inputs_index_unified,
 };
 
+const FNV_OFFSET: u64 = 1_469_598_103_934_665_603;
+const FNV_PRIME: u64 = 1_099_511_628_211;
+
 fn temp_root() -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
     std::env::temp_dir().join(format!("personalrag-build-tune-{}-{nonce}", std::process::id()))
+}
+
+fn update_hash(hash: &mut u64, bytes: &[u8]) {
+    for &byte in bytes {
+        *hash = (*hash ^ u64::from(byte)).wrapping_mul(FNV_PRIME);
+    }
+}
+
+fn collect_tree_files(root: &Path, current: &Path, out: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(current).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if entry.file_type().unwrap().is_dir() {
+            collect_tree_files(root, &path, out);
+        } else {
+            out.push(path.strip_prefix(root).unwrap().to_path_buf());
+        }
+    }
+}
+
+fn tree_hash(root: &Path) -> u64 {
+    let mut files = Vec::new();
+    collect_tree_files(root, root, &mut files);
+    files.sort_by_key(|path| path.to_string_lossy().replace('\\', "/"));
+    let mut hash = FNV_OFFSET;
+    for relative in files {
+        let portable = relative.to_string_lossy().replace('\\', "/");
+        update_hash(&mut hash, portable.as_bytes());
+        update_hash(&mut hash, &[0]);
+        update_hash(&mut hash, &fs::read(root.join(&relative)).unwrap());
+    }
+    hash
 }
 
 fn make_content(file_index: usize, target_bytes: usize) -> Vec<u8> {
@@ -95,14 +130,16 @@ fn run_build(
     )
     .unwrap();
     let wall_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let byte_hash = tree_hash(&output);
     println!(
-        "BUILD segment_docs={} workers={} iteration={} wall_ms={:.3} segments={} index_mib={:.3} hydration_ms={:.3} core_work_ms={:.3} content_grams_work_ms={:.3} content_post_work_ms={:.3} write_work_ms={:.3} accel_work_ms={:.3}",
+        "BUILD segment_docs={} workers={} iteration={} wall_ms={:.3} segments={} index_mib={:.3} byte_hash={:016x} hydration_ms={:.3} core_work_ms={:.3} content_grams_work_ms={:.3} content_post_work_ms={:.3} write_work_ms={:.3} accel_work_ms={:.3}",
         segment_docs,
         workers,
         iteration,
         wall_ms,
         report.build.segments,
         report.build.index_bytes as f64 / (1024.0 * 1024.0),
+        byte_hash,
         report.timings.hydration_wall.as_secs_f64() * 1000.0,
         report.timings.segment_core_work.as_secs_f64() * 1000.0,
         report.timings.content_grams_work.as_secs_f64() * 1000.0,
