@@ -1,1 +1,1 @@
-trigger local q1 mask benchmark
+trigger same-run q1 A-B benchmark
