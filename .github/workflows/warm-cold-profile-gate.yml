@@ -5,7 +5,9 @@ on:
     branches:
       - perf/warm-critical-cold-hydration-ab
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - perf/warm-critical-cold-hydration-ab
 
 jobs:
   windows-regression:
