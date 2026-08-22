@@ -29,9 +29,10 @@ pub use format::{BuilderKind, Q3Encoding, SearchError};
 pub use generation::{
     CompactionAutoPolicy, CompactionDecision, CompactionMetrics, CompactionReasons,
     GenerationReport, LogicalDocument, LogicalDocumentIdentity, MergedIndex, MergedSearchSession,
-    compact_generation, compact_generation_unified, initialize_generation,
-    initialize_generation_from_built_index, publish_incremental_update,
-    publish_incremental_update_unified, verify_generation,
+    VerifiedBuiltIndex, compact_generation, compact_generation_unified, initialize_generation,
+    initialize_generation_from_built_index, initialize_generation_from_verified_built_index,
+    publish_incremental_update, publish_incremental_update_unified,
+    verify_built_index_for_generation_adoption, verify_generation, verify_generation_structure,
 };
 pub use index::{
     AccelerationProfile, ContentPlanMode, ContentQueryPlan, ContentSearchDiagnostics,
