@@ -1,0 +1,50 @@
+name: Cleanup Segment Sync Wave
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout cleanup branch
+        uses: actions/checkout@v4
+        with:
+          ref: ci/cleanup-segment-sync-wave
+          fetch-depth: 0
+
+      - name: Delete temporary and merged branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          branches=(
+            'ci/segment-sync-concurrency-run'
+            'ci/segment-sync-concurrency-run2'
+            'ci/segment-sync-concurrency-run3'
+            'ci/segment-sync-concurrency-run4'
+            'ci/segment-sync-concurrency-run5'
+            'ci/segment-sync-concurrency-run6'
+            'ci/segment-sync-concurrency-trigger'
+            'ci/segment-sync-final-review'
+            'perf/segment-sync-concurrency'
+            'perf/segment-write-buffered'
+          )
+          for branch in "${branches[@]}"; do
+            if git ls-remote --exit-code --heads origin "refs/heads/$branch" >/dev/null 2>&1; then
+              echo "Deleting $branch"
+              git push origin --delete "$branch"
+            else
+              echo "Already absent: $branch"
+            fi
+          done
+
+      - name: Delete cleanup branch itself
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin --delete ci/cleanup-segment-sync-wave
