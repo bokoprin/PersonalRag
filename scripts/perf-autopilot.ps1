@@ -474,6 +474,10 @@ function Restore-CandidateSnapshot([string]$Repository, [string]$CurrentBestSha,
     $tracked = @($Snapshot.trackedPaths)
     if ($tracked.Count -gt 0) {
         Invoke-Git $Repository (@('restore', "--source=$CurrentBestSha", '--worktree', '--') + $tracked) | Out-Null
+        # Windows can retain stale index stat data immediately after an explicit restore even
+        # when the filtered worktree blob already matches current-best. Refresh only the
+        # declared tracked candidate paths before judging the rollback result.
+        Invoke-Git $Repository (@('update-index', '--really-refresh', '--') + $tracked) | Out-Null
     }
     foreach ($entry in @($Snapshot.untracked)) {
         $full = Assert-PathUnderRoot (Join-Path $Repository ([string]$entry.path)) $Repository
