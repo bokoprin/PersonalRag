@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.97"
 
+[features]
+# Used only by bridge-core/examples/index_build_profile.rs. Keep the GUI's default dependency
+# graph free of build-profile instrumentation.
+profile-build = ["personalrag-portable-search/profile-build"]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

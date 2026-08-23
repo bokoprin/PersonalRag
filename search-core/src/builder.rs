@@ -2,8 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
+#[cfg(feature = "profile-build")]
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, OnceLock, mpsc};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use crate::fold_ascii;
@@ -586,9 +588,17 @@ fn hydrate_disk_document<T: DiskPathSource>(
     max_file_bytes: u64,
 ) -> Option<DocumentInput> {
     let path = source.path();
+    let profile_build = profile_build_enabled();
     let size_bytes = match source.known_size_bytes() {
         Some(size_bytes) => size_bytes,
-        None => fs::metadata(path).ok()?.len(),
+        None => {
+            let metadata_started = profile_build.then(Instant::now);
+            let metadata = fs::metadata(path).ok()?;
+            if let Some(started) = metadata_started {
+                profile_hydration_metadata(started.elapsed());
+            }
+            metadata.len()
+        }
     };
     if max_file_bytes > 0 && size_bytes > max_file_bytes {
         return None;
@@ -604,23 +614,16 @@ fn hydrate_disk_document<T: DiskPathSource>(
             .unwrap_or_else(|| path.to_path_buf());
         path_to_portable(&relative)
     };
-    let profile_build = profile_build_enabled();
     let normalized_content = if source.index_content() {
         let read_started = profile_build.then(Instant::now);
         let mut content = fs::read(source.content_path()).ok()?;
         if let Some(started) = read_started {
-            PROFILE_HYDRATION_READ_NS.fetch_add(
-                started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
-                Ordering::Relaxed,
-            );
+            profile_hydration_combined_read(started.elapsed());
         }
         let normalize_started = profile_build.then(Instant::now);
         content.make_ascii_lowercase();
         if let Some(started) = normalize_started {
-            PROFILE_HYDRATION_NORMALIZE_NS.fetch_add(
-                started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
-                Ordering::Relaxed,
-            );
+            profile_hydration_normalize(started.elapsed());
         }
         content
     } else {
@@ -629,10 +632,7 @@ fn hydrate_disk_document<T: DiskPathSource>(
     let normalize_started = profile_build.then(Instant::now);
     let normalized_name = fold_ascii(display.as_bytes());
     if let Some(started) = normalize_started {
-        PROFILE_HYDRATION_NORMALIZE_NS.fetch_add(
-            started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64,
-            Ordering::Relaxed,
-        );
+        profile_hydration_normalize(started.elapsed());
     }
     Some(DocumentInput::new(
         display.clone(),
@@ -642,12 +642,145 @@ fn hydrate_disk_document<T: DiskPathSource>(
     ))
 }
 
-static PROFILE_BUILD_ENABLED: OnceLock<bool> = OnceLock::new();
-static PROFILE_HYDRATION_READ_NS: AtomicU64 = AtomicU64::new(0);
-static PROFILE_HYDRATION_NORMALIZE_NS: AtomicU64 = AtomicU64::new(0);
+#[derive(Clone, Copy, Debug, Default)]
+struct ProfileHydrationSnapshot {
+    combined_read_ns: u64,
+    normalize_ns: u64,
+    metadata_ns: u64,
+    batch_construction_ns: u64,
+    batch_dispatch_ns: u64,
+    dispatch_wait_ns: u64,
+    result_wait_ns: u64,
+    worker_active_ns: u64,
+    worker_send_wait_ns: u64,
+    pipeline_to_hydration_ns: u64,
+}
 
+#[cfg(feature = "profile-build")]
+struct ProfileHydrationCounters {
+    combined_read_ns: AtomicU64,
+    normalize_ns: AtomicU64,
+    metadata_ns: AtomicU64,
+    batch_construction_ns: AtomicU64,
+    batch_dispatch_ns: AtomicU64,
+    dispatch_wait_ns: AtomicU64,
+    result_wait_ns: AtomicU64,
+    worker_active_ns: AtomicU64,
+    worker_send_wait_ns: AtomicU64,
+    pipeline_to_hydration_ns: AtomicU64,
+}
+
+#[cfg(feature = "profile-build")]
+static PROFILE_BUILD_ENABLED: OnceLock<bool> = OnceLock::new();
+#[cfg(feature = "profile-build")]
+static PROFILE_HYDRATION: ProfileHydrationCounters = ProfileHydrationCounters {
+    combined_read_ns: AtomicU64::new(0),
+    normalize_ns: AtomicU64::new(0),
+    metadata_ns: AtomicU64::new(0),
+    batch_construction_ns: AtomicU64::new(0),
+    batch_dispatch_ns: AtomicU64::new(0),
+    dispatch_wait_ns: AtomicU64::new(0),
+    result_wait_ns: AtomicU64::new(0),
+    worker_active_ns: AtomicU64::new(0),
+    worker_send_wait_ns: AtomicU64::new(0),
+    pipeline_to_hydration_ns: AtomicU64::new(0),
+};
+
+#[cfg(feature = "profile-build")]
+#[inline]
 fn profile_build_enabled() -> bool {
     *PROFILE_BUILD_ENABLED.get_or_init(|| std::env::var_os("PR_PROFILE_BUILD").is_some())
+}
+
+#[cfg(not(feature = "profile-build"))]
+#[inline]
+const fn profile_build_enabled() -> bool {
+    false
+}
+
+#[cfg(feature = "profile-build")]
+#[inline]
+fn profile_add(counter: &AtomicU64, elapsed: Duration) {
+    if profile_build_enabled() {
+        counter.fetch_add(
+            elapsed.as_nanos().min(u128::from(u64::MAX)) as u64,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+macro_rules! profile_metric {
+    ($name:ident, $field:ident) => {
+        #[inline]
+        fn $name(elapsed: Duration) {
+            #[cfg(feature = "profile-build")]
+            profile_add(&PROFILE_HYDRATION.$field, elapsed);
+            #[cfg(not(feature = "profile-build"))]
+            let _ = elapsed;
+        }
+    };
+}
+
+profile_metric!(profile_hydration_combined_read, combined_read_ns);
+profile_metric!(profile_hydration_normalize, normalize_ns);
+profile_metric!(profile_hydration_metadata, metadata_ns);
+profile_metric!(profile_hydration_batch_construction, batch_construction_ns);
+profile_metric!(profile_hydration_batch_dispatch, batch_dispatch_ns);
+profile_metric!(profile_hydration_dispatch_wait, dispatch_wait_ns);
+profile_metric!(profile_hydration_result_wait, result_wait_ns);
+profile_metric!(profile_hydration_worker_active, worker_active_ns);
+profile_metric!(profile_hydration_worker_send_wait, worker_send_wait_ns);
+profile_metric!(
+    profile_hydration_pipeline_to_hydration,
+    pipeline_to_hydration_ns
+);
+
+#[cfg(feature = "profile-build")]
+fn reset_profile_hydration() {
+    for counter in [
+        &PROFILE_HYDRATION.combined_read_ns,
+        &PROFILE_HYDRATION.normalize_ns,
+        &PROFILE_HYDRATION.metadata_ns,
+        &PROFILE_HYDRATION.batch_construction_ns,
+        &PROFILE_HYDRATION.batch_dispatch_ns,
+        &PROFILE_HYDRATION.dispatch_wait_ns,
+        &PROFILE_HYDRATION.result_wait_ns,
+        &PROFILE_HYDRATION.worker_active_ns,
+        &PROFILE_HYDRATION.worker_send_wait_ns,
+        &PROFILE_HYDRATION.pipeline_to_hydration_ns,
+    ] {
+        counter.store(0, Ordering::Relaxed);
+    }
+}
+
+#[cfg(not(feature = "profile-build"))]
+fn reset_profile_hydration() {}
+
+#[cfg(feature = "profile-build")]
+fn profile_hydration_snapshot() -> ProfileHydrationSnapshot {
+    ProfileHydrationSnapshot {
+        combined_read_ns: PROFILE_HYDRATION.combined_read_ns.load(Ordering::Relaxed),
+        normalize_ns: PROFILE_HYDRATION.normalize_ns.load(Ordering::Relaxed),
+        metadata_ns: PROFILE_HYDRATION.metadata_ns.load(Ordering::Relaxed),
+        batch_construction_ns: PROFILE_HYDRATION
+            .batch_construction_ns
+            .load(Ordering::Relaxed),
+        batch_dispatch_ns: PROFILE_HYDRATION.batch_dispatch_ns.load(Ordering::Relaxed),
+        dispatch_wait_ns: PROFILE_HYDRATION.dispatch_wait_ns.load(Ordering::Relaxed),
+        result_wait_ns: PROFILE_HYDRATION.result_wait_ns.load(Ordering::Relaxed),
+        worker_active_ns: PROFILE_HYDRATION.worker_active_ns.load(Ordering::Relaxed),
+        worker_send_wait_ns: PROFILE_HYDRATION
+            .worker_send_wait_ns
+            .load(Ordering::Relaxed),
+        pipeline_to_hydration_ns: PROFILE_HYDRATION
+            .pipeline_to_hydration_ns
+            .load(Ordering::Relaxed),
+    }
+}
+
+#[cfg(not(feature = "profile-build"))]
+fn profile_hydration_snapshot() -> ProfileHydrationSnapshot {
+    ProfileHydrationSnapshot::default()
 }
 
 const HYDRATION_RESULT_CHUNK_FILES: usize = 64;
@@ -687,6 +820,7 @@ where
     if files.is_empty() {
         return Ok(Vec::new());
     }
+    let profile_build = profile_build_enabled();
     let workers = workers.max(1).min(files.len());
     let mut hydrated = std::iter::repeat_with(|| None)
         .take(files.len())
@@ -717,10 +851,12 @@ where
             if build_cancelled(cancel) {
                 return Err(SearchError::InvalidArgument("build cancelled".into()));
             }
-            observe_document(
-                index,
-                hydrate_disk_document(root, canonical_root, source, max_file_bytes),
-            );
+            let active_started = profile_build.then(Instant::now);
+            let document = hydrate_disk_document(root, canonical_root, source, max_file_bytes);
+            if let Some(started) = active_started {
+                profile_hydration_worker_active(started.elapsed());
+            }
+            observe_document(index, document);
         }
         return Ok(hydrated);
     }
@@ -745,27 +881,45 @@ where
                     let Some(source) = files.get(index) else {
                         break;
                     };
-                    local.push((
-                        index,
-                        hydrate_disk_document(root, canonical_root, source, max_file_bytes),
-                    ));
+                    let active_started = profile_build.then(Instant::now);
+                    let document =
+                        hydrate_disk_document(root, canonical_root, source, max_file_bytes);
+                    if let Some(started) = active_started {
+                        profile_hydration_worker_active(started.elapsed());
+                    }
+                    local.push((index, document));
                     if local.len() >= HYDRATION_RESULT_CHUNK_FILES
                         || last_flush.elapsed() >= HYDRATION_PROGRESS_INTERVAL
                     {
+                        let send_started = profile_build.then(Instant::now);
                         if result_tx.send(core::mem::take(&mut local)).is_err() {
                             return;
+                        }
+                        if let Some(started) = send_started {
+                            profile_hydration_worker_send_wait(started.elapsed());
                         }
                         local = Vec::with_capacity(HYDRATION_RESULT_CHUNK_FILES);
                         last_flush = Instant::now();
                     }
                 }
                 if !local.is_empty() {
+                    let send_started = profile_build.then(Instant::now);
                     let _ = result_tx.send(local);
+                    if let Some(started) = send_started {
+                        profile_hydration_worker_send_wait(started.elapsed());
+                    }
                 }
             }));
         }
         drop(result_tx);
-        for batch in result_rx {
+        loop {
+            let result_wait_started = profile_build.then(Instant::now);
+            let Ok(batch) = result_rx.recv() else {
+                break;
+            };
+            if let Some(started) = result_wait_started {
+                profile_hydration_result_wait(started.elapsed());
+            }
             for (index, document) in batch {
                 observe_document(index, document);
             }
@@ -1041,7 +1195,7 @@ fn build_owned_segment_profile(
             build_workers,
             durable,
         })?;
-        if std::env::var_os("PR_PROFILE_BUILD").is_some() {
+        if profile_build {
             eprintln!(
                 "BUILD_ACCEL segment={} q2_bytes={} pos1_bytes={} pos2_bytes={} pos3_bytes={}",
                 task.segment_index,
@@ -1403,8 +1557,7 @@ where
     let started = Instant::now();
     let profile_build = profile_build_enabled();
     if profile_build {
-        PROFILE_HYDRATION_READ_NS.store(0, Ordering::Relaxed);
-        PROFILE_HYDRATION_NORMALIZE_NS.store(0, Ordering::Relaxed);
+        reset_profile_hydration();
     }
     let timings = Arc::new(BuildTimingAccumulator::default());
     let mut hydration_wall_ns = 0u64;
@@ -1472,19 +1625,30 @@ where
             let mut total_docs = 0usize;
             let mut next_segment = 0usize;
             let mut batch_start = 0usize;
+            let mut first_hydration = true;
             'batches: while batch_start < files.len() {
                 if cancel.is_some_and(|flag| flag.load(Ordering::Acquire)) {
                     return Err(SearchError::InvalidArgument("build cancelled".into()));
                 }
+                let batch_construction_started = profile_build.then(Instant::now);
                 let batch_end = next_hydration_batch_end(
                     &files,
                     batch_start,
                     batch_paths,
                     hydration_batch_bytes,
                 );
+                if let Some(started) = batch_construction_started {
+                    profile_hydration_batch_construction(started.elapsed());
+                }
                 let paths = &files[batch_start..batch_end];
                 let batch_source_base = progress.processed_files;
                 let batch_bytes_base = progress.bytes_read;
+                if first_hydration {
+                    if profile_build {
+                        profile_hydration_pipeline_to_hydration(started.elapsed());
+                    }
+                    first_hydration = false;
+                }
                 let hydration_started = Instant::now();
                 let hydrated = hydrate_disk_paths_parallel_observed(
                     root,
@@ -1538,10 +1702,15 @@ where
                         if cancel.is_some_and(|flag| flag.load(Ordering::Acquire)) {
                             return Err(SearchError::InvalidArgument("build cancelled".into()));
                         }
+                        let dispatch_wait_started = profile_build.then(Instant::now);
                         let worker = ready_rx.recv().map_err(|_| {
                             SearchError::Format("pipeline builder readiness channel closed".into())
                         })?;
+                        if let Some(started) = dispatch_wait_started {
+                            profile_hydration_dispatch_wait(started.elapsed());
+                        }
                         let doc_base = total_docs - pending_docs.len();
+                        let dispatch_started = profile_build.then(Instant::now);
                         task_senders[worker]
                             .send(SegmentBuildTask {
                                 documents: core::mem::take(&mut pending_docs),
@@ -1551,6 +1720,9 @@ where
                             .map_err(|_| {
                                 SearchError::Format("pipeline builder task channel closed".into())
                             })?;
+                        if let Some(started) = dispatch_started {
+                            profile_hydration_batch_dispatch(started.elapsed());
+                        }
                         pending_docs = Vec::with_capacity(options.segment_docs);
                         next_segment += 1;
                     }
@@ -1564,10 +1736,15 @@ where
                 batch_start = batch_end;
             }
             if !pending_docs.is_empty() {
+                let dispatch_wait_started = profile_build.then(Instant::now);
                 let worker = ready_rx.recv().map_err(|_| {
                     SearchError::Format("pipeline builder readiness channel closed".into())
                 })?;
+                if let Some(started) = dispatch_wait_started {
+                    profile_hydration_dispatch_wait(started.elapsed());
+                }
                 let doc_base = total_docs - pending_docs.len();
+                let dispatch_started = profile_build.then(Instant::now);
                 task_senders[worker]
                     .send(SegmentBuildTask {
                         documents: pending_docs,
@@ -1577,6 +1754,9 @@ where
                     .map_err(|_| {
                         SearchError::Format("pipeline builder task channel closed".into())
                     })?;
+                if let Some(started) = dispatch_started {
+                    profile_hydration_batch_dispatch(started.elapsed());
+                }
                 next_segment += 1;
             }
             drop(task_senders);
@@ -1588,9 +1768,13 @@ where
                 .take(next_segment)
                 .collect::<Vec<Option<Vec<DocumentInput>>>>();
             for _ in 0..next_segment {
+                let result_wait_started = profile_build.then(Instant::now);
                 let (segment_index, result) = result_rx.recv().map_err(|_| {
                     SearchError::Format("pipeline builder result channel closed".into())
                 })?;
+                if let Some(started) = result_wait_started {
+                    profile_hydration_result_wait(started.elapsed());
+                }
                 let (entry, retained) = result?;
                 let slot = entries.get_mut(segment_index).ok_or_else(|| {
                     SearchError::Format("pipeline segment index out of bounds".into())
@@ -1653,12 +1837,21 @@ where
     progress.current_path = None;
     on_progress(&progress);
     if profile_build {
+        let hydration = profile_hydration_snapshot();
         eprintln!(
-            "BUILD_HYDRATION source_files={} docs={} read_ms={:.3} normalize_ms={:.3} wall_ms={:.3}",
+            "BUILD_HYDRATION source_files={} docs={} combined_read_ms={:.3} normalize_ms={:.3} metadata_ms={:.3} batch_construction_ms={:.3} batch_dispatch_ms={:.3} dispatch_wait_ms={:.3} result_wait_ms={:.3} worker_active_ms={:.3} worker_send_wait_ms={:.3} pipeline_to_hydration_ms={:.3} wall_ms={:.3}",
             source_files,
             total_docs,
-            PROFILE_HYDRATION_READ_NS.load(Ordering::Relaxed) as f64 / 1_000_000.0,
-            PROFILE_HYDRATION_NORMALIZE_NS.load(Ordering::Relaxed) as f64 / 1_000_000.0,
+            hydration.combined_read_ns as f64 / 1_000_000.0,
+            hydration.normalize_ns as f64 / 1_000_000.0,
+            hydration.metadata_ns as f64 / 1_000_000.0,
+            hydration.batch_construction_ns as f64 / 1_000_000.0,
+            hydration.batch_dispatch_ns as f64 / 1_000_000.0,
+            hydration.dispatch_wait_ns as f64 / 1_000_000.0,
+            hydration.result_wait_ns as f64 / 1_000_000.0,
+            hydration.worker_active_ns as f64 / 1_000_000.0,
+            hydration.worker_send_wait_ns as f64 / 1_000_000.0,
+            hydration.pipeline_to_hydration_ns as f64 / 1_000_000.0,
             hydration_wall_ns as f64 / 1_000_000.0,
         );
     }

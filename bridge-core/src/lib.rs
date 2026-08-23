@@ -56,6 +56,15 @@ pub enum ScannerMode {
 
 impl ScannerMode {
     #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::WalkDir => "walk_dir",
+            Self::WindowsNative => "windows_native",
+        }
+    }
+
+    #[must_use]
     pub fn parse(value: &str) -> Self {
         match value {
             "walk_dir" => Self::WalkDir,

@@ -10,6 +10,11 @@ license = "MIT"
 name = "personalrag_portable_search"
 path = "src/lib.rs"
 
+[features]
+# Opt-in diagnostics for the standalone build profiler. Production GUI/release builds do not
+# enable this feature, so the collector and its atomics are not compiled into the hot path.
+profile-build = []
+
 [[bin]]
 name = "pr_portable"
 path = "src/bin/pr_portable.rs"

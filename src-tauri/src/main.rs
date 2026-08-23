@@ -16,11 +16,12 @@ use std::{
 use personalrag_gui_bridge_core::{
     BackendReadiness, BackgroundRequest, BackgroundStatus, ContractInfo, DirectoryTrackingSnapshot,
     IncrementalCatalogState, IncrementalChangeSyncRequest, IncrementalSyncRequest,
-    IncrementalSyncResult, IndexBuildDiagnosticLog, IndexBuildPhase, IndexEngine, IndexRequest,
-    IndexResponse, PortableEngine, ProductionBackendMode, ProgressRateTracker, RebuildProgress,
-    RebuildStatus, SearchBackendStatus, SearchCatalogView, SearchCoreBackendStatus, SearchEngine,
-    SearchHit, SearchRequest, Settings, SnippetBatchRequest, SnippetBatchResult, SnippetHit,
-    SnippetRequest, UsnCheckpoint, UsnScanResult, INGESTION_VERSION,
+    IncrementalSyncResult, IndexBuildDiagnosticLog, IndexBuildPhase, IndexBuildSettings,
+    IndexEngine, IndexRequest, IndexResponse, PortableEngine, ProductionBackendMode,
+    ProgressRateTracker, RebuildProgress, RebuildStatus, ScannerMode, SearchBackendStatus,
+    SearchCatalogView, SearchCoreBackendStatus, SearchEngine, SearchHit, SearchRequest, Settings,
+    SnippetBatchRequest, SnippetBatchResult, SnippetHit, SnippetRequest, UsnCheckpoint,
+    UsnScanResult, INGESTION_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, State};
@@ -839,7 +840,10 @@ fn start_rebuild(
                 &root,
                 scan.files,
                 &build_dir,
-                settings.max_bytes,
+                IndexBuildSettings::new(
+                    settings.max_bytes,
+                    ScannerMode::parse(&settings.scanner_mode),
+                ),
                 cancel.as_ref(),
                 &mut on_build_progress,
             );

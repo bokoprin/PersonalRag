@@ -10,9 +10,9 @@ use std::{
 use personalrag_gui_bridge_core::{
     scan_files, search_catalog, search_catalog_with_metadata, snippets, ExclusionConfig,
     ExtractionBudget, IncrementalCatalogState, IncrementalChangeSyncRequest,
-    IncrementalSyncRequest, IncrementalSyncResult, IndexEngine, OfficeExtractionConfig,
-    OfficeExtractionService, PortableEngine, ScanExclusions, ScannerMode, SearchCatalogView,
-    SearchEngine, SearchOptions, SearchRequest,
+    IncrementalSyncRequest, IncrementalSyncResult, IndexBuildSettings, IndexEngine,
+    OfficeExtractionConfig, OfficeExtractionService, PortableEngine, ScanExclusions, ScannerMode,
+    SearchCatalogView, SearchEngine, SearchOptions, SearchRequest,
 };
 use personalrag_portable_search::{
     build_disk_path_inputs_index_pipelined, BuildMode, BuildOptions, DiskPathBuildConfig,
@@ -461,7 +461,7 @@ fn portable_facade_owns_search_and_index_engine_boundary() {
             corpus.path(),
             scan.files,
             index.path(),
-            1024 * 1024,
+            IndexBuildSettings::new(1024 * 1024, ScannerMode::Auto),
             cancel.as_ref(),
             &mut |_| progress_events += 1,
         )
@@ -662,7 +662,7 @@ fn office_extraction_and_incremental_sync_work_through_engine_facade() {
             corpus.path(),
             first_scan.files,
             index.path(),
-            4 * 1024 * 1024,
+            IndexBuildSettings::new(4 * 1024 * 1024, ScannerMode::WalkDir),
             cancel.as_ref(),
             &mut |_| {},
         )
@@ -931,7 +931,7 @@ fn office_cache_reuses_media_only_change_and_refreshes_searchable_xml() {
             corpus.path(),
             first_scan.files,
             index.path(),
-            4 * 1024 * 1024,
+            IndexBuildSettings::new(4 * 1024 * 1024, ScannerMode::WalkDir),
             cancel.as_ref(),
             &mut |_| {},
         )
@@ -1113,7 +1113,7 @@ fn sparse_incremental_change_sync_preserves_unchanged_catalog_rows() {
             corpus.path(),
             first_scan.files,
             index.path(),
-            1024 * 1024,
+            IndexBuildSettings::new(1024 * 1024, ScannerMode::WalkDir),
             cancel.as_ref(),
             &mut |_| {},
         )

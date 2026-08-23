@@ -20,8 +20,8 @@ use personalrag_portable_search::{
     publish_vnext_incremental_generation, recommend_system_build_tuning,
     verify_built_index_for_generation_adoption, verify_generation, verify_generation_structure,
     verify_positional2_sidecars, verify_positional3_sidecars, verify_positional_sidecars,
-    verify_vnext_generation_store, AccelerationProfile, BuildMode, BuildOptions, ChangeBatch,
-    ChangeKind, DiskPathBuildConfig, DiskPathInput, DocumentChange, DocumentInput,
+    verify_vnext_generation_store, AccelerationProfile, BuildMode, BuildOptions, BuildTuning,
+    ChangeBatch, ChangeKind, DiskPathBuildConfig, DiskPathInput, DocumentChange, DocumentInput,
     IncrementalPolicy, LogicalDocumentIdentity, MergedIndex, MergedSearchSession, PosCodec,
     VNextDocumentInput, VNextGenerationIndex,
 };
@@ -46,6 +46,46 @@ const VNEXT_STORE_DIR: &str = "vnext-store";
 const VNEXT_SEGMENT_DOCS: usize = 5_000;
 const SHADOW_QUEUE_CAPACITY: usize = 16;
 const PRODUCTION_ACCELERATION_PROFILE: AccelerationProfile = AccelerationProfile::Balanced;
+
+#[cfg(feature = "profile-build")]
+#[inline]
+fn profile_build_order_enabled() -> bool {
+    std::env::var_os("PR_PROFILE_BUILD").is_some()
+        && std::env::var_os("PR_PROFILE_BUILD_ORDER").is_some()
+}
+
+#[cfg(not(feature = "profile-build"))]
+#[inline]
+const fn profile_build_order_enabled() -> bool {
+    false
+}
+
+/// Fully resolved settings used by the production full-build pipeline.
+///
+/// The profile runner uses the same resolver and then freezes these concrete values for a
+/// benchmark run. Keeping the policy here prevents a profile from accidentally measuring a
+/// different worker or batching policy than the GUI uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProductionBuildConfig {
+    pub hydration_workers: usize,
+    pub build_workers: usize,
+    pub segment_docs: usize,
+    pub max_file_bytes: u64,
+    pub hydration_batch_bytes: u64,
+    pub scanner_mode: ScannerMode,
+    pub acceleration_profile: AccelerationProfile,
+}
+
+impl ProductionBuildConfig {
+    #[must_use]
+    pub fn build_options(self) -> BuildOptions {
+        BuildOptions {
+            mode: BuildMode::Adaptive,
+            segment_docs: self.segment_docs,
+            workers: self.build_workers,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProductionBackendMode {
@@ -294,6 +334,76 @@ fn hydration_workers_for(
     logical_cpus.max(1).min(cap)
 }
 
+fn resolve_production_build_config_from_tuning(
+    max_file_bytes: u64,
+    scanner_mode: ScannerMode,
+    content_files: usize,
+    content_bytes: u64,
+    tuning: BuildTuning,
+) -> ProductionBuildConfig {
+    ProductionBuildConfig {
+        hydration_workers: hydration_workers_for(
+            cfg!(windows),
+            tuning.logical_cpus,
+            content_files,
+            content_bytes,
+            tuning.scan_workers,
+        ),
+        build_workers: tuning.build_workers,
+        segment_docs: tuning.segment_docs,
+        max_file_bytes,
+        hydration_batch_bytes: hydration_batch_budget(tuning.memory_budget_bytes),
+        scanner_mode,
+        acceleration_profile: PRODUCTION_ACCELERATION_PROFILE,
+    }
+}
+
+#[cfg(test)]
+fn legacy_production_build_config_for_test(
+    max_file_bytes: u64,
+    scanner_mode: ScannerMode,
+    content_files: usize,
+    content_bytes: u64,
+    tuning: BuildTuning,
+) -> ProductionBuildConfig {
+    // This deliberately mirrors the pre-resolver GUI path. Keep it test-only so changing the
+    // shared resolver cannot silently alter a production default under the guise of a refactor.
+    ProductionBuildConfig {
+        hydration_workers: hydration_workers_for(
+            cfg!(windows),
+            tuning.logical_cpus,
+            content_files,
+            content_bytes,
+            tuning.scan_workers,
+        ),
+        build_workers: tuning.build_workers,
+        segment_docs: tuning.segment_docs,
+        max_file_bytes,
+        hydration_batch_bytes: hydration_batch_budget(tuning.memory_budget_bytes),
+        scanner_mode,
+        acceleration_profile: PRODUCTION_ACCELERATION_PROFILE,
+    }
+}
+
+/// Resolves the concrete full-build settings used by the production GUI for the supplied
+/// already-selected corpus. Callers that benchmark the GUI pipeline must persist this result
+/// and reuse it verbatim rather than recomputing it during later comparisons.
+#[must_use]
+pub fn resolve_production_build_config(
+    max_file_bytes: u64,
+    scanner_mode: ScannerMode,
+    content_files: usize,
+    content_bytes: u64,
+) -> ProductionBuildConfig {
+    resolve_production_build_config_from_tuning(
+        max_file_bytes,
+        scanner_mode,
+        content_files,
+        content_bytes,
+        recommend_system_build_tuning(),
+    )
+}
+
 pub struct SearchCatalogView<'a> {
     pub root: &'a Path,
     pub paths: &'a [String],
@@ -339,6 +449,27 @@ pub struct IndexBuildProgress {
     pub bytes_read: u64,
     pub prepared_bytes: u64,
     pub current_path: Option<PathBuf>,
+}
+
+/// Scan settings that must stay coupled to a full build.
+///
+/// The GUI has already used these values while discovering `files`; carrying them as one value
+/// into the build keeps the production and profile resolver inputs explicit without extending
+/// the `IndexEngine` trait's argument list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IndexBuildSettings {
+    pub max_file_bytes: u64,
+    pub scanner_mode: ScannerMode,
+}
+
+impl IndexBuildSettings {
+    #[must_use]
+    pub const fn new(max_file_bytes: u64, scanner_mode: ScannerMode) -> Self {
+        Self {
+            max_file_bytes,
+            scanner_mode,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -424,7 +555,7 @@ pub trait IndexEngine: Send + Sync {
         root: &Path,
         files: Vec<ScannedFile>,
         build_dir: &Path,
-        max_file_bytes: u64,
+        settings: IndexBuildSettings,
         cancel: &AtomicBool,
         on_progress: &mut dyn FnMut(IndexBuildProgress),
     ) -> Result<IndexBuildOutcome, String>;
@@ -1463,10 +1594,14 @@ impl IndexEngine for PortableEngine {
         root: &Path,
         mut files: Vec<ScannedFile>,
         build_dir: &Path,
-        max_file_bytes: u64,
+        settings: IndexBuildSettings,
         cancel: &AtomicBool,
         on_progress: &mut dyn FnMut(IndexBuildProgress),
     ) -> Result<IndexBuildOutcome, String> {
+        let IndexBuildSettings {
+            max_file_bytes,
+            scanner_mode,
+        } = settings;
         self.invalidate_search_cache()?;
         let build_total_started = Instant::now();
         let mut stage_timings = Vec::with_capacity(10);
@@ -1480,7 +1615,7 @@ impl IndexEngine for PortableEngine {
         let sort_workers = crate::build_order::sort_scanned_files(&mut files)?;
         let sort_ms = sort_started.elapsed().as_secs_f64() * 1000.0;
         stage_timings.push(IndexBuildStageTiming::new("build.sort", sort_ms));
-        if std::env::var_os("PR_PROFILE_BUILD_ORDER").is_some() {
+        if profile_build_order_enabled() {
             eprintln!(
                 "BUILD_ORDER_SORT files={} workers={} elapsed_ms={:.3}",
                 files.len(),
@@ -1520,14 +1655,14 @@ impl IndexEngine for PortableEngine {
             .sum::<u64>();
 
         let tuning = recommend_system_build_tuning();
-        let hydration_workers = hydration_workers_for(
-            cfg!(windows),
-            tuning.logical_cpus,
+        let production_build = resolve_production_build_config_from_tuning(
+            max_file_bytes,
+            scanner_mode,
             content_files,
             content_bytes,
-            tuning.scan_workers,
+            tuning,
         );
-        let build_options = portable_build_options();
+        let build_options = production_build.build_options();
         let base_index_path = sibling_temp_dir(build_dir, "base-index");
         let _base_cleanup = CleanupDir::new(base_index_path.clone())?;
         let production_mode = self.production_backend()?;
@@ -1548,10 +1683,10 @@ impl IndexEngine for PortableEngine {
         let mut shared_vnext_capture = None::<Vec<VNextDocumentInput>>;
         let build_config = DiskPathBuildConfig {
             max_docs: None,
-            max_file_bytes,
+            max_file_bytes: production_build.max_file_bytes,
             build: &build_options,
-            scan_workers: hydration_workers,
-            hydration_batch_bytes: hydration_batch_budget(tuning.memory_budget_bytes),
+            scan_workers: production_build.hydration_workers,
+            hydration_batch_bytes: production_build.hydration_batch_bytes,
             cancel: Some(cancel),
         };
         let mut progress_adapter =
@@ -1581,7 +1716,7 @@ impl IndexEngine for PortableEngine {
                 inputs,
                 &base_index_path,
                 build_config,
-                PRODUCTION_ACCELERATION_PROFILE,
+                production_build.acceleration_profile,
                 &mut progress_adapter,
             )
             .map_err(map_build_error)?
@@ -1591,7 +1726,7 @@ impl IndexEngine for PortableEngine {
                 inputs,
                 &base_index_path,
                 build_config,
-                PRODUCTION_ACCELERATION_PROFILE,
+                production_build.acceleration_profile,
                 &mut progress_adapter,
             )
             .map_err(map_build_error)?;
@@ -1617,7 +1752,7 @@ impl IndexEngine for PortableEngine {
                 inputs,
                 &base_index_path,
                 build_config,
-                PRODUCTION_ACCELERATION_PROFILE,
+                production_build.acceleration_profile,
                 &mut progress_adapter,
             )
             .map_err(map_build_error)?
@@ -1718,7 +1853,7 @@ impl IndexEngine for PortableEngine {
         let verify_base_started = Instant::now();
         let verified_built_index = verify_built_index_for_generation_adoption(&base_index_path)
             .map_err(|error| error.to_string())?;
-        if PRODUCTION_ACCELERATION_PROFILE == AccelerationProfile::Full {
+        if production_build.acceleration_profile == AccelerationProfile::Full {
             verify_positional_sidecars(&base_index_path, PosCodec::production())
                 .map_err(|error| error.to_string())?;
             verify_positional2_sidecars(&base_index_path).map_err(|error| error.to_string())?;
@@ -2195,15 +2330,16 @@ mod policy_tests {
     };
 
     use personalrag_portable_search::{
-        initialize_generation, initialize_vnext_generation_store, BuildMode, BuildOptions,
-        DocumentInput, LogicalDocument, MergedIndex, VNextDocumentInput,
+        initialize_generation, initialize_vnext_generation_store, AccelerationProfile, BuildMode,
+        BuildOptions, BuildTuning, DocumentInput, LogicalDocument, MergedIndex, VNextDocumentInput,
     };
 
-    use crate::{IncrementalCatalogState, ScannedFile, SearchOptions};
+    use crate::{IncrementalCatalogState, ScannedFile, ScannerMode, SearchOptions};
 
     use super::{
-        hydration_batch_budget, hydration_workers_for, vnext_store_dir,
-        IncrementalChangeSyncRequest, IncrementalSyncResult, IndexEngine, PortableEngine,
+        hydration_batch_budget, hydration_workers_for, legacy_production_build_config_for_test,
+        resolve_production_build_config_from_tuning, vnext_store_dir, IncrementalChangeSyncRequest,
+        IncrementalSyncResult, IndexBuildSettings, IndexEngine, PortableEngine,
         ProductionBackendMode, ProductionBackendTelemetry, SearchCatalogView,
         ShadowCompareExecutor, ShadowCompareJob, ShadowCompareKey, MIB,
     };
@@ -2411,6 +2547,128 @@ mod policy_tests {
     }
 
     #[test]
+    fn production_build_config_resolver_preserves_every_legacy_setting() {
+        let cases = [
+            (
+                BuildTuning {
+                    segment_docs: 2_500,
+                    build_workers: 1,
+                    scan_workers: 1,
+                    memory_budget_bytes: 128 * MIB,
+                    logical_cpus: 1,
+                },
+                0,
+                0,
+                ScannerMode::WalkDir,
+            ),
+            (
+                BuildTuning {
+                    segment_docs: 2_500,
+                    build_workers: 1,
+                    scan_workers: 3,
+                    memory_budget_bytes: 256 * MIB,
+                    logical_cpus: 32,
+                },
+                1,
+                64 * 1024,
+                ScannerMode::Auto,
+            ),
+            (
+                BuildTuning {
+                    segment_docs: 2_500,
+                    build_workers: 1,
+                    scan_workers: 3,
+                    memory_budget_bytes: 256 * MIB + 8,
+                    logical_cpus: 32,
+                },
+                1,
+                64 * 1024 + 1,
+                ScannerMode::WindowsNative,
+            ),
+            (
+                BuildTuning {
+                    segment_docs: 2_500,
+                    build_workers: 1,
+                    scan_workers: 3,
+                    memory_budget_bytes: 1024 * MIB - 8,
+                    logical_cpus: 32,
+                },
+                1,
+                MIB,
+                ScannerMode::WalkDir,
+            ),
+            (
+                BuildTuning {
+                    segment_docs: 2_500,
+                    build_workers: 1,
+                    scan_workers: 3,
+                    memory_budget_bytes: 1024 * MIB,
+                    logical_cpus: 32,
+                },
+                1,
+                MIB + 1,
+                ScannerMode::Auto,
+            ),
+            (
+                BuildTuning {
+                    segment_docs: 2_500,
+                    build_workers: 2,
+                    scan_workers: 2,
+                    memory_budget_bytes: 220 * MIB,
+                    logical_cpus: 4,
+                },
+                10_000,
+                320 * MIB,
+                ScannerMode::Auto,
+            ),
+            (
+                BuildTuning {
+                    segment_docs: 5_000,
+                    build_workers: 4,
+                    scan_workers: 2,
+                    memory_budget_bytes: 1024 * MIB,
+                    logical_cpus: 16,
+                },
+                100,
+                50 * MIB,
+                ScannerMode::WindowsNative,
+            ),
+            (
+                BuildTuning {
+                    segment_docs: 5_000,
+                    build_workers: 2,
+                    scan_workers: 2,
+                    memory_budget_bytes: 512 * MIB,
+                    logical_cpus: 2,
+                },
+                10,
+                20 * MIB,
+                ScannerMode::Auto,
+            ),
+        ];
+
+        for (tuning, files, bytes, scanner_mode) in cases {
+            let expected = legacy_production_build_config_for_test(
+                32 * MIB,
+                scanner_mode,
+                files,
+                bytes,
+                tuning,
+            );
+            let actual = resolve_production_build_config_from_tuning(
+                32 * MIB,
+                scanner_mode,
+                files,
+                bytes,
+                tuning,
+            );
+            assert_eq!(actual, expected);
+            assert_eq!(actual.acceleration_profile, AccelerationProfile::Balanced);
+            assert_eq!(actual.scanner_mode.as_str(), scanner_mode.as_str());
+        }
+    }
+
+    #[test]
     fn full_build_reports_stage_timings_without_profile_environment() {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -2444,7 +2702,7 @@ mod policy_tests {
                 &source,
                 files,
                 &build_dir,
-                1024 * 1024,
+                IndexBuildSettings::new(1024 * 1024, ScannerMode::Auto),
                 &AtomicBool::new(false),
                 &mut |_| {},
             )
