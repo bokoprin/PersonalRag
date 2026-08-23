@@ -1,0 +1,96 @@
+name: Finalize Segment Sync Concurrency
+
+on:
+  push:
+    branches:
+      - perf/segment-sync-concurrency
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: perf/segment-sync-concurrency
+          fetch-depth: 0
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Rust 1.97.1
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+
+      - name: Preserve sync timing contract and lock default=2
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from pathlib import Path
+
+          path = Path("search-core/src/builder.rs")
+          text = path.read_text(encoding="utf-8")
+
+          old = """    let sync = if durable {\n        let sync_started = Instant::now();\n        let _sync_permit = sync_limiter.map(SegmentSyncLimiter::acquire);\n        file.get_ref().sync_all()?;\n        sync_started.elapsed()\n    } else {"""
+          new = """    let sync = if durable {\n        let _sync_permit = sync_limiter.map(SegmentSyncLimiter::acquire);\n        let sync_started = Instant::now();\n        file.get_ref().sync_all()?;\n        sync_started.elapsed()\n    } else {"""
+          if text.count(old) != 1:
+              raise SystemExit(f"sync timing marker count={text.count(old)}")
+          text = text.replace(old, new, 1)
+
+          old_test = "        assert!((1..=4).contains(&segment_sync_concurrency_for(4, None)));"
+          new_test = """        assert_eq!(segment_sync_concurrency_for(4, None), 2);\n        assert_eq!(segment_sync_concurrency_for(1, None), 1);"""
+          if text.count(old_test) != 1:
+              raise SystemExit(f"default test marker count={text.count(old_test)}")
+          text = text.replace(old_test, new_test, 1)
+
+          path.write_text(text, encoding="utf-8", newline="\n")
+          print("SEGMENT_SYNC_FINAL_REVIEW_FIX_APPLIED")
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw "python patch failed: $LASTEXITCODE" }
+          cargo fmt --manifest-path search-core/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw "cargo fmt failed: $LASTEXITCODE" }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "git diff --check failed: $LASTEXITCODE" }
+
+      - name: Search core tests and clippy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo test --manifest-path search-core/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw "cargo test failed: $LASTEXITCODE" }
+          cargo clippy --manifest-path search-core/Cargo.toml --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw "cargo clippy failed: $LASTEXITCODE" }
+
+      - name: Full Windows regression and release build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/verify-and-build-windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw "full regression failed: $LASTEXITCODE" }
+          git restore --worktree -- src-tauri/gen/schemas/desktop-schema.json src-tauri/gen/schemas/windows-schema.json
+
+      - name: Commit exact validated product tree
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git rm -f .github/workflows/finalize-segment-sync-concurrency.yml
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "git diff --check failed: $LASTEXITCODE" }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "segment sync計測契約とデフォルト値テストを修正"
+          if ($LASTEXITCODE -ne 0) { throw "git commit failed: $LASTEXITCODE" }
+          git push origin HEAD:perf/segment-sync-concurrency
+          if ($LASTEXITCODE -ne 0) { throw "git push failed: $LASTEXITCODE" }
+          git rev-parse HEAD
