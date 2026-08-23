@@ -33,11 +33,16 @@ jobs:
 
       - name: Gate 0 - Windows full regression before product change
         shell: pwsh
-        run: ./scripts/verify-and-build-windows.ps1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/verify-and-build-windows.ps1
+          git restore --worktree -- src-tauri/gen/schemas/desktop-schema.json src-tauri/gen/schemas/windows-schema.json
+          git status --short
 
       - name: Create deterministic sync A/B corpus
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $corpus = Join-Path $env:RUNNER_TEMP 'personalrag-sync-ab-corpus'
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $corpus
           New-Item -ItemType Directory -Force -Path $corpus | Out-Null
@@ -55,20 +60,30 @@ jobs:
       - name: Apply sync concurrency implementation
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           python scripts/apply-segment-sync-concurrency.py
+          if ($LASTEXITCODE -ne 0) { throw "sync concurrency patch failed: $LASTEXITCODE" }
           cargo fmt --manifest-path search-core/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw "cargo fmt failed: $LASTEXITCODE" }
           git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "git diff --check failed: $LASTEXITCODE" }
+          $builderDiff = git diff -- search-core/src/builder.rs
+          if (-not $builderDiff) { throw 'builder.rs was not modified by sync concurrency patch' }
           git status --short
 
       - name: Search Core tests and clippy
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           cargo test --manifest-path search-core/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { throw "cargo test failed: $LASTEXITCODE" }
           cargo clippy --manifest-path search-core/Cargo.toml --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw "cargo clippy failed: $LASTEXITCODE" }
 
       - name: Warm sync concurrency A/B 1-2-4
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $records = @()
           $firstOutput = @{}
           $sequence = @(4, 1, 2, 2, 4, 1, 1, 2, 4)
@@ -79,6 +94,7 @@ jobs:
             $log = Join-Path $env:RUNNER_TEMP ("personalrag-sync-ab-c{0}-r{1}.log" -f $concurrency, $iteration)
             $env:PR_PROFILE_SEGMENT_SYNC_CONCURRENCY = [string]$concurrency
             ./scripts/profile-index-build.ps1 -Mode Warm -Root $env:PR_SYNC_AB_CORPUS -HydrationWorkers 4 -BuildWorkers 4 -SegmentDocs 64 -OutputRoot $out -LogPath $log
+            if ($LASTEXITCODE -ne 0) { throw "profile failed for concurrency ${concurrency}: $LASTEXITCODE" }
             if (-not $firstOutput.ContainsKey($concurrency)) { $firstOutput[$concurrency] = $out }
             $line = Get-Content -LiteralPath $log | Where-Object { $_ -like 'PROFILE_RUN_JSON *' } | Select-Object -Last 1
             if (-not $line) { throw "PROFILE_RUN_JSON missing: $log" }
@@ -132,11 +148,11 @@ jobs:
             $referenceKeys = @($reference.Keys | Sort-Object)
             $candidateKeys = @($candidate.Keys | Sort-Object)
             if (($referenceKeys -join "`n") -ne ($candidateKeys -join "`n")) {
-              throw "Byte identity failed for sync concurrency $concurrency: file sets differ"
+              throw "Byte identity failed for sync concurrency ${concurrency}: file sets differ"
             }
             foreach ($key in $referenceKeys) {
               if ($reference[$key] -ne $candidate[$key]) {
-                throw "Byte identity failed for sync concurrency $concurrency: $key differs"
+                throw "Byte identity failed for sync concurrency ${concurrency}: $key differs"
               }
             }
           }
@@ -144,17 +160,24 @@ jobs:
 
       - name: Final full Windows regression and release build
         shell: pwsh
-        run: ./scripts/verify-and-build-windows.ps1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./scripts/verify-and-build-windows.ps1
+          git restore --worktree -- src-tauri/gen/schemas/desktop-schema.json src-tauri/gen/schemas/windows-schema.json
 
       - name: Commit exact validated product tree
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           git rm -f .github/workflows/segment-sync-concurrency-ci.yml
           git rm -f scripts/apply-segment-sync-concurrency.py
           git diff --check
+          if ($LASTEXITCODE -ne 0) { throw "git diff --check failed: $LASTEXITCODE" }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "segment syncの並列数を制御してdurable write競合を抑制"
+          if ($LASTEXITCODE -ne 0) { throw "git commit failed: $LASTEXITCODE" }
           git push origin HEAD:perf/segment-sync-concurrency
+          if ($LASTEXITCODE -ne 0) { throw "git push failed: $LASTEXITCODE" }
           git rev-parse HEAD
