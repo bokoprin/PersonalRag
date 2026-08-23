@@ -3,7 +3,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, mpsc};
+use std::sync::{Arc, Condvar, Mutex, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 
 use crate::fold_ascii;
@@ -63,6 +63,73 @@ pub struct BuildTuning {
 
 const MIB: u64 = 1024 * 1024;
 const SEGMENT_WRITE_BUFFER_BYTES: usize = 1024 * 1024;
+const DEFAULT_SEGMENT_SYNC_CONCURRENCY: usize = 2;
+const PROFILE_SEGMENT_SYNC_CONCURRENCY_ENV: &str = "PR_PROFILE_SEGMENT_SYNC_CONCURRENCY";
+
+struct SegmentSyncLimiter {
+    active: Mutex<usize>,
+    ready: Condvar,
+    limit: usize,
+}
+
+struct SegmentSyncPermit<'a> {
+    limiter: &'a SegmentSyncLimiter,
+}
+
+impl SegmentSyncLimiter {
+    fn new(limit: usize) -> Self {
+        Self {
+            active: Mutex::new(0),
+            ready: Condvar::new(),
+            limit: limit.max(1),
+        }
+    }
+
+    fn acquire(&self) -> SegmentSyncPermit<'_> {
+        let mut active = self
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        while *active >= self.limit {
+            active = self
+                .ready
+                .wait(active)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        *active += 1;
+        SegmentSyncPermit { limiter: self }
+    }
+}
+
+impl Drop for SegmentSyncPermit<'_> {
+    fn drop(&mut self) {
+        let mut active = self
+            .limiter
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *active = active.saturating_sub(1);
+        self.limiter.ready.notify_one();
+    }
+}
+
+fn segment_sync_concurrency_for(build_workers: usize, override_value: Option<usize>) -> usize {
+    let build_workers = build_workers.max(1);
+    override_value
+        .unwrap_or(DEFAULT_SEGMENT_SYNC_CONCURRENCY)
+        .clamp(1, build_workers)
+}
+
+fn segment_sync_concurrency(build_workers: usize) -> usize {
+    let override_value = profile_build_enabled()
+        .then(|| {
+            std::env::var(PROFILE_SEGMENT_SYNC_CONCURRENCY_ENV)
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok())
+        })
+        .flatten();
+    segment_sync_concurrency_for(build_workers, override_value)
+}
 
 /// Selects one of the measured production build points from an explicit process-memory budget.
 ///
@@ -895,6 +962,7 @@ struct OwnedSegmentBuildConfig<'a> {
     durable: bool,
     retain_documents: bool,
     timings: Option<&'a BuildTimingAccumulator>,
+    sync_limiter: Option<&'a SegmentSyncLimiter>,
 }
 
 fn build_owned_segment_profile(
@@ -909,6 +977,7 @@ fn build_owned_segment_profile(
         durable,
         retain_documents,
         timings,
+        sync_limiter,
     } = config;
     let profile_build = profile_build_enabled();
     let total_started = Instant::now();
@@ -938,7 +1007,7 @@ fn build_owned_segment_profile(
     let file = format!("seg-{:05}.prseg", task.segment_index);
     let path = output_dir.join(&file);
     let base_write_started = Instant::now();
-    let written = write_segment(&path, &data, durable)?;
+    let written = write_segment(&path, &data, durable, sync_limiter)?;
     let base_write_elapsed = base_write_started.elapsed();
     let base_write_ms = base_write_elapsed.as_secs_f64() * 1000.0;
     if let Some(timings) = timings {
@@ -1342,6 +1411,8 @@ where
     let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     let scan_workers = scan_workers.max(1);
     let build_workers = options.workers.max(1);
+    let segment_sync_limiter =
+        durable.then(|| SegmentSyncLimiter::new(segment_sync_concurrency(build_workers)));
     let batch_paths = options.segment_docs.saturating_mul(2).max(1_024);
     let source_files = files.len();
     let limit = max_docs.unwrap_or(usize::MAX);
@@ -1363,6 +1434,7 @@ where
                 let ready_tx = ready_tx.clone();
                 let result_tx = result_tx.clone();
                 let timings = Arc::clone(&timings);
+                let sync_limiter = segment_sync_limiter.as_ref();
                 scope.spawn(move || {
                     loop {
                         if ready_tx.send(worker_id).is_err() {
@@ -1382,6 +1454,7 @@ where
                                 durable,
                                 retain_documents,
                                 timings: Some(timings.as_ref()),
+                                sync_limiter,
                             },
                         );
                         if result_tx.send((segment_index, result)).is_err() {
@@ -1728,6 +1801,7 @@ impl<'a> UnifiedIndexAssembler<'a> {
                 durable: self.durable,
                 retain_documents: false,
                 timings: None,
+                sync_limiter: None,
             },
         )?;
         self.entries.push(entry);
@@ -1834,6 +1908,8 @@ fn build_index_profile_impl(
     let next = AtomicUsize::new(0);
     let first_error: Arc<Mutex<Option<SearchError>>> = Arc::new(Mutex::new(None));
     let worker_count = options.workers.max(1).min(segment_count.max(1));
+    let segment_sync_limiter =
+        durable.then(|| SegmentSyncLimiter::new(segment_sync_concurrency(worker_count)));
 
     std::thread::scope(|scope| {
         for _ in 0..worker_count {
@@ -1841,6 +1917,7 @@ fn build_index_profile_impl(
             let first_error = Arc::clone(&first_error);
             let output_dir = &output_dir;
             let next = &next;
+            let sync_limiter = segment_sync_limiter.as_ref();
             scope.spawn(move || {
                 loop {
                     if first_error.lock().expect("error mutex poisoned").is_some() {
@@ -1864,6 +1941,7 @@ fn build_index_profile_impl(
                         acceleration,
                         options.workers,
                         durable,
+                        sync_limiter,
                     );
                     match result {
                         Ok(entry) => {
@@ -1923,6 +2001,7 @@ fn build_one_segment_profile(
     acceleration: AccelerationProfile,
     build_workers: usize,
     durable: bool,
+    sync_limiter: Option<&SegmentSyncLimiter>,
 ) -> Result<ManifestEntry> {
     let SliceSegmentTask {
         documents,
@@ -1947,7 +2026,7 @@ fn build_one_segment_profile(
     )?;
     let file = format!("seg-{segment_index:05}.prseg");
     let path = output_dir.join(&file);
-    let written = write_segment(&path, &data, durable)?;
+    let written = write_segment(&path, &data, durable, sync_limiter)?;
     if acceleration != AccelerationProfile::None {
         build_accelerators_from_memory(MemoryAccelerationRequest {
             segment_path: &path,
@@ -2784,7 +2863,12 @@ struct WrittenSegmentMeta {
     write_breakdown: SegmentWriteBreakdown,
 }
 
-fn write_segment(path: &Path, data: &SegmentData, durable: bool) -> Result<WrittenSegmentMeta> {
+fn write_segment(
+    path: &Path,
+    data: &SegmentData,
+    durable: bool,
+    sync_limiter: Option<&SegmentSyncLimiter>,
+) -> Result<WrittenSegmentMeta> {
     let prepare_started = Instant::now();
     let sizes = section_sizes(data);
     let mut offsets = [(0u64, 0u64); SECTION_COUNT];
@@ -2912,6 +2996,7 @@ fn write_segment(path: &Path, data: &SegmentData, durable: bool) -> Result<Writt
     let metadata = metadata_started.elapsed();
 
     let sync = if durable {
+        let _sync_permit = sync_limiter.map(SegmentSyncLimiter::acquire);
         let sync_started = Instant::now();
         file.get_ref().sync_all()?;
         sync_started.elapsed()
@@ -3037,6 +3122,22 @@ fn read_all(path: &Path) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     file.read_to_end(&mut bytes)?;
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod segment_sync_concurrency_tests {
+    use super::segment_sync_concurrency_for;
+
+    #[test]
+    fn segment_sync_concurrency_is_bounded_by_worker_count() {
+        assert_eq!(segment_sync_concurrency_for(0, Some(4)), 1);
+        assert_eq!(segment_sync_concurrency_for(4, Some(1)), 1);
+        assert_eq!(segment_sync_concurrency_for(4, Some(2)), 2);
+        assert_eq!(segment_sync_concurrency_for(4, Some(4)), 4);
+        assert_eq!(segment_sync_concurrency_for(4, Some(99)), 4);
+        assert_eq!(segment_sync_concurrency_for(4, None), 2);
+        assert_eq!(segment_sync_concurrency_for(1, None), 1);
+    }
 }
 
 #[cfg(test)]
