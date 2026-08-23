@@ -1,1 +1,1 @@
-trigger segment sync concurrency validation
+trigger segment sync concurrency validation v2
