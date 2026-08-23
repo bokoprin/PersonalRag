@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, mpsc};
@@ -62,6 +62,7 @@ pub struct BuildTuning {
 }
 
 const MIB: u64 = 1024 * 1024;
+const SEGMENT_WRITE_BUFFER_BYTES: usize = 1024 * 1024;
 
 /// Selects one of the measured production build points from an explicit process-memory budget.
 ///
@@ -2713,13 +2714,13 @@ fn update_fnv(hash: &mut u64, bytes: &[u8]) {
     }
 }
 
-fn write_hashed(file: &mut File, hash: &mut u64, bytes: &[u8]) -> Result<()> {
+fn write_hashed<W: Write>(file: &mut W, hash: &mut u64, bytes: &[u8]) -> Result<()> {
     file.write_all(bytes)?;
     update_fnv(hash, bytes);
     Ok(())
 }
 
-fn write_padding(file: &mut File, hash: &mut u64, count: usize) -> Result<()> {
+fn write_padding<W: Write>(file: &mut W, hash: &mut u64, count: usize) -> Result<()> {
     const ZEROES: [u8; 8] = [0; 8];
     let mut remaining = count;
     while remaining != 0 {
@@ -2730,8 +2731,8 @@ fn write_padding(file: &mut File, hash: &mut u64, count: usize) -> Result<()> {
     Ok(())
 }
 
-fn stream_u32_values(
-    file: &mut File,
+fn stream_u32_values<W: Write>(
+    file: &mut W,
     hash: &mut u64,
     values: &[u32],
     scratch: &mut Vec<u8>,
@@ -2748,8 +2749,8 @@ fn stream_u32_values(
     Ok(())
 }
 
-fn stream_u64_values(
-    file: &mut File,
+fn stream_u64_values<W: Write>(
+    file: &mut W,
     hash: &mut u64,
     values: &[u64],
     scratch: &mut Vec<u8>,
@@ -2821,12 +2822,13 @@ fn write_segment(path: &Path, data: &SegmentData, durable: bool) -> Result<Writt
     let prepare = prepare_started.elapsed();
 
     let open_started = Instant::now();
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
         .open(path)?;
     let open = open_started.elapsed();
+    let mut file = BufWriter::with_capacity(SEGMENT_WRITE_BUFFER_BYTES, file);
     let body_started = Instant::now();
     let mut hash = FNV_OFFSET;
     write_hashed(&mut file, &mut hash, &header)?;
@@ -2900,17 +2902,18 @@ fn write_segment(path: &Path, data: &SegmentData, durable: bool) -> Result<Writt
     }
     file.write_all(FOOTER_MAGIC)?;
     file.write_all(&hash.to_le_bytes())?;
+    file.flush()?;
     let body = body_started.elapsed();
 
     let metadata_started = Instant::now();
-    if file.metadata()?.len() != final_size {
+    if file.get_ref().metadata()?.len() != final_size {
         return Err(SearchError::Format("segment final size mismatch".into()));
     }
     let metadata = metadata_started.elapsed();
 
     let sync = if durable {
         let sync_started = Instant::now();
-        file.sync_all()?;
+        file.get_ref().sync_all()?;
         sync_started.elapsed()
     } else {
         Duration::ZERO
