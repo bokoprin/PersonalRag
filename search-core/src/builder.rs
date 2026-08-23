@@ -2996,8 +2996,8 @@ fn write_segment(
     let metadata = metadata_started.elapsed();
 
     let sync = if durable {
-        let sync_started = Instant::now();
         let _sync_permit = sync_limiter.map(SegmentSyncLimiter::acquire);
+        let sync_started = Instant::now();
         file.get_ref().sync_all()?;
         sync_started.elapsed()
     } else {
@@ -3135,7 +3135,8 @@ mod segment_sync_concurrency_tests {
         assert_eq!(segment_sync_concurrency_for(4, Some(2)), 2);
         assert_eq!(segment_sync_concurrency_for(4, Some(4)), 4);
         assert_eq!(segment_sync_concurrency_for(4, Some(99)), 4);
-        assert!((1..=4).contains(&segment_sync_concurrency_for(4, None)));
+        assert_eq!(segment_sync_concurrency_for(4, None), 2);
+        assert_eq!(segment_sync_concurrency_for(1, None), 1);
     }
 }
 
