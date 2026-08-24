@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "runId": "autopilot-20260823-203333",
+  "status": "complete",
+  "branch": "perf/autopilot-5round-20260823-192255",
+  "startSha": "29682e1d1ebc8f27fae76070719a7778342d1bcc",
+  "currentBestSha": "fec46b51e7c1820304fcd2aed7178b2ce17b635c",
+  "acceptedPerformanceCommit": "ca23e39205b0718130d0e06e520f68e4eab49c36",
+  "result": {
+    "iterations": 5,
+    "accepted": 1,
+    "rejected": 4,
+    "initialBaselineScoreMs": 31601.6902,
+    "finalObservedScoreMs": 53719.1352,
+    "finalObservedComparisonToInitialPercent": -69.988
+  },
+  "frozenBenchmarkConfig": {
+    "hydrationWorkers": 4,
+    "buildWorkers": 4,
+    "segmentDocs": 5000,
+    "maxFileBytes": 33554432,
+    "hydrationBatchBytes": 134217728,
+    "scannerMode": "auto",
+    "accelerationProfile": "balanced"
+  },
+  "canonicalEnvironment": {
+    "sourceFiles": 66259,
+    "processedFiles": 66259,
+    "indexedFiles": 66259,
+    "bytesRead": 3049848764
+  },
+  "canonicalOutputTreeSha256": "7389a6cf73fa99b425d1cb3b9177e13e1934f9b54752a00d7ef9f74bae22fcb8",
+  "measurementPolicy": {
+    "primaryScore": "callWallMs + verifyWallMs",
+    "representative": "unrounded arithmetic mean of A and B",
+    "acceptThresholdPercent": 3,
+    "requiresBothPairsToWin": true,
+    "requiresEnvironmentAndByteIdentity": true
+  },
+  "iterations": [
+    {
+      "iteration": 1,
+      "decision": "REJECT",
+      "bestAms": 28550.0438,
+      "candidateAms": 35392.4205,
+      "reason": "REJECT_PRIMARY_SCORE_A=-23.966%"
+    },
+    {
+      "iteration": 2,
+      "decision": "ACCEPT",
+      "bestAms": 33606.05,
+      "candidateAms": 32651.321,
+      "candidateBms": 30506.288,
+      "bestBms": 32315.098,
+      "improvementPercent": 4.192,
+      "acceptedCommit": "ca23e39205b0718130d0e06e520f68e4eab49c36"
+    },
+    {
+      "iteration": 3,
+      "decision": "REJECT",
+      "bestAms": 32336.304,
+      "candidateAms": 33486.858,
+      "reason": "REJECT_PRIMARY_SCORE_A=-3.558%"
+    },
+    {
+      "iteration": 4,
+      "decision": "REJECT",
+      "bestAms": 37432.963,
+      "candidateAms": 58037.148,
+      "reason": "REJECT_PRIMARY_SCORE_A=-55.043%"
+    },
+    {
+      "iteration": 5,
+      "decision": "REJECT",
+      "bestAms": 64700.383,
+      "candidateAms": 40352.619,
+      "candidateBms": 49917.342,
+      "bestBms": 34549.716,
+      "improvementPercent": 9.048,
+      "reason": "REJECT_PAIRED: pairAWin=true, pairBWin=false"
+    }
+  ],
+  "anomalies": [
+    "Iteration 3 stale Git worktree stat data invalidated one discarded measurement before the harness was repaired.",
+    "Iteration 5 Candidate A hit C: os error 112; incomplete evidence was preserved and the iteration restarted from a fresh BEST A.",
+    "Warm-prime hydration showed major Windows I/O/cache variation and was not used as the primary score."
+  ],
+  "finalChecks": {
+    "fullRegressionPassed": true,
+    "windowsReleaseBuildPassed": true,
+    "finalByteIdentityPassed": true,
+    "candidateWorktreeClean": true,
+    "bestWorktreeClean": true
+  }
+}

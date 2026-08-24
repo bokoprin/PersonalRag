@@ -1,0 +1,9 @@
+{
+  "accelerationProfile": "balanced",
+  "buildWorkers": 4,
+  "hydrationBatchBytes": 134217728,
+  "hydrationWorkers": 4,
+  "maxFileBytes": 33554432,
+  "scannerMode": "auto",
+  "segmentDocs": 5000
+}
