@@ -77,8 +77,10 @@ public sealed class Cq3Segment {
     public long BitmapRankU32Bytes { get; set; }
     public long BitmapRankPacked16Bytes { get; set; }
     public long BitmapRankBitPackedBytes { get; set; }
-    public Dictionary<int, long> BlockedDeltaBytes { get; set; }
-    public Dictionary<int, long> BlockCounts { get; set; }
+    // PowerShell 7's ConvertTo-Json rejects dictionaries with non-string keys.
+    // Keep the modeled block sizes identical, but expose them with JSON-safe keys.
+    public Dictionary<string, long> BlockedDeltaBytes { get; set; }
+    public Dictionary<string, long> BlockCounts { get; set; }
 }
 
 public sealed class Cq3Analysis {
@@ -370,12 +372,13 @@ public static class Cq3ReadOnlyAnalyzer {
             long bitmapPacked16 = fitsPacked14 ? checked(bitmapBase + entries * 6L) : -1L;
             long bitmapBitPacked = checked(bitmapBase + CeilBitsToBytes(entries, packedBits + offsetBits));
 
-            var blocked = new Dictionary<int, long>();
-            var blocks = new Dictionary<int, long>();
+            var blocked = new Dictionary<string, long>();
+            var blocks = new Dictionary<string, long>();
             for (int bi = 0; bi < BlockSizes.Length; bi++) {
                 long size = checked((long)PrefixBytes + blockCounts[bi] * 10L + blockedPayload[bi]);
-                blocked[BlockSizes[bi]] = size;
-                blocks[BlockSizes[bi]] = blockCounts[bi];
+                string blockKey = BlockSizes[bi].ToString(System.Globalization.CultureInfo.InvariantCulture);
+                blocked[blockKey] = size;
+                blocks[blockKey] = blockCounts[bi];
             }
 
             return new Cq3Segment {
@@ -517,7 +520,7 @@ public static class Cq3ReadOnlyAnalyzer {
         ));
 
         foreach (int blockSize in BlockSizes) {
-            long bytes = segments.Sum(s => s.BlockedDeltaBytes[blockSize]);
+            long bytes = segments.Sum(s => s.BlockedDeltaBytes[blockSize.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
             candidates.Add(MakeCandidate(
                 "blocked-delta-" + blockSize,
                 "prefix -> binary-search 10-byte block checkpoints -> decode at most " + blockSize + " records",
