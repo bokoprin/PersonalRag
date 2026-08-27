@@ -1,0 +1,38 @@
+name: Handoff source archive
+
+on:
+  push:
+    branches:
+      - handoff/export-20260827
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout authoritative source commit
+        uses: actions/checkout@v4
+        with:
+          ref: fcbd4e7faf26833835214ad33af725e829703076
+          fetch-depth: 1
+
+      - name: Create immutable source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=zip --prefix=PersonalRag_SOURCE_2026-08-27/ \
+            --output=PersonalRag_SOURCE_2026-08-27.zip \
+            fcbd4e7faf26833835214ad33af725e829703076
+          sha256sum PersonalRag_SOURCE_2026-08-27.zip > PersonalRag_SOURCE_2026-08-27.zip.sha256
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersonalRag_SOURCE_2026-08-27
+          path: |
+            PersonalRag_SOURCE_2026-08-27.zip
+            PersonalRag_SOURCE_2026-08-27.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
