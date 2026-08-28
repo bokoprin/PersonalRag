@@ -1,0 +1,67 @@
+name: Apply sealed PersonalRag canonical source
+
+on:
+  push:
+    branches:
+      - chatgpt-canonical-step1234-20260829
+    paths:
+      - .canonical-upload/TRIGGER
+
+permissions:
+  contents: write
+
+jobs:
+  apply-canonical:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout upload branch
+        uses: actions/checkout@v4
+        with:
+          path: upload
+          fetch-depth: 0
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: repo
+          fetch-depth: 0
+
+      - name: Reconstruct and verify sealed archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat upload/.canonical-upload/chunk-* > canonical.zip.b64
+          base64 -d canonical.zip.b64 > canonical.zip
+          echo "9e8dcdf404008ee3f4047a45ab867be546245ef42b291500c36ee74316308683  canonical.zip" | sha256sum -c -
+          mkdir extracted
+          unzip -q canonical.zip -d extracted
+          ROOT="extracted/PersonalRag_V2_CANONICAL_STEP1234_2026-08-29"
+          test -f "$ROOT/SOURCE_MANIFEST.sha256"
+          (cd "$ROOT" && sha256sum -c SOURCE_MANIFEST.sha256)
+          if find "$ROOT" -type d -name target | grep -q .; then
+            echo "target directory must not be present" >&2
+            exit 1
+          fi
+
+      - name: Replace main tree with canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$GITHUB_WORKSPACE/extracted/PersonalRag_V2_CANONICAL_STEP1234_2026-08-29"
+          find repo -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "$ROOT"/. repo/
+          cd repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "旧実装をV2 Step1-4 canonical正本へ置換"
+          git push origin HEAD:main
+
+      - name: Remove temporary upload branch
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C repo push origin --delete chatgpt-canonical-step1234-20260829 || true
