@@ -918,10 +918,7 @@ fn read_zip_entry(path: &Path, entry: &str, config: &ExtractorConfig) -> Result<
             .arg(external_helper_path(path))
             .arg(entry);
     } else {
-        command
-            .arg("-p")
-            .arg(external_helper_path(path))
-            .arg(entry);
+        command.arg("-p").arg(external_helper_path(path)).arg(entry);
     }
     let output = command.output().map_err(ExtractionError::Io)?;
     if !output.status.success() {
