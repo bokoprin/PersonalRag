@@ -1,5 +1,7 @@
 # PersonalRag V2 Step 7 Final Windows E2E Retest
 
+> **Superseded for the latest last-two closure.** The complete real-machine product E2E was already executed against the immediately preceding product source. For the current canonical source, Codex must follow `STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md` unless its diff guard reports an unexpected product implementation/Cargo change.
+
 Date: 2026-08-30  
 Purpose: final native-Windows acceptance after the Step 7 final stabilization wave.
 
