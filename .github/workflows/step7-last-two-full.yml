@@ -1,0 +1,76 @@
+name: Step7 last-two full regression
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-last-two-20260830
+    paths:
+      - .github/workflows/step7-last-two-full.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: Install document helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils unzip zip zstd
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Full regression
+        run: cargo test --offline --locked
+      - name: Release build
+        run: cargo build --offline --locked --release
+
+  windows-full:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: Install test-only document executables
+        shell: pwsh
+        run: |
+          choco install poppler zstandard -y --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+          refreshenv
+          where.exe pdftotext.exe
+          where.exe zstd.exe
+          where.exe tar.exe
+      - name: fmt
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: clippy
+        shell: pwsh
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Full regression
+        shell: pwsh
+        run: cargo test --offline --locked
+      - name: Windows PowerShell 5.1 capacity regression
+        shell: pwsh
+        run: |
+          cargo build --offline --locked --release --bin personalrag-v2-indexer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB "4,96,256" -Indexer ".\target\release\personalrag-v2-indexer.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Release build
+        shell: pwsh
+        run: cargo build --offline --locked --release
