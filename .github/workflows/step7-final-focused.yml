@@ -6,6 +6,11 @@ on:
       - chatgpt-step7-final-stabilization-20260830
     paths:
       - .github/workflows/step7-final-focused.yml
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
 
 permissions:
   contents: read
