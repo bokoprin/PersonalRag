@@ -1,0 +1,40 @@
+name: Export canonical main source
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-stabilization-20260829
+    paths:
+      - .github/workflows/export-main-source.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout canonical main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Verify main HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "TREE=$(git rev-parse HEAD^{tree})"
+          git status --porcelain
+      - name: Pack source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git -czf "$RUNNER_TEMP/personalrag-main-source.tar.gz" .
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: personalrag-main-source
+          path: ${{ runner.temp }}/personalrag-main-source.tar.gz
+          if-no-files-found: error
+          compression-level: 0
