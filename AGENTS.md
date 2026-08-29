@@ -1,42 +1,31 @@
 # PersonalRag Codex Instructions
 
-## Step 7 final Windows E2E retest
+## Step 7 targeted Windows closure
 
-When the user asks Codex to verify PersonalRag Step 7 on Windows, this repository is a **verification target**, not an implementation workspace.
+When the user asks Codex to finish PersonalRag Step 7 verification, this repository is a **verification target**, not an implementation workspace.
 
 ### Hard rules
 
-- Run the final E2E on the user's real native Windows machine. Linux, WSL-only, browser/cloud Linux, and GitHub Actions do not count as final Step 7 acceptance.
-- Use a **fresh disposable clone** of the latest GitHub `main`.
+- Run on the user's real native Windows machine.
+- Use a **fresh disposable clone** of latest GitHub `main`.
 - Do not modify product source, tests, specifications, Cargo files, or `SOURCE_MANIFEST.sha256`.
-- Do not repair failures during verification. Record them and continue independent checks where safe.
+- Do not repair failures during verification.
 - Never claim an unexecuted check as PASS.
-- Destructive/corruption checks must use disposable Step 7 data only.
-- Use exactly `PASS`, `FAIL`, `BLOCKED`, or `SKIP`.
-- Required helper provisioning may be performed only when the user explicitly authorizes the repository's `tools/setup_windows_helpers.ps1 -Install`; do not install unrelated software.
-
-The user authorizes **report publication only** after verification: Codex may create and push a branch named `reports/step7-windows-e2e-<timestamp>` containing only the report/log/evidence bundle. Never push or merge `main`.
+- Do not install a separate `zip.exe`; the final test verifies that it is no longer required.
+- Required Poppler/Zstandard provisioning may use only the repository-provided `tools/setup_windows_helpers.ps1 -Install` when needed.
+- Publish reports only to `reports/step7-windows-closure-<timestamp>`; never push or merge `main`.
 
 ## Required procedure
 
-1. Fresh-clone the latest GitHub `main`; record HEAD/tree and clean status.
-2. Run `powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1`.
-3. Read `STEP7_WINDOWS_FINAL_RETEST_CODEX_2026-08-30.md` completely.
-4. Follow it without substituting undocumented product commands.
-5. Re-evaluate:
-   - `S7-BUILD-001`
-   - `S7-BUILD-002`
-   - `S7-GUI-001`
-   - `S7-INCREMENTAL-001`
-   - `S7-INIT-001`
-   - `S7-USN-001`
-   - `S7-DOC-001`
-   - `S7-DOC-002`
-   - `S7-CAPACITY-001`
-6. For `watch`, normal-user `mode=usn` and `mode=directory-notify` are both supported; acceptance requires live searchable updates, not administrator elevation.
-7. Provision required document helpers before the final full `cargo test` when authorized.
-8. Run the 4/96/256 MiB complete-store capacity measurement exactly as documented.
-9. At the end, `git status --porcelain` must still be empty in the source checkout.
-10. Publish only report/evidence to the dedicated `reports/...` branch.
+1. Fresh-clone latest `main`; record HEAD/tree and clean status.
+2. Verify `SOURCE_MANIFEST.sha256`.
+3. Read `STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md` completely.
+4. Run its product-source diff guard against `a33a32a81a344cdbdeee14431fe71a159afe2471`.
+5. If unexpected product `src/` or Cargo-format/dependency changes exist, stop with `TARGETED_RETEST_INVALID`.
+6. Otherwise execute the targeted Windows full test/document/capacity closure exactly as documented.
+7. Windows PowerShell **5.1** (`powershell.exe`) must execute the 4/96/256 MiB capacity measurement.
+8. The oversized `496256` request must be rejected before creating test data.
+9. Final source checkout must remain clean.
+10. If all targeted checks pass, report `S7-DOC-002 = PASS` and final `STEP7_COMPLETE`.
 
-If the final retest document conflicts with actual current source behavior, record the discrepancy as a defect rather than inventing a workaround.
+The previous full real-machine E2E evidence is report commit `2ee23681f9f1a09864c421fa9e974fb003ea84af`. Do not rerun the entire manual GUI/watch matrix unless the diff guard proves product implementation changed.
