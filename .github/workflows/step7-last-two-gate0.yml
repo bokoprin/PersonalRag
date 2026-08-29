@@ -1,0 +1,81 @@
+name: Step7 last-two Gate0
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-last-two-20260830
+    paths:
+      - .github/workflows/step7-last-two-gate0.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: Install document helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils unzip zip zstd
+      - name: Manifest
+        run: sha256sum -c SOURCE_MANIFEST.sha256
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Full regression
+        run: cargo test --offline --locked
+      - name: Release build
+        run: cargo build --offline --locked --release
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: fmt
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: clippy
+        shell: pwsh
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Existing Windows regressions
+        shell: pwsh
+        run: |
+          cargo test --offline --locked --test gui_search -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --offline --locked --test incremental_index -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --offline --locked --test product_lifecycle -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --offline --locked --test windows_watch -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --offline --locked --test windows_document_helper -- --nocapture
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Release build
+        shell: pwsh
+        run: cargo build --offline --locked --release
+      - name: Reproduce PowerShell 5.1 parser defect
+        shell: pwsh
+        run: |
+          $p = Start-Process powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',('.\tools\measure_product_capacity.ps1'),'-MiB','4' -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -eq 0) { throw 'Expected Windows PowerShell 5.1 parser defect was not reproduced' }
+          Write-Host "KNOWN_BASELINE capacity-script PS5.1 exit=$($p.ExitCode)"
