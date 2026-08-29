@@ -1,0 +1,77 @@
+name: Materialize Step7 last-two canonical
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-last-two-20260830
+    paths:
+      - .github/workflows/step7-last-two-materialize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail-closed base and scope check
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          MAIN=$(git rev-parse origin/main)
+          test "$MAIN" = "a33a32a81a344cdbdeee14431fe71a159afe2471"
+          echo "MAIN=$MAIN"
+          git diff --name-only origin/main...HEAD > "$RUNNER_TEMP/diff.txt"
+          cat "$RUNNER_TEMP/diff.txt"
+          if grep -Eq '^(src/|Cargo\.toml$|Cargo\.lock$)' "$RUNNER_TEMP/diff.txt"; then
+            echo "Unexpected product/Cargo change in last-two wave"
+            exit 1
+          fi
+          grep -qx 'tests/document_extraction.rs' "$RUNNER_TEMP/diff.txt"
+          grep -qx 'tools/measure_product_capacity.ps1' "$RUNNER_TEMP/diff.txt"
+
+      - name: Remove temporary CI workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f             .github/workflows/step7-last-two-gate0.yml             .github/workflows/step7-last-two-focused.yml             .github/workflows/step7-last-two-full.yml             .github/workflows/step7-last-two-materialize.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+
+      - name: Regenerate and verify source manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf target
+          rm -f SOURCE_MANIFEST.sha256
+          find . -type f ! -path './.git/*' ! -name 'SOURCE_MANIFEST.sha256' -print0             | sort -z             | xargs -0 sha256sum > SOURCE_MANIFEST.sha256
+          sha256sum -c SOURCE_MANIFEST.sha256
+          FILES=$(find . -type f ! -path './.git/*' | wc -l)
+          ENTRIES=$(wc -l < SOURCE_MANIFEST.sha256)
+          MANIFEST_SHA=$(sha256sum SOURCE_MANIFEST.sha256 | awk '{print $1}')
+          echo "CANONICAL_FILES=$FILES"
+          echo "MANIFEST_ENTRIES=$ENTRIES"
+          echo "MANIFEST_SHA256=$MANIFEST_SHA"
+          test "$FILES" -eq "$((ENTRIES + 1))"
+
+      - name: Build exact tree and canonical candidate commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          test -z "$(git ls-files | grep -E '^\.github/workflows/step7-last-two-|^\.ci-upload/' || true)"
+          TREE=$(git write-tree)
+          MAIN=$(git rev-parse origin/main)
+          git config user.name "ChatGPT Canonicalizer"
+          git config user.email "chatgpt-canonicalizer@users.noreply.github.com"
+          COMMIT=$(printf '%s\n' 'Step7最後2点のWindows検証修正を正本化' | git commit-tree "$TREE" -p "$MAIN")
+          echo "FINAL_TREE=$TREE"
+          echo "FINAL_COMMIT=$COMMIT"
+          echo "TRACKED_FILES=$(git ls-files | wc -l)"
+          git push --force origin "$COMMIT:refs/heads/chatgpt-step7-last-two-canonical-20260830-v1"
