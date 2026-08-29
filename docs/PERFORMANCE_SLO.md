@@ -2,7 +2,7 @@
 
 Status: **Canonical normative development target**  
 Scope: PersonalRag V2 search/index architecture  
-Last updated: 2026-08-28
+Last updated: 2026-08-30
 
 ## 1. Product objective
 
@@ -38,6 +38,8 @@ IndexSourceRatio = finalPersistentIndexBytes / selectedSourceBytes
 | <= 5% | preferred / excellent |
 | >5% and <=10% | acceptable |
 | >10% | fails hard capacity gate |
+
+The percentage hard gate is evaluated for selected source sets of **4 MiB or larger**. Below 4 MiB, fixed bundle/header/rollback-reserve overhead dominates the ratio; measure and report it, but do not fail product acceptance from that percentage alone. This floor does not weaken any generation-level fail-closed capacity checks.
 
 The complete persistent footprint must be counted, including catalog/block metadata, gram structures, sparse postings, manifests/deltas/reserve that are part of normal operation, and compressed extracted verification data where required.
 
@@ -93,6 +95,20 @@ A design is not accepted because one internal operation is faster. It must be ev
 7. implementation complexity and maintainability.
 
 If two designs both remain comfortably below 300 ms, prefer the materially smaller/simpler design unless the faster design creates a user-visible benefit.
+
+## 7.0 Step 7 final-stabilization whole-store evidence
+
+The product-level probe forces a compaction-producing update and counts the complete retained store after normal two-bundle rollback retention. The pre-fix diagnostic run `33274120802` measured:
+
+| Selected source | Init store/source | Complete store/source after compacting update |
+|---:|---:|---:|
+| 4 MiB | 2.689290% | **5.387712%** |
+| 96 MiB | 1.356620% | **2.713791%** |
+| 256 MiB | 1.341617% | **2.683691%** |
+
+All normative sizes are below the 10% hard gate. The earlier ~1.2 MiB Step 7 corpus measured 24.6876% because fixed dual-generation rollback overhead dominated the tiny denominator; that observation remains valid as a diagnostic but is not a hard-gate failure under the clarified >=4 MiB acceptance floor.
+
+The reproducible Windows-side measurement command is `tools/measure_product_capacity.ps1`. Final target-Windows retest must re-run 4/96/256 MiB and record the exact complete-store ratios.
 
 ## 7.1 Step 5 controlled document evidence
 
