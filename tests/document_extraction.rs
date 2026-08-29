@@ -83,6 +83,26 @@ fn write_pdf(path: &Path, lines: &[&str], padding: usize) -> io::Result<()> {
     fs::write(path, out)
 }
 
+#[cfg(windows)]
+fn create_zip_fixture(root: &Path, path: &Path) -> io::Result<std::process::ExitStatus> {
+    Command::new("tar.exe")
+        .current_dir(root)
+        .args(["-a", "-c", "-f"])
+        .arg(path)
+        .arg(".")
+        .status()
+}
+
+#[cfg(not(windows))]
+fn create_zip_fixture(root: &Path, path: &Path) -> io::Result<std::process::ExitStatus> {
+    Command::new("zip")
+        .current_dir(root)
+        .args(["-q", "-r"])
+        .arg(path)
+        .arg(".")
+        .status()
+}
+
 fn write_zip(path: &Path, entries: &[(&str, &str)]) {
     let root = temp_dir("zip-source");
     for (name, content) in entries {
@@ -90,13 +110,7 @@ fn write_zip(path: &Path, entries: &[(&str, &str)]) {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(target, content).unwrap();
     }
-    let status = Command::new("zip")
-        .current_dir(&root)
-        .args(["-q", "-r"])
-        .arg(path)
-        .arg(".")
-        .status()
-        .unwrap();
+    let status = create_zip_fixture(&root, path).unwrap();
     assert!(status.success());
     fs::remove_dir_all(root).unwrap();
 }
