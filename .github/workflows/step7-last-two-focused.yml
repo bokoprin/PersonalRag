@@ -1,0 +1,66 @@
+name: Step7 last-two focused validation
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-last-two-20260830
+    paths:
+      - .github/workflows/step7-last-two-focused.yml
+
+permissions:
+  contents: read
+
+jobs:
+  document-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+      - name: Install document helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils unzip zip zstd
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: Document extraction regression
+        run: cargo test --offline --locked --test document_extraction -- --nocapture
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+      - name: fmt
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: clippy
+        shell: pwsh
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Windows native fixture ZIP focused regression
+        shell: pwsh
+        run: cargo test --offline --locked --test document_extraction windows_fixture_zip_generation_uses_native_tar -- --nocapture
+      - name: Build release indexer
+        shell: pwsh
+        run: cargo build --offline --locked --release --bin personalrag-v2-indexer
+      - name: PowerShell 5.1 capacity 4/96/256 MiB
+        shell: pwsh
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB "4,96,256" -Indexer ".\target\release\personalrag-v2-indexer.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Reject dangerous oversized capacity request before data creation
+        shell: pwsh
+        run: |
+          $before = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'PersonalRag-Capacity-*' -ErrorAction SilentlyContinue).Count
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB "496256" -Indexer ".\target\release\personalrag-v2-indexer.exe"
+          if ($LASTEXITCODE -eq 0) { throw 'oversized request was accepted' }
+          $after = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'PersonalRag-Capacity-*' -ErrorAction SilentlyContinue).Count
+          if ($after -ne $before) { throw "oversized request created capacity data: before=$before after=$after" }
+          $global:LASTEXITCODE = 0
+          Write-Host 'OVERSIZED_REQUEST_REJECTED PASS'
