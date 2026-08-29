@@ -20,10 +20,10 @@ The new derived verification sidecar is `PRV2VER1` v1. A sidecar generation is n
 Extraction is local/offline and uses explicit helper-process boundaries:
 
 - PDF: Poppler `pdftotext`
-- OOXML ZIP access: `unzip`
+- OOXML ZIP access: ZIP-reader process (`unzip` on the original Step 5 host; native Windows `tar.exe` is accepted as an equivalent transport)
 - verification compression: `zstd`
 
-The helpers are configurable paths. Product packaging may bundle pinned Windows helper binaries; missing helpers are explicit errors. No network service or cloud conversion is permitted.
+The helper paths are configurable. Step 7 final stabilization changes only the Windows ZIP transport: native `tar.exe` is preferred and Git/MSYS `unzip.exe` is not auto-selected. This does not change logical-unit semantics, verification bytes, or any frozen persistent identity. Missing `pdftotext`/`zstd` helpers remain explicit errors. No network service or cloud conversion is permitted.
 
 ## Logical units
 
