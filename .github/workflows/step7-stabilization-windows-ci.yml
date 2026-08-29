@@ -1,0 +1,92 @@
+name: Step7 stabilization Windows CI
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-stabilization-20260829
+    paths:
+      - .github/workflows/step7-stabilization-windows-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout temporary branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and apply stabilization patch to canonical main
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .ci-upload/step7-patch-00 .ci-upload/step7-patch-01 > "$RUNNER_TEMP/patch.b64"
+          base64 --decode "$RUNNER_TEMP/patch.b64" > "$RUNNER_TEMP/step7.patch.xz"
+          echo "27d4529ce8ab8c97c82ce12b8c9a3a1122ded0f3820195dcf4728041a5dd9a5f  $RUNNER_TEMP/step7.patch.xz" | sha256sum -c -
+          xz -dc "$RUNNER_TEMP/step7.patch.xz" > "$RUNNER_TEMP/step7.patch"
+          git fetch origin main
+          git switch --detach origin/main
+          git clean -fdx
+          patch -p3 < "$RUNNER_TEMP/step7.patch"
+          test "$(grep '^version = "0.9.0"$' Cargo.toml | wc -l)" -eq 1
+          test -f src/product.rs
+          test -f src/bin/personalrag_indexer.rs
+          test -f tools/setup_windows_helpers.ps1
+          test -f .gitattributes
+      - name: Upload patched source
+        uses: actions/upload-artifact@v4
+        with:
+          name: step7-stabilization-source
+          path: |
+            .
+            !.git/**
+            !target/**
+          include-hidden-files: true
+          if-no-files-found: error
+
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - name: Download patched source
+        uses: actions/download-artifact@v4
+        with:
+          name: step7-stabilization-source
+          path: .
+      - name: Install Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: Format
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        shell: pwsh
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: GUI Windows regression
+        shell: pwsh
+        run: cargo test --offline --locked --test gui_search -- --nocapture
+      - name: Incremental Windows regression
+        shell: pwsh
+        run: cargo test --offline --locked --test incremental_index -- --nocapture
+      - name: Product lifecycle regression
+        shell: pwsh
+        run: cargo test --offline --locked --test product_lifecycle -- --nocapture
+      - name: Library regression
+        shell: pwsh
+        run: cargo test --offline --locked --lib -- --nocapture
+      - name: Release build
+        shell: pwsh
+        run: cargo build --offline --locked --release
+      - name: Verify product binaries
+        shell: pwsh
+        run: |
+          if (!(Test-Path .\target\release\personalrag-v2-gui.exe)) { throw "GUI executable missing" }
+          if (!(Test-Path .\target\release\personalrag-v2-indexer.exe)) { throw "indexer executable missing" }
+          Get-Item .\target\release\personalrag-v2-gui.exe, .\target\release\personalrag-v2-indexer.exe |
+            Select-Object FullName,Length,LastWriteTime
