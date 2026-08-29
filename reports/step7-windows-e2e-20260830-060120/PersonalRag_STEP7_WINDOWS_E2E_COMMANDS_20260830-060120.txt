@@ -1,0 +1,114 @@
+PersonalRag V2 Step 7 Windows実機最終E2E command / action log
+run_id=20260830-060120
+repository=https://github.com/bokoprin/PersonalRag.git
+fresh_clone=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Final-Fresh-20260830-060120
+
+[fresh clone and source integrity]
+git clone https://github.com/bokoprin/PersonalRag.git <new-fresh-directory>
+git switch main
+git pull --ff-only origin main
+git rev-parse HEAD
+git rev-parse HEAD^{tree}
+git status --porcelain
+powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+
+[toolchain and release build]
+Get-ComputerInfo | Select-Object WindowsProductName,WindowsVersion,OsBuildNumber,OsArchitecture
+rustc --version
+cargo --version
+git --version
+cargo fmt --all -- --check
+cargo clippy --offline --locked --all-targets -- -D warnings
+cargo build --offline --locked --release
+Test-Path .\target\release\personalrag-v2-gui.exe
+Test-Path .\target\release\personalrag-v2-indexer.exe
+
+[helper discovery and permitted install]
+.\target\release\personalrag-v2-indexer.exe helpers
+powershell -ExecutionPolicy Bypass -File .\tools\setup_windows_helpers.ps1
+powershell -ExecutionPolicy Bypass -File .\tools\setup_windows_helpers.ps1 -Install
+.\target\release\personalrag-v2-indexer.exe helpers
+powershell -ExecutionPolicy Bypass -File .\tools\setup_windows_helpers.ps1
+
+Only the repository-provided helper installer was invoked for missing pdftotext/zstd. Native C:\Windows\System32\tar.exe was used as the ZIP reader. No zip.exe was installed.
+
+[tests]
+cargo test --offline --locked
+cargo test --offline --locked --test document_extraction -- --nocapture
+cargo test --offline --locked --test windows_document_helper -- --nocapture
+where.exe zip
+
+[product initial indexes]
+.\target\release\personalrag-v2-indexer.exe init --root "$Root" --store "$Store"
+.\target\release\personalrag-v2-indexer.exe status --root "$Root" --store "$Store"
+.\target\release\personalrag-v2-indexer.exe init --root "$DocumentRoot" --store "$DocumentStore"
+.\target\release\personalrag-v2-indexer.exe status --root "$DocumentRoot" --store "$DocumentStore"
+
+Document helper environment used for product commands:
+PERSONALRAG_PDFTOTEXT=<Poppler pdftotext.exe>
+PERSONALRAG_UNZIP=C:\Windows\System32\tar.exe
+PERSONALRAG_ZSTD=<Poppler zstd.exe>
+
+[native Win32 GUI actions]
+.\target\release\personalrag-v2-gui.exe --root "$Root" --store "$Store"
+Native UIA / keyboard actions:
+- filename query alpha
+- Full path ON; query text\alpha.txt
+- Case sensitive OFF/ON; query MIXEDCASENAME.TXT
+- literal content query PR_STEP7_FINAL_ALPHA_7F41
+- filename alpha + content PR_STEP7_FINAL_日本語_9A73
+- selector Regex; query ERROR_[0-9]{4}
+- selector Wildcard; query PR_STEP7_FINAL_BULK_*
+- Unicode query PR_STEP7_FINAL_日本語_9A73
+- More for PR_STEP7_FINAL_SHARED_8C22
+- select result and inspect Preview
+- click Open
+- click Show in Explorer
+- click Reload index
+- maximize / restore and type through native keyboard
+- close and relaunch GUI
+
+[normal-user live watch]
+.\target\release\personalrag-v2-indexer.exe watch --root "$Root" --store "$Store" --interval-ms 250
+Normal PowerShell identity check: isAdministrator=false.
+While watch remained running, execute each separately, wait for WATCH_UPDATE, click GUI Reload index, search:
+1. create text\live-created.txt marker PR_STEP7_FINAL_CREATE_NEW_7E55
+2. modify modify\modify-me.txt old PR_STEP7_FINAL_MODIFY_OLD_1C33 -> new PR_STEP7_FINAL_MODIFY_NEW_5D44
+3. rename rename\before-rename.txt -> rename\after-rename.txt
+4. move move\before-move.txt -> text\after-move.txt
+5. delete delete\delete-me.txt marker PR_STEP7_FINAL_DELETE_9F10
+
+No explicit update was used in this live-watch subsection.
+
+[explicit update]
+Create text\explicit-update.txt marker PR_STEP7_FINAL_EXPLICIT_UPDATE_A41B.
+.\target\release\personalrag-v2-indexer.exe update --root "$Root" --store "$Store"
+Click GUI Reload index and search the explicit marker.
+
+[restart]
+Close GUI and watch.
+.\target\release\personalrag-v2-indexer.exe status --root "$Root" --store "$Store"
+Relaunch GUI, click Reload index, search PR_STEP7_FINAL_ALPHA_7F41.
+Relaunch watch with the same normal-user command and record WATCH_READY; stop it.
+
+[fail-closed recovery]
+Copy disposable "$Store" to disposable recovery-store.
+Corrupt only recovery-store\gen-00000000000000000004.prv2.
+.\target\release\personalrag-v2-indexer.exe status --root "$Root" --store "$RecoveryStore"
+Launch GUI against recovery-store; verify alpha remains searchable and explicit-update marker from bundle 7 is absent.
+
+[capacity]
+powershell -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB 4,96,256
+
+The required Windows PowerShell command was executed and failed to parse the existing script at [Array]::Fill[byte](...) under Windows PowerShell 5.1. The same unchanged script was then executed with already-installed PowerShell 7 using a correctly bound array:
+pwsh -NoProfile -ExecutionPolicy Bypass -Command "& <repo>\tools\measure_product_capacity.ps1 -MiB @(4,96,256)"
+
+[final gates]
+powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+git diff --check
+git status --porcelain
+git switch -c reports/step7-windows-e2e-20260830-060120
+git diff --cached --check
+git add reports/step7-windows-e2e-20260830-060120
+git commit -m "Step 7 Windows実機最終E2E再検証結果を記録"
+git push -u origin reports/step7-windows-e2e-20260830-060120

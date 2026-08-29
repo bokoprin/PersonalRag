@@ -1,0 +1,785 @@
+===== fresh-preflight.json =====
+{
+  "freshRoot": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Fresh-20260830-060120",
+  "remote": "https://github.com/bokoprin/PersonalRag.git",
+  "branch": "main",
+  "pullExit": 0,
+  "head": "a33a32a81a344cdbdeee14431fe71a159afe2471",
+  "tree": "490b98c77dd3d57c29052124a440aa3a8d6f9e76",
+  "status": [],
+  "manifestExit": 0,
+  "manifestOutput": [
+    "SOURCE_MANIFEST: 98/98 PASS normalized_legacy_crlf=0"
+  ],
+  "agentsBytes": 2387,
+  "agentsLines": 42,
+  "agentsSha256": "B9F39A89DA00ED13CA83FAC6D673D0E590DACE233EB39F2EBBB765BE6E927470",
+  "instructionBytes": 9069,
+  "instructionLines": 328,
+  "instructionSha256": "E8A322B24E4A86217C685D9E4CE6F0941A657D37079FE5884FBED2B899337CFC"
+}
+
+
+===== verify_source_manifest.txt =====
+SOURCE_MANIFEST: 98/98 PASS normalized_legacy_crlf=0
+
+
+===== verify-source-manifest-final.txt =====
+SOURCE_MANIFEST: 98/98 PASS normalized_legacy_crlf=0
+
+
+===== cargo-fmt.txt =====
+MISSING: C:\Users\bokop\AppData\Local\PersonalRag\Step7-Final-Evidence-20260830-060120\raw\cargo-fmt.txt
+
+===== cargo-clippy.txt =====
+    Checking personalrag-v2 v0.9.1 (C:\Users\bokop\AppData\Local\PersonalRag\Step7-Final-Fresh-20260830-060120)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.29s
+
+
+===== cargo-build-release.txt =====
+   Compiling personalrag-v2 v0.9.1 (C:\Users\bokop\AppData\Local\PersonalRag\Step7-Final-Fresh-20260830-060120)
+    Finished `release` profile [optimized] target(s) in 13.35s
+
+
+===== release-binaries-existence.json =====
+{
+  "guiPath": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Fresh-20260830-060120\\target\\release\\personalrag-v2-gui.exe",
+  "indexerPath": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Fresh-20260830-060120\\target\\release\\personalrag-v2-indexer.exe",
+  "guiExists": true,
+  "indexerExists": true
+}
+
+
+===== helpers-before-install.txt =====
+HELPER name=pdftotext available=false path=pdftotext.exe error="program not found"
+HELPER name=zip_reader available=true path=C:\WINDOWS\System32/tar.exe version="bsdtar 3.8.8 - libarchive 3.8.8 zlib/1.2.13.1-motley liblzma/5.8.1 bz2lib/1.0.8 libzstd/1.5.7 cng/2.0 libb2/bundled"
+HELPER name=zstd available=false path=zstd.exe error="program not found"
+
+
+===== setup-helpers-before-install.txt =====
+HELPER pdftotext=MISSING
+HELPER zip_reader=PASS path=C:\WINDOWS\System32\tar.exe
+HELPER zstd=MISSING
+PERSONALRAG_UNZIP=C:\WINDOWS\System32\tar.exe
+
+
+===== setup-helpers-install.txt =====
+見つかりました Poppler [oschwartz10612.Poppler] バージョン 25.07.0-0
+このアプリケーションは所有者からライセンス供与されます。
+Microsoft はサードパーティのパッケージに対して責任を負わず、ライセンスも付与しません。
+このパッケージには次の依存関係が必要です:
+  - パッケージ
+      Microsoft.VCRedist.2015+.x64
+ダウンロード中 https://github.com/oschwartz10612/poppler-windows/releases/download/v25.07.0-0/Release-25.07.0-0.zip
+インストーラーハッシュが正常に検証されました
+アーカイブを展開しています...
+アーカイブが正常に展開されました
+パッケージのインストールを開始しています...
+パス環境変数が変更されました; 新しい値を使用するにはシェルを再起動してください。
+コマンド ライン エイリアスが追加されました: "pdfattach"
+コマンド ライン エイリアスが追加されました: "pdfdetach"
+コマンド ライン エイリアスが追加されました: "pdffonts"
+コマンド ライン エイリアスが追加されました: "pdfimages"
+コマンド ライン エイリアスが追加されました: "pdfinfo"
+コマンド ライン エイリアスが追加されました: "pdfseparate"
+コマンド ライン エイリアスが追加されました: "pdftocairo"
+コマンド ライン エイリアスが追加されました: "pdftohtml"
+コマンド ライン エイリアスが追加されました: "pdftoppm"
+コマンド ライン エイリアスが追加されました: "pdftops"
+コマンド ライン エイリアスが追加されました: "pdftotext"
+コマンド ライン エイリアスが追加されました: "pdfunite"
+コマンド ライン エイリアスが追加されました: "zstd"
+インストールが完了しました
+HELPER pdftotext=PASS path=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe
+HELPER zip_reader=PASS path=C:\WINDOWS\System32\tar.exe
+HELPER zstd=PASS path=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe
+PERSONALRAG_PDFTOTEXT=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe
+PERSONALRAG_UNZIP=C:\WINDOWS\System32\tar.exe
+PERSONALRAG_ZSTD=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe
+
+
+===== helpers-after-install.txt =====
+HELPER name=pdftotext available=true path=C:\Users\bokop\AppData\Local\Microsoft/WinGet/Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe version="pdftotext version 25.07.0"
+HELPER name=zip_reader available=true path=C:\WINDOWS\System32/tar.exe version="bsdtar 3.8.8 - libarchive 3.8.8 zlib/1.2.13.1-motley liblzma/5.8.1 bz2lib/1.0.8 libzstd/1.5.7 cng/2.0 libb2/bundled"
+HELPER name=zstd available=true path=C:\Users\bokop\AppData\Local\Microsoft/WinGet/Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe version="*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***"
+
+
+===== setup-helpers-after-install.txt =====
+HELPER pdftotext=PASS path=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe
+HELPER zip_reader=PASS path=C:\WINDOWS\System32\tar.exe
+HELPER zstd=PASS path=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe
+PERSONALRAG_PDFTOTEXT=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe
+PERSONALRAG_UNZIP=C:\WINDOWS\System32\tar.exe
+PERSONALRAG_ZSTD=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe
+
+
+===== helpers-after-install-result.json =====
+{
+  "name": "helpers-after-install",
+  "exitCode": 0,
+  "elapsedMs": 844.5017,
+  "output": [
+    "HELPER name=pdftotext available=true path=C:\\Users\\bokop\\AppData\\Local\\Microsoft/WinGet/Packages\\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\\poppler-25.07.0\\Library\\bin\\pdftotext.exe version=\"pdftotext version 25.07.0\"",
+    "HELPER name=zip_reader available=true path=C:\\WINDOWS\\System32/tar.exe version=\"bsdtar 3.8.8 - libarchive 3.8.8 zlib/1.2.13.1-motley liblzma/5.8.1 bz2lib/1.0.8 libzstd/1.5.7 cng/2.0 libb2/bundled\"",
+    "HELPER name=zstd available=true path=C:\\Users\\bokop\\AppData\\Local\\Microsoft/WinGet/Packages\\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\\poppler-25.07.0\\Library\\bin\\zstd.exe version=\"*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***\""
+  ]
+}
+
+
+===== cargo-test-full-with-helpers.txt =====
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src\lib.rs (target\debug\deps\personalrag_v2-6ad2216dafab0128.exe)
+
+running 24 tests
+test gui::tests::file_size_and_modified_time_are_human_readable ... ok
+test gui::send_tests::gui_session_can_live_on_background_search_thread ... ok
+test extraction::tests::xml_entities_and_paragraph_boundaries_are_deterministic ... ok
+test extraction::tests::utf16_xml_is_supported ... ok
+test incremental::content_mapping_path_tests::windows_content_mapping_canonicalizes_only_separator_direction ... ok
+test gui::tests::file_query_uses_frozen_unicode_and_separator_semantics ... ok
+test extraction::tests::xlsx_shared_inline_formula_and_cell_boundaries_are_exact ... ok
+test pattern::tests::regex_rejects_unsafe_features_and_normalizes_escaped_literal_runs ... ok
+test pattern::tests::wildcard_uses_same_nfa_and_escape_rules ... ok
+test pattern::tests::nfa_supports_frozen_core_grammar_without_backtracking ... ok
+test persistent::crc_tests::crc64_ecma_matches_standard_check_vector ... ok
+test metadata::tests::metadata_format_identity_is_separate_from_content_index ... ok
+test gui::tests::context_preview_is_utf8_safe_and_bounded ... ok
+test metadata::tests::separator_canonicalization_is_search_only ... ok
+test unicode::tests::hangul_composition_is_algorithmic ... ok
+test unicode::tests::nfc_and_casefold_semantics_match_frozen_examples ... ok
+test unicode::tests::japanese_ascii_is_byte_preserving_but_unicode_special_cases_are_not ... ok
+test unicode::tests::unicode_version_is_frozen ... ok
+test unicode::tests::every_table_composition_pair_normalizes_to_its_composed_scalar ... ok
+test product::tests::metadata_scan_keeps_all_files_but_marks_only_supported_content ... ok
+test unicode::tests::generated_python_unicode_15_1_oracle_vectors_match ... ok
+test adaptive_tests::adaptive_presence_chooses_smallest_exact_representation_and_preserves_membership ... ok
+test persistent::format_version_tests::frozen_unicode_semantics_reject_prior_format_v1 ... ok
+test pattern::tests::indexed_pattern_search_equals_candidate_free_verification ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.54s
+
+     Running unittests src\bin\incremental_storm_bench.rs (target\debug\deps\incremental_storm_bench-808b02a6ee6443b5.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\metadata_bench.rs (target\debug\deps\metadata_bench-2bb1b16980371144.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\persistent_bench.rs (target\debug\deps\persistent_bench-9cdd89cdf9286da5.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\personalrag_v2_bench-608a45e9f7af2b8a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\personalrag_gui.rs (target\debug\deps\personalrag_v2_gui-9077253ddc9e8ad6.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\personalrag_indexer.rs (target\debug\deps\personalrag_v2_indexer-02574824bf255e53.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\document_extraction.rs (target\debug\deps\document_extraction-49f3cf6444f1e9d2.exe)
+
+running 9 tests
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... FAILED
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... FAILED
+test verification_capacity_hard_gate_fails_closed_before_publish ... ok
+test document_source_drift_is_rejected_before_exact_verification ... ok
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... ok
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... ok
+test controlled_document_first_batch_stays_below_hard_slo ... ok
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... ok
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... ok
+
+failures:
+
+---- extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics stdout ----
+
+thread 'extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics' (25816) panicked at tests\document_extraction.rs:99:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: NotFound, message: "program not found" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units stdout ----
+
+thread 'pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units' (26200) panicked at tests\document_extraction.rs:99:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: NotFound, message: "program not found" }
+
+
+failures:
+    extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics
+    pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units
+
+test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+
+error: test failed, to rerun pass `--test document_extraction`
+
+
+===== cargo-test-document-extraction-with-helpers.txt =====
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests\document_extraction.rs (target\debug\deps\document_extraction-49f3cf6444f1e9d2.exe)
+
+running 9 tests
+
+thread 'extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics' (7820) panicked at tests\document_extraction.rs:99:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: NotFound, message: "program not found" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... FAILED
+
+thread 'pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units' (27060) panicked at tests\document_extraction.rs:99:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: NotFound, message: "program not found" }
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... FAILED
+test verification_capacity_hard_gate_fails_closed_before_publish ... ok
+test document_source_drift_is_rejected_before_exact_verification ... ok
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... ok
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... ok
+STEP5_SLO selected_bytes=4199696 verification_bytes=1136 combined_ratio=0.021731 cold_ms=51.559 p50_ms=0.111 p95_ms=0.240 p99_ms=0.240 max_ms=51.559 candidate_blocks=1 candidate_bytes=176 verification_scan_bytes=176
+test controlled_document_first_batch_stays_below_hard_slo ... ok
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... ok
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... ok
+
+failures:
+
+failures:
+    extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics
+    pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units
+
+test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
+
+error: test failed, to rerun pass `--test document_extraction`
+
+
+===== cargo-test-windows-document-helper-with-helpers.txt =====
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests\windows_document_helper.rs (target\debug\deps\windows_document_helper-b2967a3db4a4be9f.exe)
+
+running 1 test
+test native_zip_reader_handles_verbatim_windows_document_paths ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+
+
+
+===== zip-command-availability.txt =====
+INFO: Could not find files for the given pattern(s).
+
+
+===== indexer-init-initial.txt =====
+INIT_OK bundle=1 metadata=145 searchable=135 store_bytes=162033 usn_available=false journal_id=0 next_usn=0
+
+
+===== indexer-status-initial.txt =====
+STATUS_OK bundle=1 content=1 metadata=1 delta=1 state=1 metadata_records=145 delta_changes=0 journal_id=0 next_usn=0
+
+
+===== indexer-init-documents-with-padding.txt =====
+INIT_OK bundle=1 metadata=7 searchable=5 store_bytes=118285 usn_available=false journal_id=0 next_usn=0
+
+
+===== indexer-status-documents-with-padding.txt =====
+STATUS_OK bundle=1 content=1 metadata=1 delta=1 state=1 metadata_records=7 delta_changes=0 journal_id=0 next_usn=0
+
+
+===== gui-document-lifecycle-observations.json =====
+{
+  "gui": {
+    "initialIndex": {
+      "status": "1 files · 0.0 ms · limit 100 · bundle 1 · metadata 145 · delta 0",
+      "filename": "alpha",
+      "resultName": "alpha.txt",
+      "resultPath": "text\\alpha.txt",
+      "location": "Line 1 · byte 0"
+    },
+    "relativeFullPath": {
+      "fullPathMode": true,
+      "query": "text\\alpha.txt",
+      "resultName": "alpha.txt",
+      "resultPath": "text\\alpha.txt",
+      "pass": true
+    },
+    "absolutePath": {
+      "queries": [
+        "C:/.../text/alpha.txt",
+        "C:\\...\\text\\alpha.txt"
+      ],
+      "resultCount": 0,
+      "note": "GUIのfull-path検索はroot相対パスを受理。絶対filesystem pathは結果0"
+    },
+    "caseInsensitive": {
+      "query": "MIXEDCASENAME.TXT",
+      "caseSensitive": false,
+      "result": "MixedCaseName.TXT",
+      "pass": true
+    },
+    "caseSensitive": {
+      "query": "MIXEDCASENAME.TXT",
+      "caseSensitive": true,
+      "resultCount": 0,
+      "pass": true
+    },
+    "literal": {
+      "query": "PR_STEP7_FINAL_ALPHA_7F41",
+      "result": "alpha.txt",
+      "location": "Line 1 · byte 0",
+      "pass": true
+    },
+    "and": {
+      "file": "alpha",
+      "content": "PR_STEP7_FINAL_日本語_9A73",
+      "result": "alpha.txt",
+      "location": "Line 4 · byte 0",
+      "pass": true
+    },
+    "regex": {
+      "query": "ERROR_[0-9]{4}",
+      "resultNames": [
+        "alpha.txt",
+        "bravo.txt"
+      ],
+      "resultCount": 2,
+      "pass": true
+    },
+    "wildcard": {
+      "query": "PR_STEP7_FINAL_BULK_*",
+      "resultCount": 125,
+      "first": "ONLY_000.txt",
+      "pass": true
+    },
+    "unicode": {
+      "query": "PR_STEP7_FINAL_日本語_9A73",
+      "resultNames": [
+        "alpha.txt",
+        "日本語ファイル.txt"
+      ],
+      "resultCount": 2,
+      "pass": true
+    },
+    "more": {
+      "query": "PR_STEP7_FINAL_SHARED_8C22",
+      "resultCount": 127,
+      "status": "127 files · 7.9 ms · limit 145",
+      "pass": true
+    },
+    "preview": {
+      "selected": "alpha.txt",
+      "markerObserved": "PR_STEP7_FINAL_ALPHA_7F41",
+      "nativeScreenshotInspected": true,
+      "pass": true
+    },
+    "open": {
+      "target": "alpha.txt",
+      "observedWindow": "Sakura Editor: alpha.txt - サクラエディタ32bit 2.4.2.6048",
+      "pass": true
+    },
+    "showInExplorer": {
+      "targetDirectory": "text",
+      "observedWindow": "text - エクスプローラー",
+      "pass": true
+    },
+    "resize": {
+      "maximizedControlChanged": "最大化 -> 元のサイズに戻す",
+      "responding": true,
+      "pass": true
+    },
+    "typing": {
+      "nativeKeyboardHomeShiftEndTypeReturn": true,
+      "pass": true
+    }
+  },
+  "documents": {
+    "initStatus": "INIT_OK bundle=1 metadata=7 searchable=5 store_bytes=118285 usn_available=false journal_id=0 next_usn=0",
+    "status": "STATUS_OK bundle=1 content=1 metadata=1 delta=1 state=1 metadata_records=7 delta_changes=0",
+    "searches": [
+      {
+        "kind": "PDF",
+        "marker": "PR_STEP7_FINAL_PDF_ONLY_64C4",
+        "name": "fixture.pdf",
+        "path": "docs\\fixture.pdf",
+        "location": "Unit 1 · byte 0",
+        "status": "1 files · 2092.1 ms · limit 100 · bundle 1 · metadata 7 · delta 0",
+        "pass": true
+      },
+      {
+        "kind": "DOCX",
+        "marker": "PR_STEP7_FINAL_DOCX_ONLY_71D1",
+        "name": "fixture.docx",
+        "path": "docs\\fixture.docx",
+        "location": "Unit 1 · byte 0",
+        "status": "1 files · 778.1 ms · limit 100 · bundle 1 · metadata 7 · delta 0",
+        "pass": true
+      },
+      {
+        "kind": "XLSX",
+        "marker": "PR_STEP7_FINAL_XLSX_ONLY_82E2",
+        "name": "fixture.xlsx",
+        "path": "docs\\fixture.xlsx",
+        "location": "Unit 1 · byte 0",
+        "status": "1 files · 1102.3 ms · limit 100 · bundle 1 · metadata 7 · delta 0",
+        "pass": true
+      },
+      {
+        "kind": "PPTX",
+        "marker": "PR_STEP7_FINAL_PPTX_ONLY_93F3",
+        "name": "fixture.pptx",
+        "path": "docs\\fixture.pptx",
+        "location": "Unit 1 · byte 0",
+        "status": "1 files · 759.1 ms · limit 100 · bundle 1 · metadata 7 · delta 0",
+        "pass": true
+      }
+    ]
+  },
+  "watch": {
+    "mode": "directory-notify",
+    "fallbackReason": "I/O error: アクセスが拒否されました。 (os error 5)",
+    "normalUser": true,
+    "operations": [
+      "create",
+      "modify",
+      "rename",
+      "move",
+      "delete"
+    ],
+    "allWatchUpdate": true,
+    "guiReloadAfterEach": true,
+    "staleStateDisappeared": true,
+    "pass": true
+  },
+  "restart": {
+    "status": "STATUS_OK bundle=7 content=4 metadata=7 delta=7 state=7 metadata_records=146 delta_changes=0",
+    "guiRepresentativeSearch": "alpha.txt / PR_STEP7_FINAL_ALPHA_7F41",
+    "watchReadyAgain": "mode=directory-notify",
+    "pass": true
+  },
+  "recovery": {
+    "corruptedCopyArtifact": "gen-00000000000000000004.prv2",
+    "status": "STATUS_OK bundle=6 content=3 metadata=5 delta=6 state=6 metadata_records=146 delta_changes=2",
+    "fallbackSearch": "alpha.txt",
+    "latestMarkerAbsent": "PR_STEP7_FINAL_EXPLICIT_UPDATE_A41B result 0",
+    "originalStoreUnchanged": true,
+    "pass": true
+  }
+}
+
+
+===== watch-normal-start.json =====
+{
+  "command": "personalrag-v2-indexer.exe watch --root <Root> --store <Store> --interval-ms 250",
+  "pid": 27200,
+  "identity": "ZENBOOK\\bokop",
+  "isElevated": null,
+  "isAdministrator": false,
+  "started": "2026-08-30T06:34:22.0888724+09:00",
+  "stdout": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\raw\\watch-normal.stdout.txt",
+  "stderr": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\raw\\watch-normal.stderr.txt",
+  "initialStdout": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\n",
+  "initialStderr": null,
+  "running": true,
+  "exitCode": null
+}
+
+
+===== watch-normal.stdout.txt =====
+WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some("I/O error: アクセスが拒否されました。 (os error 5)")
+WATCH_UPDATE committed=true compacted=false bundle=2 metadata=146 delta_changes=2
+WATCH_UPDATE committed=true compacted=true bundle=3 metadata=146 delta_changes=0
+WATCH_UPDATE committed=true compacted=false bundle=4 metadata=146 delta_changes=2
+WATCH_UPDATE committed=true compacted=true bundle=5 metadata=146 delta_changes=0
+WATCH_UPDATE committed=true compacted=false bundle=6 metadata=145 delta_changes=2
+
+
+===== watch-normal.stderr.txt =====
+
+
+===== watch-op-create.json =====
+{
+  "operation": "create",
+  "path": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\text\\live-created.txt",
+  "marker": "PR_STEP7_FINAL_CREATE_NEW_7E55",
+  "start": "2026-08-30T06:34:39.8002399+09:00",
+  "watchUpdateSeen": true,
+  "watchUpdateLatencyMs": 283.2169,
+  "stdoutAfter": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\nWATCH_UPDATE committed=true compacted=false bundle=2 metadata=146 delta_changes=2\n",
+  "stderrAfter": null,
+  "fileExists": true
+}
+
+
+===== watch-op-modify.json =====
+{
+  "operation": "modify",
+  "path": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\modify\\modify-me.txt",
+  "marker": "PR_STEP7_FINAL_MODIFY_NEW_5D44",
+  "oldMarker": "PR_STEP7_FINAL_MODIFY_OLD_1C33",
+  "start": "2026-08-30T06:35:34.7656912+09:00",
+  "watchUpdateSeen": true,
+  "watchUpdateLatencyMs": 275.7407,
+  "watchUpdateCountBefore": 1,
+  "stdoutAfter": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\nWATCH_UPDATE committed=true compacted=false bundle=2 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=3 metadata=146 delta_changes=0\n",
+  "stderrAfter": null,
+  "fileExists": true
+}
+
+
+===== watch-op-rename.json =====
+{
+  "operation": "rename",
+  "oldPath": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\rename\\before-rename.txt",
+  "newPath": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\rename\\after-rename.txt",
+  "marker": "PR_STEP7_FINAL_RENAME_7D88",
+  "start": "2026-08-30T06:36:08.7169039+09:00",
+  "watchUpdateSeen": true,
+  "watchUpdateLatencyMs": 279.1341,
+  "watchUpdateCountBefore": 2,
+  "stdoutAfter": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\nWATCH_UPDATE committed=true compacted=false bundle=2 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=3 metadata=146 delta_changes=0\nWATCH_UPDATE committed=true compacted=false bundle=4 metadata=146 delta_changes=2\n",
+  "stderrAfter": null,
+  "oldExists": false,
+  "newExists": true
+}
+
+
+===== watch-op-move.json =====
+{
+  "operation": "move",
+  "oldPath": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\move\\before-move.txt",
+  "newPath": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\text\\after-move.txt",
+  "marker": "PR_STEP7_FINAL_MOVE_2E66",
+  "start": "2026-08-30T06:36:32.9823680+09:00",
+  "watchUpdateSeen": true,
+  "watchUpdateLatencyMs": 557.1226,
+  "watchUpdateCountBefore": 3,
+  "stdoutAfter": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\nWATCH_UPDATE committed=true compacted=false bundle=2 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=3 metadata=146 delta_changes=0\nWATCH_UPDATE committed=true compacted=false bundle=4 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=5 metadata=146 delta_changes=0\n",
+  "stderrAfter": null,
+  "oldExists": false,
+  "newExists": true
+}
+
+
+===== watch-op-delete.json =====
+{
+  "operation": "delete",
+  "path": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\delete\\delete-me.txt",
+  "marker": "PR_STEP7_FINAL_DELETE_9F10",
+  "start": "2026-08-30T06:37:14.4272734+09:00",
+  "watchUpdateSeen": true,
+  "watchUpdateLatencyMs": 295.4814,
+  "watchUpdateCountBefore": 4,
+  "stdoutAfter": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\nWATCH_UPDATE committed=true compacted=false bundle=2 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=3 metadata=146 delta_changes=0\nWATCH_UPDATE committed=true compacted=false bundle=4 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=5 metadata=146 delta_changes=0\nWATCH_UPDATE committed=true compacted=false bundle=6 metadata=145 delta_changes=2\n",
+  "stderrAfter": null,
+  "fileExists": false
+}
+
+
+===== watch-normal-stop.json =====
+{
+  "pid": 27200,
+  "wasRunning": true,
+  "runningAfter": false,
+  "stdout": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\nWATCH_UPDATE committed=true compacted=false bundle=2 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=3 metadata=146 delta_changes=0\nWATCH_UPDATE committed=true compacted=false bundle=4 metadata=146 delta_changes=2\nWATCH_UPDATE committed=true compacted=true bundle=5 metadata=146 delta_changes=0\nWATCH_UPDATE committed=true compacted=false bundle=6 metadata=145 delta_changes=2\n",
+  "stderr": null
+}
+
+
+===== indexer-update-explicit.txt =====
+UPDATE_OK committed=true compacted=true bundle=7 metadata=146 delta_changes=0
+
+
+===== indexer-update-explicit-result.json =====
+{
+  "command": "personalrag-v2-indexer.exe update --root <Root> --store <Store>",
+  "exitCode": 0,
+  "elapsedMs": 188.9477,
+  "output": [
+    "UPDATE_OK committed=true compacted=true bundle=7 metadata=146 delta_changes=0"
+  ],
+  "newPath": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus\\text\\explicit-update.txt",
+  "marker": "PR_STEP7_FINAL_EXPLICIT_UPDATE_A41B"
+}
+
+
+===== indexer-status-restart.txt =====
+STATUS_OK bundle=7 content=4 metadata=7 delta=7 state=7 metadata_records=146 delta_changes=0 journal_id=0 next_usn=0
+
+
+===== indexer-status-restart-result.json =====
+{
+  "command": "personalrag-v2-indexer.exe status --root <Root> --store <Store>",
+  "exitCode": 0,
+  "elapsedMs": 21.6427,
+  "output": [
+    "STATUS_OK bundle=7 content=4 metadata=7 delta=7 state=7 metadata_records=146 delta_changes=0 journal_id=0 next_usn=0"
+  ]
+}
+
+
+===== watch-restart-start.json =====
+{
+  "pid": 27584,
+  "isAdministrator": false,
+  "stdout": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\n",
+  "stderr": null,
+  "running": true
+}
+
+
+===== watch-restart.stdout.txt =====
+WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some("I/O error: アクセスが拒否されました。 (os error 5)")
+
+
+===== watch-restart-stop.json =====
+{
+  "pid": 27584,
+  "wasRunning": true,
+  "runningAfter": false,
+  "stdout": "WATCH_READY mode=directory-notify journal_id=0 next_usn=0 interval_ms=250 fallback_reason=Some(\"I/O error: アクセスが拒否されました。 (os error 5)\")\n",
+  "stderr": null
+}
+
+
+===== corruption-recovery.json =====
+{
+  "originalStore": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\store",
+  "recoveryStore": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\recovery-store",
+  "corpus": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\corpus",
+  "corruptedArtifact": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\recovery-store\\gen-00000000000000000004.prv2",
+  "originalArtifact": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Evidence-20260830-060120\\step7-data\\store\\gen-00000000000000000004.prv2",
+  "beforeHash": "65117B07C53F780B9CE97E23C4B2762DC2A5843AC9F66DFB2CBA879867924513",
+  "beforeSize": 117878,
+  "afterHash": "F80A6B7E8E697C96B4944FE9EE8CCDB67E0F40F76F3EB113A009DAC8A409A5F3",
+  "afterSize": 38,
+  "statusExitCode": 0,
+  "statusOutput": [
+    "STATUS_OK bundle=6 content=3 metadata=5 delta=6 state=6 metadata_records=146 delta_changes=2 journal_id=0 next_usn=0"
+  ],
+  "originalUnchanged": true
+}
+
+
+===== indexer-status-corruption-copy.txt =====
+STATUS_OK bundle=6 content=3 metadata=5 delta=6 state=6 metadata_records=146 delta_changes=2 journal_id=0 next_usn=0
+
+
+===== measure-product-capacity-4-96-256.txt =====
+At C:\Users\bokop\AppData\Local\PersonalRag\Step7-Final-Fresh-20260830-060120\tools\measure_product_capacity.ps1:32 cha
+r:23
++         [Array]::Fill[byte]($buffer, [byte][char]'a')
++                       ~
+Array index expression is missing or not valid.
+At C:\Users\bokop\AppData\Local\PersonalRag\Step7-Final-Fresh-20260830-060120\tools\measure_product_capacity.ps1:32 cha
+r:23
++         [Array]::Fill[byte]($buffer, [byte][char]'a')
++                       ~~~~~
+Unexpected token 'byte]' in expression or statement.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : MissingArrayIndexExpression
+
+
+
+===== measure-product-capacity-4-96-256-result.json =====
+{
+  "command": "powershell -ExecutionPolicy Bypass -File .\\tools\\measure_product_capacity.ps1 -MiB 4,96,256",
+  "exitCode": 1,
+  "elapsedMs": 1065.9985,
+  "output": [
+    "At C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Fresh-20260830-060120\\tools\\measure_product_capacity.ps1:32 cha",
+    "r:23",
+    "+         [Array]::Fill[byte]($buffer, [byte][char]'a')",
+    "+                       ~",
+    "Array index expression is missing or not valid.",
+    "At C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Fresh-20260830-060120\\tools\\measure_product_capacity.ps1:32 cha",
+    "r:23",
+    "+         [Array]::Fill[byte]($buffer, [byte][char]'a')",
+    "+                       ~~~~~",
+    "Unexpected token 'byte]' in expression or statement.",
+    "    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException",
+    "    + FullyQualifiedErrorId : MissingArrayIndexExpression",
+    " "
+  ]
+}
+
+
+===== measure-product-capacity-4-96-256-pwsh-result.json =====
+{
+  "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\tools\\measure_product_capacity.ps1 -MiB 4,96,256",
+  "exitCode": -1,
+  "elapsedMs": 102733.0494,
+  "output": []
+}
+
+
+===== measure-product-capacity-4-96-256-corrected-result.json =====
+{
+  "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"& <repo>\\tools\\measure_product_capacity.ps1 -MiB @(4,96,256)\"",
+  "script": "C:\\Users\\bokop\\AppData\\Local\\PersonalRag\\Step7-Final-Fresh-20260830-060120\\tools\\measure_product_capacity.ps1",
+  "miB": [
+    4,
+    96,
+    256
+  ],
+  "exitCode": 0,
+  "elapsedMs": 16859.3881,
+  "output": [
+    "INIT_OK bundle=1 metadata=4 searchable=4 store_bytes=106525 usn_available=false journal_id=0 next_usn=0",
+    "UPDATE_OK committed=true compacted=true bundle=2 metadata=4 delta_changes=0",
+    "CAPACITY mib=4 changes=1 init_ratio=2.539754% complete_ratio=5.087256% hard_gate=True",
+    "INIT_OK bundle=1 metadata=96 searchable=96 store_bytes=1338609 usn_available=false journal_id=0 next_usn=0",
+    "UPDATE_OK committed=true compacted=true bundle=2 metadata=96 delta_changes=0",
+    "CAPACITY mib=96 changes=2 init_ratio=1.329789% complete_ratio=2.659954% hard_gate=True",
+    "INIT_OK bundle=1 metadata=256 searchable=256 store_bytes=3539747 usn_available=false journal_id=0 next_usn=0",
+    "UPDATE_OK committed=true compacted=true bundle=2 metadata=256 delta_changes=0",
+    "CAPACITY mib=256 changes=6 init_ratio=1.318659% complete_ratio=2.637484% hard_gate=True",
+    "",
+    "MiB ChangedFiles InitSourceBytes InitStoreBytes InitRatio FinalSourceBytes CompleteStoreBytes CompleteRatio HardGate",
+    "--- ------------ --------------- -------------- --------- ---------------- ------------------ ------------- --------",
+    "  4            1         4194304         106525      0.03          4194304             213375          0.05     True",
+    " 96            2       100663296        1338609      0.01        100663296            2677597          0.03     True",
+    "256            6       268435456        3539747      0.01        268435456            7079943          0.03     True",
+    ""
+  ]
+}
+
+
+===== api-key-presence-final.json =====
+{"OPENAI_API_KEY_present":false,"CODEX_API_KEY_present":false,"checkedAt":"2026-08-30T06:46:35.9985243+09:00","action":"CONTINUE"}
+
+
+===== final-prepublish-gates.json =====
+{
+  "zip": {
+    "exitCode": 1,
+    "output": [
+      "INFO: Could not find files for the given pattern(s)."
+    ]
+  },
+  "manifest": {
+    "exitCode": 0,
+    "output": [
+      "SOURCE_MANIFEST: 98/98 PASS normalized_legacy_crlf=0"
+    ]
+  },
+  "diffCheck": {
+    "exitCode": 0,
+    "output": []
+  },
+  "status": {
+    "exitCode": 0,
+    "output": [],
+    "empty": true
+  },
+  "head": "a33a32a81a344cdbdeee14431fe71a159afe2471",
+  "tree": "490b98c77dd3d57c29052124a440aa3a8d6f9e76"
+}
