@@ -1,0 +1,80 @@
+name: Step7 final stabilization acceptance
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-final-stabilization-20260830
+    paths:
+      - .github/workflows/step7-final-acceptance.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: Install document helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils unzip zip zstd
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: full regression
+        run: cargo test --offline --locked
+      - name: release build
+        run: cargo build --offline --locked --release
+
+  windows-target:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: fmt
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: clippy
+        shell: pwsh
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Native ZIP reader regression
+        shell: pwsh
+        run: cargo test --offline --locked --test windows_document_helper -- --nocapture
+      - name: Non-elevated watch regression
+        shell: pwsh
+        run: cargo test --offline --locked --test windows_watch -- --nocapture
+      - name: GUI regression
+        shell: pwsh
+        run: cargo test --offline --locked --test gui_search -- --nocapture
+      - name: Incremental regression
+        shell: pwsh
+        run: cargo test --offline --locked --test incremental_index -- --nocapture
+      - name: Product lifecycle regression
+        shell: pwsh
+        run: cargo test --offline --locked --test product_lifecycle -- --nocapture
+      - name: release build
+        shell: pwsh
+        run: cargo build --offline --locked --release
+      - name: Whole-store product capacity 4/96/256 MiB
+        shell: pwsh
+        run: .\tools\measure_product_capacity.ps1 -MiB 4,96,256
+      - name: Verify release binaries
+        shell: pwsh
+        run: |
+          if (!(Test-Path .\target\release\personalrag-v2-gui.exe)) { throw 'GUI executable missing' }
+          if (!(Test-Path .\target\release\personalrag-v2-indexer.exe)) { throw 'indexer executable missing' }
+          Get-Item .\target\release\personalrag-v2-gui.exe, .\target\release\personalrag-v2-indexer.exe | Select-Object FullName,Length
