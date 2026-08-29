@@ -1,7 +1,7 @@
 # PersonalRag V2 — deterministic Windows desktop search
 
 Date: 2026-08-30  
-Status: **Steps 1–6 FROZEN / Step 7 final stabilization implemented / target-Windows E2E final retest pending**
+Status: **Steps 1–6 FROZEN / Step 7 final stabilization COMPLETE / target-Windows final E2E pending**
 
 This repository contains the PersonalRag V2 deterministic search backend, native Win32 Everything-style GUI, and Step 7 product index lifecycle used to create/update/watch a Windows index store. The removed legacy implementation must not be restored as a compatibility layer.
 
@@ -109,7 +109,7 @@ The first two native-Windows Step 7 runs exposed path-mapping, clippy, manifest,
 
 The deterministic engine, GUI, and runnable index lifecycle are implemented. The remaining roadmap is:
 
-7. re-run target-Windows E2E / performance / failure / usability acceptance against the stabilized product
+7. final target-Windows E2E / performance / failure / usability acceptance against the final-stabilized product
 8. V2 1.0
 
 Semantic/LLM search remains deferred until deterministic Windows product acceptance is complete.
