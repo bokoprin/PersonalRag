@@ -82,7 +82,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             let config = ExtractorConfig::discover();
             print_helper("pdftotext", &config.pdftotext, "-v");
-            print_helper("unzip", &config.unzip, "-v");
+            let zip_version_arg = if config
+                .unzip
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.eq_ignore_ascii_case("tar.exe") || name == "tar")
+            {
+                "--version"
+            } else {
+                "-v"
+            };
+            print_helper("zip_reader", &config.unzip, zip_version_arg);
             print_helper("zstd", &config.zstd, "--version");
         }
         "watch" => run_watch(args.collect())?,
