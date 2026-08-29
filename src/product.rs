@@ -763,7 +763,7 @@ impl WindowsWatchProducer {
     }
 
     pub fn mode(&self) -> WindowsWatchMode {
-        match self.inner {
+        match &self.inner {
             WindowsWatchInner::Usn(_) => WindowsWatchMode::Usn,
             WindowsWatchInner::DirectoryNotification { .. } => {
                 WindowsWatchMode::DirectoryNotification
