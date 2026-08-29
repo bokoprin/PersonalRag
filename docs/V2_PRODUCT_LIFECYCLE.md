@@ -1,7 +1,7 @@
 # PersonalRag V2 Product Index Lifecycle
 
-Date: 2026-08-29  
-Status: **Step 7 stabilization interface — target-Windows E2E pending**
+Date: 2026-08-30  
+Status: **Step 7 final stabilization interface — target-Windows final E2E pending**
 
 ## Purpose
 
@@ -57,19 +57,19 @@ Capturing the journal checkpoint before the potentially long scan prevents a fil
 
 `update` performs a deterministic filesystem reconciliation against base+overlay state and publishes only when data or durable relevant state changes. It remains available independently of USN.
 
-## Live Windows USN producer
+## Live Windows watcher
 
-`watch` is native-Windows only. It opens the drive-letter volume's NTFS USN Journal, resumes from the durable Step 4 checkpoint, detects records involving known indexed FRNs or indexed parent FRNs, and then runs deterministic reconciliation/publish.
+`watch` is native-Windows only and is designed to work under a normal non-elevated desktop token. It first attempts the drive-letter volume's NTFS USN Journal. If raw-volume access is unavailable (for example `ERROR_ACCESS_DENIED` under a normal token), it falls back to recursive Win32 directory-change notifications. `WATCH_READY` reports `mode=usn` or `mode=directory-notify` and includes the fallback reason when applicable.
 
-This stabilization implementation is intentionally correctness-first: USN is the change trigger, while reconciliation determines the authoritative new product state. It does not claim the final performance of a future direct-FRN mutation pipeline.
+In USN mode, the watcher resumes from the durable Step 4 checkpoint and uses relevant FRNs/parent FRNs as a trigger. In directory-notification mode, Win32 change notifications act only as the trigger. In both modes, deterministic reconciliation is the authoritative source of truth before bundle publication.
 
-A journal reset/gap forces reconciliation rather than guessing. A relevant journal advance with no file-state delta can publish a state-only bundle so the durable checkpoint is not lost.
+This final-stabilization implementation is intentionally correctness-first. A USN journal reset/gap reconciles rather than guessing, and the non-elevated fallback avoids making administrator elevation a normal product requirement.
 
 ## Helper discovery
 
-`ExtractorConfig::discover()` honors explicit environment overrides first, then searches executable-local helpers and common Windows installation locations before falling back to command names.
+`ExtractorConfig::discover()` honors explicit environment overrides first, then searches executable-local helpers and common Windows installation locations before falling back to command names. On Windows, OOXML ZIP access prefers the built-in native `tar.exe`; Git/MSYS `usr\bin\unzip.exe` is deliberately not auto-selected because it can mangle Win32 verbatim paths.
 
-`tools/setup_windows_helpers.ps1` reports discovery state. With explicit `-Install`, it can use WinGet to provision Poppler (`pdftotext`), Zstandard (`zstd`), and Git for Windows (`unzip`). Third-party binaries are not committed into the PersonalRag source repository.
+`tools/setup_windows_helpers.ps1` reports discovery state. With explicit `-Install`, it uses WinGet only for Poppler (`pdftotext`) and Zstandard (`zstd`); the preferred ZIP reader is Windows' built-in `tar.exe`. Third-party binaries are not committed into the PersonalRag source repository.
 
 ## Frozen identities
 
@@ -84,3 +84,7 @@ No Step 1–5 persistent identity changes in this layer:
 - semantic ID `0x0003_0001`
 
 The Windows content-to-metadata mapping fix canonicalizes only slash direction for the internal cross-index lookup. It does not redefine stored path identity or frozen query semantics.
+
+## Product capacity acceptance
+
+Whole-store capacity is measured with `tools/measure_product_capacity.ps1`. The normative percentage hard gate is evaluated at selected-source sizes of 4 MiB or larger; smaller roots are reported diagnostically because fixed two-bundle rollback/header overhead dominates the denominator. The final Windows retest must record 4/96/256 MiB complete-store ratios.
