@@ -1,7 +1,7 @@
 # PersonalRag V2 Step 7 Last-Two Fix Wave
 
 Date: 2026-08-30  
-Status: **IMPLEMENTATION + CI COMPLETE / canonicalization pending**
+Status: **LAST-TWO FIX COMPLETE / CANONICAL CANDIDATE — real-machine targeted closure pending**
 
 ## Scope
 
