@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          EXPECTED_LEGACY_MAIN='aab6c9151d194061d49565d135c089ccd9039a74'
+          EXPECTED_PREVIOUS_MAIN='e5c599d19fc5f1a2671a7e726b62c1718719ad3f'
           EXPECTED_SEALED_SHA='9135abbc89c8ba0d7a628f7ed5c993b08c2308830cbccd40f71ec1565b49d99d'
           EXPECTED_SOURCE_MANIFEST_SHA='8c1b594f929843eede27f2d7a55c722af6a6c819785a39df62450e619cff334f'
           EXPECTED_TREE='7b2bef96686f7ed29abf091eddc8c6bf751fa190'
@@ -34,14 +34,14 @@ jobs:
           git fetch origin main chatgpt-canonical-step1234-20260829
           ACTUAL_MAIN="$(git rev-parse origin/main)"
           PARENT="$(git rev-parse "$ACTUAL_MAIN^")"
-          test "$PARENT" = "$EXPECTED_LEGACY_MAIN"
-          CHANGED="$(git diff --name-only "$EXPECTED_LEGACY_MAIN" "$ACTUAL_MAIN")"
+          test "$PARENT" = "$EXPECTED_PREVIOUS_MAIN"
+          CHANGED="$(git diff --name-only "$EXPECTED_PREVIOUS_MAIN" "$ACTUAL_MAIN")"
           test "$CHANGED" = "$WORKFLOW_PATH"
 
           TMP="$(mktemp -d)"
           trap 'rm -rf "$TMP"' EXIT
 
-          for n in 001 002 003; do
+          for n in 000 001 002 003; do
             git show "$STAGING:.canonical-upload/chunk-$n" >> "$TMP/canonical.b64"
           done
           base64 --decode "$TMP/canonical.b64" > "$TMP/canonical.zip"
