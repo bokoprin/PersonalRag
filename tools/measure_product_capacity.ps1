@@ -1,5 +1,5 @@
 param(
-    [int[]]$MiB = @(4, 96, 256),
+    [object[]]$MiB = @(4, 96, 256),
     [string]$Indexer = ".\target\release\personalrag-v2-indexer.exe",
     [switch]$Keep
 )
@@ -10,16 +10,59 @@ if (-not (Test-Path -LiteralPath $Indexer -PathType Leaf)) {
     throw "Indexer not found: $Indexer"
 }
 
+function Convert-ToSafeMiBSizes([object[]]$Values) {
+    $parsed = New-Object 'System.Collections.Generic.List[int]'
+    foreach ($value in $Values) {
+        foreach ($token in ([string]$value -split ',')) {
+            $trimmed = $token.Trim()
+            if (-not $trimmed) { continue }
+
+            $size = 0
+            if (-not [int]::TryParse($trimmed, [ref]$size)) {
+                throw "Invalid MiB value: '$trimmed'"
+            }
+            if ($size -lt 1 -or $size -gt 1024) {
+                throw "MiB must be between 1 and 1024: $size"
+            }
+            $parsed.Add($size)
+        }
+    }
+
+    if ($parsed.Count -eq 0) {
+        throw 'At least one MiB value is required.'
+    }
+    if ($parsed.Count -gt 16) {
+        throw "Too many MiB values: $($parsed.Count) (maximum 16)"
+    }
+
+    return $parsed.ToArray()
+}
+
+function New-FilledByteBuffer([int]$Length, [byte]$Value) {
+    $buffer = New-Object byte[] $Length
+    if ($Length -eq 0) { return $buffer }
+
+    $buffer[0] = $Value
+    $filled = 1
+    while ($filled -lt $Length) {
+        $copy = [Math]::Min($filled, $Length - $filled)
+        [Array]::Copy($buffer, 0, $buffer, $filled, $copy)
+        $filled += $copy
+    }
+    return $buffer
+}
+
 function Get-TreeBytes([string]$Root) {
     $sum = (Get-ChildItem -LiteralPath $Root -File -Recurse | Measure-Object -Property Length -Sum).Sum
     if ($null -eq $sum) { return [int64]0 }
     return [int64]$sum
 }
 
-$results = @()
-foreach ($size in $MiB) {
-    if ($size -lt 1) { throw "MiB must be >= 1: $size" }
+$requestedMiB = Convert-ToSafeMiBSizes $MiB
+Write-Host ("CAPACITY_REQUEST mib={0}" -f (($requestedMiB | ForEach-Object { [string]$_ }) -join ','))
 
+$results = @()
+foreach ($size in $requestedMiB) {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-ffff'
     $base = Join-Path $env:TEMP "PersonalRag-Capacity-$size-$stamp"
     $root = Join-Path $base 'root'
@@ -28,8 +71,7 @@ foreach ($size in $MiB) {
 
     try {
         $fileBytes = 1MB
-        $buffer = New-Object byte[] $fileBytes
-        [Array]::Fill[byte]($buffer, [byte][char]'a')
+        $buffer = New-FilledByteBuffer $fileBytes ([byte][char]'a')
         for ($i = 0; $i -lt $size; $i++) {
             $marker = [Text.Encoding]::UTF8.GetBytes(("PR_CAP_FILE_{0:D4}" + [Environment]::NewLine -f $i))
             [Array]::Copy($marker, 0, $buffer, 0, $marker.Length)

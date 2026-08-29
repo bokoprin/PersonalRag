@@ -83,6 +83,26 @@ fn write_pdf(path: &Path, lines: &[&str], padding: usize) -> io::Result<()> {
     fs::write(path, out)
 }
 
+#[cfg(windows)]
+fn create_zip_fixture(root: &Path, path: &Path) -> io::Result<std::process::ExitStatus> {
+    Command::new("tar.exe")
+        .current_dir(root)
+        .args(["-a", "-c", "-f"])
+        .arg(path)
+        .arg(".")
+        .status()
+}
+
+#[cfg(not(windows))]
+fn create_zip_fixture(root: &Path, path: &Path) -> io::Result<std::process::ExitStatus> {
+    Command::new("zip")
+        .current_dir(root)
+        .args(["-q", "-r"])
+        .arg(path)
+        .arg(".")
+        .status()
+}
+
 fn write_zip(path: &Path, entries: &[(&str, &str)]) {
     let root = temp_dir("zip-source");
     for (name, content) in entries {
@@ -90,14 +110,33 @@ fn write_zip(path: &Path, entries: &[(&str, &str)]) {
         fs::create_dir_all(target.parent().unwrap()).unwrap();
         fs::write(target, content).unwrap();
     }
-    let status = Command::new("zip")
-        .current_dir(&root)
-        .args(["-q", "-r"])
-        .arg(path)
-        .arg(".")
-        .status()
-        .unwrap();
+    let status = create_zip_fixture(&root, path).unwrap();
     assert!(status.success());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_fixture_zip_generation_uses_native_tar() {
+    let root = temp_dir("windows-fixture-zip");
+    let archive = root.join("fixture.docx");
+    write_zip(
+        &archive,
+        &[(
+            "word/document.xml",
+            r#"<?xml version="1.0"?><w:document xmlns:w="w"><w:body><w:p><w:r><w:t>WINDOWS_FIXTURE_ZIP</w:t></w:r></w:p></w:body></w:document>"#,
+        )],
+    );
+
+    let output = Command::new("tar.exe")
+        .args(["-tf"])
+        .arg(&archive)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let entries = String::from_utf8(output.stdout).unwrap();
+    assert!(entries.replace('\\', "/").contains("word/document.xml"));
+
     fs::remove_dir_all(root).unwrap();
 }
 
