@@ -1,0 +1,53 @@
+PersonalRag V2 Step 7 final stabilization evidence
+Date: 2026-08-30
+Crate: 0.9.1
+
+PRE-CHANGE GATE0
+GitHub Actions run: 33273993630
+Conclusion: PASS
+Canonical manifest: PASS
+Linux fmt/clippy/full regression/release: PASS
+Windows fmt/clippy/GUI/incremental/product lifecycle/release: PASS
+
+FOCUSED VALIDATION
+GitHub Actions run: 33274363082
+Conclusion: PASS
+Windows native ZIP reader: 1/1 PASS
+Windows normal-user watch publish/search: 1/1 PASS
+Windows GUI: 2/2 PASS
+Windows incremental: 19/19 PASS
+Windows product lifecycle: 1/1 PASS
+Manifest exact legacy CRLF normalization: PASS
+Manifest real-content corruption rejection: PASS
+Version-sync rerun: 33274473901 / PASS
+
+CURRENT PRODUCT CAPACITY PROBE
+GitHub Actions run: 33274120802
+Conclusion: PASS
+4 MiB complete ratio: 5.387712%
+96 MiB complete ratio: 2.713791%
+256 MiB complete ratio: 2.683691%
+
+FINAL ACCEPTANCE
+GitHub Actions run: 33274526326
+Conclusion: PASS
+Linux Rust/Cargo: 1.97.1
+Linux fmt: PASS
+Linux clippy -D warnings: PASS
+Linux full regression: 88/88 PASS
+Linux release build: PASS
+Windows fmt: PASS
+Windows clippy -D warnings: PASS
+Windows native ZIP reader: 1/1 PASS
+Windows normal-user watch: 1/1 PASS
+Windows GUI: 2/2 PASS
+Windows incremental: 19/19 PASS
+Windows product lifecycle: 1/1 PASS
+Windows release build: PASS (22.39 s)
+Windows GUI exe: 915456 bytes
+Windows indexer exe: 995328 bytes
+Windows 4 MiB complete ratio: 5.087256% PASS
+Windows 96 MiB complete ratio: 2.659954% PASS
+Windows 256 MiB complete ratio: 2.637484% PASS
+
+Real user-machine final Step 7 E2E: PENDING / not counted as PASS
