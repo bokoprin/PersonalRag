@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          EXPECTED_PREVIOUS_MAIN='5f50b11db377b219d9bca5984f6744e368879251'
+          EXPECTED_PREVIOUS_MAIN='807d6c12e720d5b3a2e417e574bbd8f098ca1cc4'
           EXPECTED_OLD_TRANSPORT='57376db8ebe17dce14ddf52537158e0006756873980d3bd2e1d6d2bbf8d095e6'
           EXPECTED_OLD_TREE='7b2bef96686f7ed29abf091eddc8c6bf751fa190'
           EXPECTED_DELTA='887e9023f3cf76b603831dfc612a240ac96c4a79d3d4b5301e2b364aa3c662b4'
@@ -46,15 +46,26 @@ jobs:
           mkdir "$TMP/src"
 
           : > "$TMP/source.b64"
-          for n in 000 001 002 003; do
+          for n in 000 001 002; do
             git show "$STAGING:.canonical-upload/v2source-$n" >> "$TMP/source.b64"
+          done
+          for p in 003a 003b 003c 003d; do
+            git show "$STAGING:.canonical-upload/v2source-fix-$p" >> "$TMP/source.b64"
           done
           for p in 004a 004b 004c 004d; do
             git show "$STAGING:.canonical-upload/v2source-$p" >> "$TMP/source.b64"
           done
-          for n in 005 006 007 008 009; do
+          for n in 005 006; do
             git show "$STAGING:.canonical-upload/v2source-$n" >> "$TMP/source.b64"
           done
+          for p in 007a 007b 007c; do
+            git show "$STAGING:.canonical-upload/v2source-fix-$p" >> "$TMP/source.b64"
+          done
+          git show "$STAGING:.canonical-upload/v2source-fix-007d-exact" >> "$TMP/source.b64"
+          for n in 008 009; do
+            git show "$STAGING:.canonical-upload/v2source-$n" >> "$TMP/source.b64"
+          done
+
           base64 --decode "$TMP/source.b64" > "$TMP/source.tar.xz"
           echo "$EXPECTED_OLD_TRANSPORT  $TMP/source.tar.xz" | sha256sum -c -
           xz -dc "$TMP/source.tar.xz" | tar -xf - -C "$TMP/src"
