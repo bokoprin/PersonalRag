@@ -1,0 +1,80 @@
+name: Step7 final focused validation
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-final-stabilization-20260830
+    paths:
+      - .github/workflows/step7-final-focused.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+      - name: Install document helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils unzip zip zstd
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Product lifecycle
+        run: cargo test --offline --locked --test product_lifecycle -- --nocapture
+      - name: Document regression
+        run: cargo test --offline --locked --test document_extraction -- --nocapture
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+      - name: fmt
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: clippy
+        shell: pwsh
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: Native ZIP reader regression
+        shell: pwsh
+        run: cargo test --offline --locked --test windows_document_helper -- --nocapture
+      - name: Non-elevated watch regression
+        shell: pwsh
+        run: cargo test --offline --locked --test windows_watch -- --nocapture
+      - name: Existing Windows GUI regression
+        shell: pwsh
+        run: cargo test --offline --locked --test gui_search -- --nocapture
+      - name: Existing Windows incremental regression
+        shell: pwsh
+        run: cargo test --offline --locked --test incremental_index -- --nocapture
+      - name: Existing product lifecycle
+        shell: pwsh
+        run: cargo test --offline --locked --test product_lifecycle -- --nocapture
+      - name: Manifest legacy CRLF acceptance and real corruption rejection
+        shell: pwsh
+        run: |
+          $canonical=[IO.File]::ReadAllBytes((Resolve-Path .\.gitignore))
+          $sha=[Security.Cryptography.SHA256]::Create()
+          try { $hash=([BitConverter]::ToString($sha.ComputeHash($canonical))).Replace('-','').ToLowerInvariant() } finally { $sha.Dispose() }
+          [IO.File]::WriteAllText((Join-Path (Get-Location) 'SOURCE_MANIFEST.sha256'), ($hash + '  ./.gitignore' + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
+          $text=[IO.File]::ReadAllText((Resolve-Path .\.gitignore)) -replace "`r?`n","`r`n"
+          [IO.File]::WriteAllText((Resolve-Path .\.gitignore),$text,(New-Object Text.UTF8Encoding($false)))
+          powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'legacy CRLF verification failed' }
+          [IO.File]::AppendAllText((Resolve-Path .\.gitignore),'REAL_CORRUPTION')
+          powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+          if ($LASTEXITCODE -eq 0) { throw 'verifier accepted real corruption' }
+          $global:LASTEXITCODE=0
+          Write-Host 'manifest focused behavior PASS'
