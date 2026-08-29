@@ -826,6 +826,18 @@ impl PrototypeIndex {
         ))
     }
 
+    pub fn search_regex_with_limits(
+        &self,
+        corpus: &Corpus,
+        pattern: &str,
+        case_sensitive: bool,
+        variant: PrototypeVariant,
+        limits: SearchLimits,
+    ) -> PatternResult<SearchOutcome> {
+        let compiled = RegexPattern::compile(pattern, case_sensitive)?;
+        Ok(self.search_compiled(corpus, CompiledRef::Regex(&compiled), variant, Some(limits)))
+    }
+
     pub fn search_wildcard_all(
         &self,
         corpus: &Corpus,
@@ -850,6 +862,23 @@ impl PrototypeIndex {
             CompiledRef::Wildcard(&compiled),
             variant,
             Some(SearchLimits::default()),
+        ))
+    }
+
+    pub fn search_wildcard_with_limits(
+        &self,
+        corpus: &Corpus,
+        pattern: &str,
+        case_sensitive: bool,
+        variant: PrototypeVariant,
+        limits: SearchLimits,
+    ) -> PatternResult<SearchOutcome> {
+        let compiled = WildcardPattern::compile(pattern, case_sensitive)?;
+        Ok(self.search_compiled(
+            corpus,
+            CompiledRef::Wildcard(&compiled),
+            variant,
+            Some(limits),
         ))
     }
 

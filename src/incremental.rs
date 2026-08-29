@@ -7,7 +7,7 @@ use crate::persistent::{
     publish_next_generation,
 };
 use crate::usn::{PendingRenameState, UsnCheckpoint};
-use crate::{Corpus, PrototypeIndex, PrototypeVariant, SearchHit, normalize_str};
+use crate::{Corpus, PrototypeIndex, PrototypeVariant, SearchHit, SearchLimits, normalize_str};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -172,6 +172,13 @@ pub enum ContentQueryKind<'a> {
     Literal(&'a str),
     Regex(&'a str),
     Wildcard(&'a str),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContentSearchOptions<'a> {
+    pub query: ContentQueryKind<'a>,
+    pub case_sensitive: bool,
+    pub limits: SearchLimits,
 }
 
 impl DeltaOverlay {
@@ -483,6 +490,33 @@ impl DeltaOverlay {
         )
     }
 
+    pub fn content_search_with_limits(
+        &self,
+        root: &Path,
+        base_metadata: &MetadataIndex,
+        base_content: &PersistentIndex,
+        options: ContentSearchOptions<'_>,
+    ) -> Result<Vec<IncrementalContentHit>> {
+        self.content_search_with_limits_internal(root, base_metadata, base_content, options, None)
+    }
+
+    pub fn content_search_with_limits_with_extraction(
+        &self,
+        root: &Path,
+        base_metadata: &MetadataIndex,
+        base_content: &PersistentIndex,
+        options: ContentSearchOptions<'_>,
+        extractor: &crate::extraction::ExtractorConfig,
+    ) -> Result<Vec<IncrementalContentHit>> {
+        self.content_search_with_limits_internal(
+            root,
+            base_metadata,
+            base_content,
+            options,
+            Some(extractor),
+        )
+    }
+
     fn content_search_first_batch_internal(
         &self,
         root: &Path,
@@ -557,47 +591,7 @@ impl DeltaOverlay {
             }
         }
 
-        if self.changed_content_cache.borrow().is_none() {
-            let mut changed = self
-                .upserts
-                .values()
-                .filter(|value| {
-                    value.content_changed
-                        && value.record.content_searchable
-                        && !self.tombstones.contains(&value.record.file_id)
-                })
-                .collect::<Vec<_>>();
-            changed.sort_unstable_by_key(|value| value.record.file_id);
-            let mut documents = Vec::<(String, Vec<u8>)>::new();
-            let mut stable_ids = Vec::<u64>::new();
-            for value in changed {
-                let source_path = root.join(&value.record.path);
-                let bytes = if value.record.extractable
-                    || crate::extraction::is_extractable_document(&value.record.path)
-                {
-                    let extractor = extractor.ok_or(IncrementalError::InvalidFormat(
-                        "document extraction config required",
-                    ))?;
-                    crate::extraction::extract_document_stream(&source_path, extractor)?
-                } else {
-                    fs::read(&source_path)?
-                };
-                documents.push((value.record.path.to_string_lossy().into_owned(), bytes));
-                stable_ids.push(value.record.file_id);
-            }
-            let cache = if documents.is_empty() {
-                None
-            } else {
-                let corpus = Corpus::from_documents(documents);
-                let index = PrototypeIndex::build(&corpus);
-                Some(DeltaContentCache {
-                    corpus,
-                    index,
-                    stable_ids,
-                })
-            };
-            *self.changed_content_cache.borrow_mut() = cache;
-        }
+        self.ensure_changed_content_cache(root, extractor)?;
         if result.len() < 100 {
             let cache_borrow = self.changed_content_cache.borrow();
             if let Some(cache) = cache_borrow.as_ref() {
@@ -652,6 +646,209 @@ impl DeltaOverlay {
             }
         }
         Ok(result)
+    }
+
+    fn content_search_with_limits_internal(
+        &self,
+        root: &Path,
+        base_metadata: &MetadataIndex,
+        base_content: &PersistentIndex,
+        options: ContentSearchOptions<'_>,
+        extractor: Option<&crate::extraction::ExtractorConfig>,
+    ) -> Result<Vec<IncrementalContentHit>> {
+        let ContentSearchOptions {
+            query,
+            case_sensitive,
+            limits,
+        } = options;
+        if limits.max_files == 0 || limits.max_matches_seen == 0 {
+            return Ok(Vec::new());
+        }
+        let mapping_generation = base_content.generation();
+        if self
+            .content_mapping_cache
+            .borrow()
+            .as_ref()
+            .is_none_or(|(generation, _)| *generation != mapping_generation)
+        {
+            let mapping = build_content_file_mapping(base_metadata, base_content);
+            *self.content_mapping_cache.borrow_mut() = Some((mapping_generation, mapping));
+        }
+        let mapping_borrow = self.content_mapping_cache.borrow();
+        let mapping = &mapping_borrow.as_ref().expect("content mapping cache").1;
+        let mut excluded = HashSet::<u32>::new();
+        let mut overrides = HashMap::<u32, PathBuf>::new();
+        for stable_id in &self.tombstones {
+            if let Some(internal) = mapping.internal_for_stable(*stable_id) {
+                excluded.insert(internal);
+            }
+        }
+        for (stable_id, upsert) in &self.upserts {
+            if let Some(internal) = mapping.internal_for_stable(*stable_id) {
+                if upsert.content_changed {
+                    excluded.insert(internal);
+                } else {
+                    overrides.insert(internal, upsert.record.path.clone());
+                }
+            }
+        }
+        let base_overlay = PersistentSearchOverlay {
+            excluded_file_ids: &excluded,
+            path_overrides: &overrides,
+        };
+        let base_outcome = match query {
+            ContentQueryKind::Literal(value) => base_content.search_with_limits_and_overlay(
+                value,
+                case_sensitive,
+                limits,
+                &base_overlay,
+            )?,
+            ContentQueryKind::Regex(value) => base_content.search_regex_with_limits_and_overlay(
+                value,
+                case_sensitive,
+                limits,
+                &base_overlay,
+            )?,
+            ContentQueryKind::Wildcard(value) => base_content
+                .search_wildcard_with_limits_and_overlay(
+                    value,
+                    case_sensitive,
+                    limits,
+                    &base_overlay,
+                )?,
+        };
+        let base_matched = base_outcome.metrics.matched_locations_seen;
+        let base_files = base_outcome.metrics.returned_files;
+        let mut result = Vec::<IncrementalContentHit>::new();
+        let mut seen = HashSet::<(u64, u32, u32)>::new();
+        for hit in base_outcome.hits {
+            if let Some(stable_id) = mapping
+                .internal_to_stable
+                .get(hit.file_id as usize)
+                .and_then(|value| *value)
+            {
+                let key = (stable_id, hit.line_number, hit.byte_offset_in_line);
+                if seen.insert(key) {
+                    result.push(IncrementalContentHit {
+                        file_id: stable_id,
+                        line_number: hit.line_number,
+                        byte_offset_in_line: hit.byte_offset_in_line,
+                    });
+                }
+            }
+        }
+
+        let remaining_files = limits.max_files.saturating_sub(base_files);
+        let remaining_matches = limits.max_matches_seen.saturating_sub(base_matched);
+        if remaining_files == 0 || remaining_matches == 0 {
+            return Ok(result);
+        }
+
+        self.ensure_changed_content_cache(root, extractor)?;
+        let cache_borrow = self.changed_content_cache.borrow();
+        let Some(cache) = cache_borrow.as_ref() else {
+            return Ok(result);
+        };
+        let remaining_limits = SearchLimits {
+            max_files: remaining_files,
+            max_matches_seen: remaining_matches,
+            max_snippets_per_file: limits.max_snippets_per_file,
+        };
+        let outcome = match query {
+            ContentQueryKind::Literal(value) => cache.index.search_with_limits(
+                &cache.corpus,
+                value,
+                case_sensitive,
+                PrototypeVariant::D,
+                remaining_limits,
+            ),
+            ContentQueryKind::Regex(value) => cache
+                .index
+                .search_regex_with_limits(
+                    &cache.corpus,
+                    value,
+                    case_sensitive,
+                    PrototypeVariant::D,
+                    remaining_limits,
+                )
+                .map_err(|error| {
+                    IncrementalError::InvalidFormat(Box::leak(error.to_string().into_boxed_str()))
+                })?,
+            ContentQueryKind::Wildcard(value) => cache
+                .index
+                .search_wildcard_with_limits(
+                    &cache.corpus,
+                    value,
+                    case_sensitive,
+                    PrototypeVariant::D,
+                    remaining_limits,
+                )
+                .map_err(|error| {
+                    IncrementalError::InvalidFormat(Box::leak(error.to_string().into_boxed_str()))
+                })?,
+        };
+        for hit in outcome.hits {
+            let stable_id = cache.stable_ids[hit.file_id as usize];
+            let key = (stable_id, hit.line_number, hit.byte_offset_in_line);
+            if seen.insert(key) {
+                result.push(IncrementalContentHit {
+                    file_id: stable_id,
+                    line_number: hit.line_number,
+                    byte_offset_in_line: hit.byte_offset_in_line,
+                });
+            }
+        }
+        Ok(result)
+    }
+
+    fn ensure_changed_content_cache(
+        &self,
+        root: &Path,
+        extractor: Option<&crate::extraction::ExtractorConfig>,
+    ) -> Result<()> {
+        if self.changed_content_cache.borrow().is_some() {
+            return Ok(());
+        }
+        let mut changed = self
+            .upserts
+            .values()
+            .filter(|value| {
+                value.content_changed
+                    && value.record.content_searchable
+                    && !self.tombstones.contains(&value.record.file_id)
+            })
+            .collect::<Vec<_>>();
+        changed.sort_unstable_by_key(|value| value.record.file_id);
+        let mut documents = Vec::<(String, Vec<u8>)>::new();
+        let mut stable_ids = Vec::<u64>::new();
+        for value in changed {
+            let source_path = root.join(&value.record.path);
+            let bytes = if value.record.extractable
+                || crate::extraction::is_extractable_document(&value.record.path)
+            {
+                let extractor = extractor.ok_or(IncrementalError::InvalidFormat(
+                    "document extraction config required",
+                ))?;
+                crate::extraction::extract_document_stream(&source_path, extractor)?
+            } else {
+                fs::read(&source_path)?
+            };
+            documents.push((value.record.path.to_string_lossy().into_owned(), bytes));
+            stable_ids.push(value.record.file_id);
+        }
+        let cache = if documents.is_empty() {
+            None
+        } else {
+            let corpus = Corpus::from_documents(documents);
+            let index = PrototypeIndex::build(&corpus);
+            Some(DeltaContentCache {
+                corpus,
+                index,
+                stable_ids,
+            })
+        };
+        *self.changed_content_cache.borrow_mut() = cache;
+        Ok(())
     }
 
     pub fn reconcile(&mut self, base: &MetadataIndex, observed: Vec<MetadataRecord>) {

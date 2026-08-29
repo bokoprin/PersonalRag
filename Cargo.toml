@@ -1,6 +1,6 @@
 [package]
 name = "personalrag-v2"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 rust-version = "1.97"
 publish = false
@@ -12,6 +12,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "personalrag-v2-bench"
 path = "src/main.rs"
+
+[[bin]]
+name = "personalrag-v2-gui"
+path = "src/bin/personalrag_gui.rs"
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

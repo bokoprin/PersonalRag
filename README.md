@@ -1,9 +1,9 @@
-# PersonalRag V2 — Steps 1–5 canonical deterministic search backend
+# PersonalRag V2 — Steps 1–6 deterministic desktop search
 
 Date: 2026-08-29  
-Status: **CANONICAL — Steps 1, 2, 3, 4, and 5 COMPLETE**
+Status: **Steps 1–6 COMPLETE / Step 6 GUI FROZEN**
 
-This repository is the authoritative PersonalRag V2 deterministic search backend. The removed legacy implementation must not be restored as a compatibility layer.
+This repository contains the PersonalRag V2 deterministic search backend and the Step 6 Windows Everything-style GUI. The removed legacy implementation must not be restored as a compatibility layer.
 
 ## Frozen completed steps
 
@@ -22,6 +22,11 @@ Step 4 adds `PRV2DEL1` v1, `PRV2INC1` v1, and `PRV2BND1` v1 without changing fro
    Spec: `docs/V2_DOCUMENT_EXTRACTION.md`
 
 Step 5 adds `PRV2VER1` v1 without changing the frozen Step 1–4 identities.
+
+6. **Everything-style Windows GUI** — filename/path field, independent content field, literal/regex/wildcard mode, case mode, grouped content hits, preview, open/reveal, bundle reload, asynchronous search worker, and progressive result continuation.  
+   Spec: `docs/V2_GUI.md`
+
+Step 6 does not add or alter any persistent format identity. It consumes the frozen Step 1–5 bundle contracts.
 
 ## Step 4 final controlled evidence
 
@@ -68,14 +73,23 @@ The sealed result is recorded in `STATE.json` and `HANDOFF.md`.
 
 The Windows USN adapter is implemented and forced-`cfg(windows)` type-checked, while USN parsing/state transitions are tested with synthetic records. A live NTFS/USN E2E run was not possible on the Linux execution host and is **not counted as PASS**; that remains part of Step 7 target-Windows product acceptance.
 
+## Step 6 GUI
+
+Windows GUI binary: `personalrag-v2-gui`
+
+```text
+personalrag-v2-gui --root <indexed-root> --store <index-store> [--pdftotext <path>] [--unzip <path>] [--zstd <path>]
+```
+
+The same paths may be supplied through `PERSONALRAG_ROOT` and `PERSONALRAG_STORE`. The GUI loads the frozen Step 1–5 bundle fail-closed, searches on a background worker, debounces live input, displays filename/path and content results, shows up to three snippets per file, and can open a result or reveal it in Explorer. `More` progressively expands the current result enumeration from the 100-file first batch.
+
+The Step 6 Windows-only source is forced-`cfg(windows)` type-checked on the Linux acceptance host. A real Windows window launch, ShellExecute/Explorer integration, pinned helper packaging, live NTFS/USN behavior, DPI/keyboard usability, and target-Windows latency/footprint acceptance are **not counted as PASS here**; they are Step 7.
+
 ## Current product status
 
-The deterministic search/indexing backend through incremental filesystem synchronization and PDF/Office deterministic extraction is complete. It is **not yet the desktop application**.
+The deterministic filename/path + content search application source is complete through the desktop GUI boundary. The next roadmap item is:
 
-Next roadmap item:
-
-6. Everything-style GUI with an additional file-content search field
-7. target-Windows E2E / performance / failure acceptance
+7. target-Windows E2E / performance / failure / usability acceptance
 8. V2 1.0
 
-Semantic/LLM search remains deferred until deterministic filename/path and content search are complete in the application.
+Semantic/LLM search remains deferred until deterministic Windows product acceptance is complete.

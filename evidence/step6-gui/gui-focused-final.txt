@@ -1,0 +1,31 @@
+=== Step6 freeze gate: fmt ===
+FMT PASS
+=== Step6 freeze gate: clippy ===
+    Checking personalrag-v2 v0.8.0 (/mnt/data/prag_step6_work)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.12s
+CLIPPY PASS
+=== Step6 Windows GUI source typecheck ===
+   Compiling personalrag-v2 v0.8.0 (/mnt/data/prag_step6_work)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.43s
+WINDOWS_GUI_FORCED_CFG_TYPECHECK PASS
+=== GUI search focused ===
+   Compiling personalrag-v2 v0.8.0 (/mnt/data/prag_step6_work)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running tests/gui_search.rs (target/debug/deps/gui_search-aaf8944f30a3b320)
+
+running 2 tests
+test gui_session_searches_metadata_content_and_intersection ... ok
+test gui_session_supports_literal_regex_wildcard_and_case_mode ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.29s
+
+=== additive limits focused ===
+   Compiling personalrag-v2 v0.8.0 (/mnt/data/prag_step6_work)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.39s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-f5649a642e394984)
+
+running 1 test
+test additive_content_limits_bound_file_enumeration_without_changing_first_batch_api ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.75s
+

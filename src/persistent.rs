@@ -234,6 +234,15 @@ impl PersistentIndex {
         self.search_internal(query, case_sensitive, Some(SearchLimits::default()), None)
     }
 
+    pub fn search_with_limits(
+        &self,
+        query: &str,
+        case_sensitive: bool,
+        limits: SearchLimits,
+    ) -> Result<SearchOutcome> {
+        self.search_internal(query, case_sensitive, Some(limits), None)
+    }
+
     pub fn search_regex_all(&self, pattern: &str, case_sensitive: bool) -> Result<SearchOutcome> {
         let compiled = RegexPattern::compile(pattern, case_sensitive)?;
         self.search_pattern_internal(PersistentPattern::Regex(&compiled), None, None)
@@ -250,6 +259,16 @@ impl PersistentIndex {
             Some(SearchLimits::default()),
             None,
         )
+    }
+
+    pub fn search_regex_with_limits(
+        &self,
+        pattern: &str,
+        case_sensitive: bool,
+        limits: SearchLimits,
+    ) -> Result<SearchOutcome> {
+        let compiled = RegexPattern::compile(pattern, case_sensitive)?;
+        self.search_pattern_internal(PersistentPattern::Regex(&compiled), Some(limits), None)
     }
 
     pub fn search_wildcard_all(
@@ -272,6 +291,16 @@ impl PersistentIndex {
             Some(SearchLimits::default()),
             None,
         )
+    }
+
+    pub fn search_wildcard_with_limits(
+        &self,
+        pattern: &str,
+        case_sensitive: bool,
+        limits: SearchLimits,
+    ) -> Result<SearchOutcome> {
+        let compiled = WildcardPattern::compile(pattern, case_sensitive)?;
+        self.search_pattern_internal(PersistentPattern::Wildcard(&compiled), Some(limits), None)
     }
 
     pub fn file_count(&self) -> usize {
@@ -298,6 +327,16 @@ impl PersistentIndex {
         )
     }
 
+    pub fn search_with_limits_and_overlay(
+        &self,
+        query: &str,
+        case_sensitive: bool,
+        limits: SearchLimits,
+        overlay: &PersistentSearchOverlay<'_>,
+    ) -> Result<SearchOutcome> {
+        self.search_internal(query, case_sensitive, Some(limits), Some(overlay))
+    }
+
     pub fn search_regex_first_batch_with_overlay(
         &self,
         pattern: &str,
@@ -312,6 +351,21 @@ impl PersistentIndex {
         )
     }
 
+    pub fn search_regex_with_limits_and_overlay(
+        &self,
+        pattern: &str,
+        case_sensitive: bool,
+        limits: SearchLimits,
+        overlay: &PersistentSearchOverlay<'_>,
+    ) -> Result<SearchOutcome> {
+        let compiled = RegexPattern::compile(pattern, case_sensitive)?;
+        self.search_pattern_internal(
+            PersistentPattern::Regex(&compiled),
+            Some(limits),
+            Some(overlay),
+        )
+    }
+
     pub fn search_wildcard_first_batch_with_overlay(
         &self,
         pattern: &str,
@@ -322,6 +376,21 @@ impl PersistentIndex {
         self.search_pattern_internal(
             PersistentPattern::Wildcard(&compiled),
             Some(SearchLimits::default()),
+            Some(overlay),
+        )
+    }
+
+    pub fn search_wildcard_with_limits_and_overlay(
+        &self,
+        pattern: &str,
+        case_sensitive: bool,
+        limits: SearchLimits,
+        overlay: &PersistentSearchOverlay<'_>,
+    ) -> Result<SearchOutcome> {
+        let compiled = WildcardPattern::compile(pattern, case_sensitive)?;
+        self.search_pattern_internal(
+            PersistentPattern::Wildcard(&compiled),
+            Some(limits),
             Some(overlay),
         )
     }

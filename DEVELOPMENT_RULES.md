@@ -90,16 +90,16 @@ Completed:
 3. filename/path metadata index
 4. Windows incremental indexing
 5. PDF / Office extraction and `PRV2VER1` verification store
+6. Everything-style Windows GUI with a second content-search field
 
 Next:
 
-6. Everything-style GUI with a second content-search field
-7. E2E / performance / failure acceptance
+7. target-Windows E2E / performance / failure / usability acceptance
 8. V2 1.0
 
 Semantic/LLM search is deferred until deterministic filename/path and content search are complete.
 
-Step 5 is frozen. Document extraction-aware changes must preserve `PRV2VER1` v1 binding/recovery semantics and the frozen Step 1/2/3/4 identities. Step 6 must not redesign those backend contracts merely for GUI convenience or add semantic search.
+Step 5 is frozen. Document extraction-aware changes must preserve `PRV2VER1` v1 binding/recovery semantics and the frozen Step 1/2/3/4 identities. Step 6 is also frozen: GUI changes must preserve the Step 1–5 backend contracts, asynchronous UI/search separation, and bounded first-batch behavior. Step 7 may fix target-Windows defects found by E2E, but must not silently redefine deterministic search semantics. Semantic/LLM search remains out of scope.
 
 ## Packaging
 

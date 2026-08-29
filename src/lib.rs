@@ -1,6 +1,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
 pub mod extraction;
+pub mod gui;
 pub mod incremental;
 mod pattern;
 mod unicode;
@@ -1017,6 +1018,23 @@ impl PrototypeIndex {
             case_sensitive,
             variant,
             Some(SearchLimits::default()),
+        )
+    }
+
+    pub fn search_with_limits(
+        &self,
+        corpus: &Corpus,
+        query: &str,
+        case_sensitive: bool,
+        variant: PrototypeVariant,
+        limits: SearchLimits,
+    ) -> SearchOutcome {
+        self.search_internal(
+            corpus,
+            query.as_bytes(),
+            case_sensitive,
+            variant,
+            Some(limits),
         )
     }
 

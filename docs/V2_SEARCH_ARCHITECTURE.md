@@ -2,11 +2,11 @@
 
 Status: **Canonical normative architecture specification**  
 Scope: PersonalRag V2 search/index architecture  
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
-## Step 1 + Step 2 implementation status
+## Implementation status
 
-The deterministic content-search core is implemented and frozen through Step 2. Search semantics are normative in `V2_SEARCH_SEMANTICS.md`; persistent representation is normative in `V2_PERSISTENT_FORMAT.md`. The next implementation wave is Step 3 filename/path indexing.
+The deterministic product source is implemented through Step 6. Steps 1–5 backend contracts are frozen; Step 6 adds the Windows Everything-style GUI without changing persistent identities. Search semantics are normative in `V2_SEARCH_SEMANTICS.md`, persistent representation in `V2_PERSISTENT_FORMAT.md`, extraction in `V2_DOCUMENT_EXTRACTION.md`, and the GUI contract in `V2_GUI.md`. The next implementation wave is Step 7 target-Windows E2E / performance / failure / usability acceptance.
 
 ## 1. Purpose
 

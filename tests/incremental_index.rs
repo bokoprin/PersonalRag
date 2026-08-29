@@ -722,3 +722,48 @@ fn incremental_state_persists_checkpoint_and_pending_rename() {
     assert_eq!(normalizer.pending_state(), state.pending_renames);
     let _ = fs::remove_dir_all(store);
 }
+
+#[test]
+fn additive_content_limits_bound_file_enumeration_without_changing_first_batch_api() {
+    let (root, store, _) = setup_bundle();
+    let loaded = load_bundle(&root, &store).unwrap();
+    let first_batch = loaded
+        .delta
+        .content_search_first_batch(
+            &root,
+            &loaded.metadata,
+            &loaded.content,
+            ContentQueryKind::Literal("hello"),
+            false,
+        )
+        .unwrap();
+    let limited = loaded
+        .delta
+        .content_search_with_limits(
+            &root,
+            &loaded.metadata,
+            &loaded.content,
+            personalrag_v2::incremental::ContentSearchOptions {
+                query: ContentQueryKind::Literal("hello"),
+                case_sensitive: false,
+                limits: personalrag_v2::SearchLimits {
+                    max_files: 1,
+                    max_matches_seen: 32,
+                    max_snippets_per_file: 3,
+                },
+            },
+        )
+        .unwrap();
+    let first_batch_files = first_batch
+        .iter()
+        .map(|hit| hit.file_id)
+        .collect::<std::collections::HashSet<_>>();
+    let limited_files = limited
+        .iter()
+        .map(|hit| hit.file_id)
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(first_batch_files.len(), 2);
+    assert_eq!(limited_files.len(), 1);
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(store).unwrap();
+}
