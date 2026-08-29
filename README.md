@@ -103,7 +103,7 @@ PDF extraction uses `pdftotext`; verification compression uses `zstd`. On Window
 
 `.gitattributes` forces canonical text checkout to LF. `tools/verify_source_manifest.ps1` verifies canonical hashes and also accepts only an exact CRLF→LF normalization for legacy Git-clean Windows worktrees created before the LF rule; any real content change still fails.
 
-The first two native-Windows Step 7 runs exposed path-mapping, clippy, manifest, initial-index, raw-USN privilege, helper/path, and small-corpus capacity issues. The final stabilization wave addresses the remaining manifest/watch/helper items and clarifies the product capacity gate with reproducible 4/96/256 MiB whole-store measurement. Passing CI does not replace the required real-machine final retest. The Codex procedure is `STEP7_WINDOWS_RETEST_CODEX_2026-08-29.md`.
+The first two native-Windows Step 7 runs exposed path-mapping, clippy, manifest, initial-index, raw-USN privilege, helper/path, and small-corpus capacity issues. The final stabilization wave addresses the remaining manifest/watch/helper items and clarifies the product capacity gate with reproducible 4/96/256 MiB whole-store measurement. Passing CI does not replace the required real-machine final retest. The Codex procedure is `STEP7_WINDOWS_FINAL_RETEST_CODEX_2026-08-30.md`.
 
 ## Current product status
 
