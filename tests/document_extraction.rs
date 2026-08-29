@@ -115,6 +115,31 @@ fn write_zip(path: &Path, entries: &[(&str, &str)]) {
     fs::remove_dir_all(root).unwrap();
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_fixture_zip_generation_uses_native_tar() {
+    let root = temp_dir("windows-fixture-zip");
+    let archive = root.join("fixture.docx");
+    write_zip(
+        &archive,
+        &[(
+            "word/document.xml",
+            r#"<?xml version="1.0"?><w:document xmlns:w="w"><w:body><w:p><w:r><w:t>WINDOWS_FIXTURE_ZIP</w:t></w:r></w:p></w:body></w:document>"#,
+        )],
+    );
+
+    let output = Command::new("tar.exe")
+        .args(["-tf"])
+        .arg(&archive)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let entries = String::from_utf8(output.stdout).unwrap();
+    assert!(entries.replace('\\', "/").contains("word/document.xml"));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn source_modified_ns(path: &Path) -> u128 {
     fs::metadata(path)
         .unwrap()
