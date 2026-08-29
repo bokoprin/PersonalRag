@@ -118,24 +118,39 @@ fn discover_helper(env_name: &str, base_name: &str) -> PathBuf {
 
 #[cfg(windows)]
 fn discover_windows_helper(executable_name: &str) -> Option<PathBuf> {
-    let mut direct = Vec::<PathBuf>::new();
-    if let Some(program_files) = std::env::var_os("ProgramFiles") {
-        direct.push(
-            PathBuf::from(&program_files)
-                .join("Git/usr/bin")
-                .join(executable_name),
-        );
+    if executable_name.eq_ignore_ascii_case("unzip.exe")
+        && let Some(system_root) = std::env::var_os("SystemRoot")
+    {
+        let tar = PathBuf::from(system_root).join("System32/tar.exe");
+        if tar.is_file() {
+            return Some(tar);
+        }
     }
-    if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
-        direct.push(
-            PathBuf::from(&program_files_x86)
-                .join("Git/usr/bin")
-                .join(executable_name),
-        );
+
+    let mut direct = Vec::<PathBuf>::new();
+    // Git for Windows usr/bin helpers are MSYS programs. They do not reliably
+    // accept Win32 verbatim paths, so never auto-select Git's unzip.exe.
+    if !executable_name.eq_ignore_ascii_case("unzip.exe") {
+        if let Some(program_files) = std::env::var_os("ProgramFiles") {
+            direct.push(
+                PathBuf::from(&program_files)
+                    .join("Git/usr/bin")
+                    .join(executable_name),
+            );
+        }
+        if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
+            direct.push(
+                PathBuf::from(&program_files_x86)
+                    .join("Git/usr/bin")
+                    .join(executable_name),
+            );
+        }
     }
     if let Some(local) = std::env::var_os("LOCALAPPDATA") {
         let local = PathBuf::from(local);
-        direct.push(local.join("Programs/Git/usr/bin").join(executable_name));
+        if !executable_name.eq_ignore_ascii_case("unzip.exe") {
+            direct.push(local.join("Programs/Git/usr/bin").join(executable_name));
+        }
         direct.push(local.join("Microsoft/WinGet/Links").join(executable_name));
         if let Some(found) =
             find_named_file(&local.join("Microsoft/WinGet/Packages"), executable_name, 6)
@@ -158,7 +173,6 @@ fn discover_windows_helper(executable_name: &str) -> Option<PathBuf> {
     }
     direct.into_iter().find(|path| path.is_file())
 }
-
 #[cfg(windows)]
 fn find_named_file(root: &Path, name: &str, depth: usize) -> Option<PathBuf> {
     if depth == 0 || !root.is_dir() {
@@ -508,7 +522,11 @@ pub fn extract_document(path: &Path, config: &ExtractorConfig) -> Result<Extract
     let helper_identity = match kind {
         DocumentKind::Pdf => helper_version(&config.pdftotext, &["-v"]),
         DocumentKind::Docx | DocumentKind::Xlsx | DocumentKind::Pptx => {
-            helper_version(&config.unzip, &["-v"])
+            if zip_helper_is_tar(&config.unzip) {
+                helper_version(&config.unzip, &["--version"])
+            } else {
+                helper_version(&config.unzip, &["-v"])
+            }
         }
     };
     let fingerprint = format!(
@@ -777,7 +795,7 @@ fn extract_pdf(path: &Path, config: &ExtractorConfig) -> Result<Vec<String>> {
         .arg("UTF-8")
         .arg("-eol")
         .arg("unix")
-        .arg(path)
+        .arg(external_helper_path(path))
         .arg("-")
         .output()
         .map_err(ExtractionError::Io)?;
@@ -874,30 +892,63 @@ fn extract_xlsx(path: &Path, config: &ExtractorConfig) -> Result<Vec<String>> {
 }
 
 fn list_zip_entries(path: &Path, config: &ExtractorConfig) -> Result<Vec<String>> {
-    let output = Command::new(&config.unzip)
-        .arg("-Z1")
-        .arg(path)
-        .output()
-        .map_err(ExtractionError::Io)?;
+    let mut command = Command::new(&config.unzip);
+    if zip_helper_is_tar(&config.unzip) {
+        command.arg("-tf").arg(external_helper_path(path));
+    } else {
+        command.arg("-Z1").arg(external_helper_path(path));
+    }
+    let output = command.output().map_err(ExtractionError::Io)?;
     if !output.status.success() {
         return Err(helper_failure(&config.unzip, output));
     }
     let text = String::from_utf8(output.stdout)
         .map_err(|_| ExtractionError::InvalidUtf8("zip entry list"))?;
-    Ok(text.lines().map(ToOwned::to_owned).collect())
+    Ok(text
+        .lines()
+        .map(|line| line.trim_start_matches("./").to_string())
+        .collect())
 }
 
 fn read_zip_entry(path: &Path, entry: &str, config: &ExtractorConfig) -> Result<Vec<u8>> {
-    let output = Command::new(&config.unzip)
-        .arg("-p")
-        .arg(path)
-        .arg(entry)
-        .output()
-        .map_err(ExtractionError::Io)?;
+    let mut command = Command::new(&config.unzip);
+    if zip_helper_is_tar(&config.unzip) {
+        command
+            .arg("-xOf")
+            .arg(external_helper_path(path))
+            .arg(entry);
+    } else {
+        command.arg("-p").arg(external_helper_path(path)).arg(entry);
+    }
+    let output = command.output().map_err(ExtractionError::Io)?;
     if !output.status.success() {
         return Err(helper_failure(&config.unzip, output));
     }
     Ok(output.stdout)
+}
+
+fn zip_helper_is_tar(program: &Path) -> bool {
+    program
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("tar.exe") || name == "tar")
+}
+
+#[cfg(windows)]
+fn external_helper_path(path: &Path) -> PathBuf {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest);
+    }
+    path.to_path_buf()
+}
+
+#[cfg(not(windows))]
+fn external_helper_path(path: &Path) -> PathBuf {
+    path.to_path_buf()
 }
 
 fn run_filter(program: &Path, args: &[&str], input: &[u8]) -> Result<Vec<u8>> {

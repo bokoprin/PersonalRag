@@ -162,6 +162,6 @@ The frozen Step 4 formats/state semantics remain unchanged. Step 7 stabilization
 personalrag-v2-indexer watch --root <indexed-root> --store <index-store>
 ```
 
-The producer resumes from `PRV2INC1`, reads the live NTFS USN Journal, treats indexed FileIDs/parent FileIDs as relevance anchors, and triggers deterministic reconciliation before publishing a new `PRV2BND1`. Journal reset/gap conditions reconcile instead of guessing. A relevant journal advance that changes only the durable checkpoint can publish a state-only successor bundle.
+The product watcher prefers the live NTFS USN Journal and uses indexed FileIDs/parent FileIDs as relevance anchors when raw-volume access is available. Because normal desktop tokens can be denied raw-volume access, Step 7 final stabilization adds a recursive Win32 directory-change notification fallback. Either trigger runs deterministic reconciliation before publishing a new `PRV2BND1`. Journal reset/gap conditions reconcile instead of guessing.
 
-This correctness-first producer does not alter Step 4 persistent identities and does not claim that full reconciliation is the final high-scale direct-FRN update strategy. Its live behavior remains subject to Step 7 target-Windows acceptance.
+The fallback does not modify `PRV2INC1` or any frozen Step 4 identity. It is a product-layer availability mechanism so normal-user operation does not require administrator elevation. This correctness-first watcher still does not claim the final high-scale direct-FRN update strategy.

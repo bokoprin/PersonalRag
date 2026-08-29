@@ -82,7 +82,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             let config = ExtractorConfig::discover();
             print_helper("pdftotext", &config.pdftotext, "-v");
-            print_helper("unzip", &config.unzip, "-v");
+            let zip_version_arg = if config
+                .unzip
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.eq_ignore_ascii_case("tar.exe") || name == "tar")
+            {
+                "--version"
+            } else {
+                "-v"
+            };
+            print_helper("zip_reader", &config.unzip, zip_version_arg);
             print_helper("zstd", &config.zstd, "--version");
         }
         "watch" => run_watch(args.collect())?,
@@ -152,15 +162,19 @@ fn run_watch_platform(
     interval_ms: u64,
     once: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut producer = personalrag_v2::product::WindowsUsnProducer::open(
+    let mut producer = personalrag_v2::product::WindowsWatchProducer::open(
         &common.root,
         &common.store,
         common.extractor,
     )?;
     let checkpoint = producer.checkpoint();
     println!(
-        "WATCH_READY journal_id={} next_usn={} interval_ms={}",
-        checkpoint.journal_id, checkpoint.next_usn, interval_ms
+        "WATCH_READY mode={} journal_id={} next_usn={} interval_ms={} fallback_reason={:?}",
+        producer.mode().as_str(),
+        checkpoint.journal_id,
+        checkpoint.next_usn,
+        interval_ms,
+        producer.fallback_reason()
     );
     io::stdout().flush()?;
     loop {
@@ -190,7 +204,7 @@ fn run_watch_platform(
     _once: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     Err(ProductError::Unsupported(
-        "watch requires native Windows with an NTFS USN Journal".to_string(),
+        "watch requires native Windows; it prefers NTFS USN and falls back to directory notifications when raw USN access is unavailable".to_string(),
     )
     .into())
 }
