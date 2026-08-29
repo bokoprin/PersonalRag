@@ -1,0 +1,39 @@
+name: Step7 manifest focused test
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-final-stabilization-20260830
+    paths:
+      - .github/workflows/step7-manifest-focused.yml
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build one-file canonical manifest
+        shell: pwsh
+        run: |
+          $hash=(Get-FileHash -Algorithm SHA256 .\.gitignore).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText((Join-Path (Get-Location) 'SOURCE_MANIFEST.sha256'), ($hash + '  ./.gitignore' + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
+          powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'LF canonical verification failed' }
+      - name: Legacy CRLF is accepted only through LF canonicalization
+        shell: pwsh
+        run: |
+          $text=[IO.File]::ReadAllText((Resolve-Path .\.gitignore))
+          $text=$text -replace "`r?`n","`r`n"
+          [IO.File]::WriteAllText((Resolve-Path .\.gitignore),$text,(New-Object Text.UTF8Encoding($false)))
+          powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'legacy CRLF verification failed' }
+      - name: Real content corruption still fails
+        shell: pwsh
+        run: |
+          [IO.File]::AppendAllText((Resolve-Path .\.gitignore),'REAL_CORRUPTION')
+          powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+          if ($LASTEXITCODE -eq 0) { throw 'verifier accepted real corruption' }
+          Write-Host 'real corruption correctly rejected'
