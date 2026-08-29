@@ -24,7 +24,7 @@ jobs:
           set -euo pipefail
           cat .ci-upload/step7-patch-00 .ci-upload/step7-patch-01 > "$RUNNER_TEMP/patch.b64"
           base64 --decode "$RUNNER_TEMP/patch.b64" > "$RUNNER_TEMP/step7.patch.xz"
-          echo "27d4529ce8ab8c97c82ce12b8c9a3a1122ded0f3820195dcf4728041a5dd9a5f  $RUNNER_TEMP/step7.patch.xz" | sha256sum -c -
+          echo "e00618b4cc68a468c2af9cf1c55590763a99f38254ab4e6f56b219dda297060b  $RUNNER_TEMP/step7.patch.xz" | sha256sum -c -
           xz -dc "$RUNNER_TEMP/step7.patch.xz" > "$RUNNER_TEMP/step7.patch"
           git fetch origin main
           git switch --detach origin/main
