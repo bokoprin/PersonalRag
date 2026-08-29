@@ -9,6 +9,7 @@ mod unicode;
 mod unicode_tables;
 pub mod usn;
 pub mod windows_usn;
+pub mod windows_watch;
 
 pub use pattern::{PatternError, RegexPattern, WildcardPattern};
 pub use unicode::{
