@@ -62,9 +62,17 @@ fn non_elevated_watch_path_publishes_a_real_content_change() {
         max_files: 20,
         ..GuiSearchRequest::default()
     };
-    assert!(gui.search(&request("PR_WATCH_OLD_TOKEN")).unwrap().rows.is_empty());
+    assert!(
+        gui.search(&request("PR_WATCH_OLD_TOKEN"))
+            .unwrap()
+            .rows
+            .is_empty()
+    );
     assert_eq!(
-        gui.search(&request("PR_WATCH_NEW_TOKEN")).unwrap().rows.len(),
+        gui.search(&request("PR_WATCH_NEW_TOKEN"))
+            .unwrap()
+            .rows
+            .len(),
         1
     );
 
