@@ -1,0 +1,12 @@
+records=1000000
+build_ms=16472.885 persistent_bytes=185743016 bytes_per_record=185.743
+publish_ms=2086.020 load_ms=813.775 written_bytes=185743016 loaded_records=1000000
+case=rare_filename p50_ms=0.009 max_ms=0.041 returned=1 candidates=19 verified=19 anchor_width=Some(5) anchor_df=Some(19) absent=false
+case=unicode_filename p50_ms=0.006 max_ms=0.021 returned=1 candidates=1 verified=1 anchor_width=Some(3) anchor_df=Some(1) absent=false
+case=zero_hit_q3 p50_ms=0.000 max_ms=0.000 returned=0 candidates=0 verified=0 anchor_width=None anchor_df=None absent=true
+case=zero_one_char p50_ms=65.013 max_ms=190.133 returned=0 candidates=1000000 verified=1000000 anchor_width=None anchor_df=None absent=false
+case=zero_two_char p50_ms=65.306 max_ms=142.278 returned=0 candidates=1000000 verified=1000000 anchor_width=None anchor_df=None absent=false
+case=common_one_char p50_ms=0.011 max_ms=0.012 returned=100 candidates=1000000 verified=100 anchor_width=None anchor_df=None absent=false
+case=common_two_char p50_ms=0.008 max_ms=0.009 returned=100 candidates=1000000 verified=101 anchor_width=None anchor_df=None absent=false
+case=path p50_ms=0.096 max_ms=1.316 returned=100 candidates=1000 verified=800 anchor_width=Some(4) anchor_df=Some(1000) absent=false
+case=filename_path_and p50_ms=0.129 max_ms=0.314 returned=100 candidates=1000 verified=800 anchor_width=Some(4) anchor_df=Some(1000) absent=false

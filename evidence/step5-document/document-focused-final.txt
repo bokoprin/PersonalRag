@@ -1,0 +1,17 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running tests/document_extraction.rs (target/debug/deps/document_extraction-108af8dda01aaa19)
+
+running 9 tests
+test document_source_drift_is_rejected_before_exact_verification ... ok
+STEP5_SLO selected_bytes=4199696 verification_bytes=1136 combined_ratio=0.021714 cold_ms=8.870 p50_ms=0.047 p95_ms=0.069 p99_ms=0.069 max_ms=8.870 candidate_blocks=1 candidate_bytes=176 verification_scan_bytes=176
+test controlled_document_first_batch_stays_below_hard_slo ... ok
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... ok
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... ok
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... ok
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... ok
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... ok
+test verification_capacity_hard_gate_fails_closed_before_publish ... ok
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.20s
+

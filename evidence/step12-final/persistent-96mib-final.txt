@@ -1,0 +1,10 @@
+source_bytes=100663296 index_bytes=1312158 ratio=1.303512% q45_bytes=508145 blocks=96 publish_ms=3986.824 load_ms=9.891
+query="abd" p50_ms=2.634 max_ms=2.920 candidate_blocks=1 candidate_bytes=1048537 verification_bytes=1052852 absent=false anchor_df=Some(1) anchor_width=Some(3)
+query="wxyz" p50_ms=2.421 max_ms=2.488 candidate_blocks=1 candidate_bytes=1048537 verification_bytes=1052852 absent=false anchor_df=Some(1) anchor_width=Some(4)
+query="klmno" p50_ms=2.508 max_ms=2.696 candidate_blocks=1 candidate_bytes=1048537 verification_bytes=1052852 absent=false anchor_df=Some(1) anchor_width=Some(5)
+query="abcde" p50_ms=0.000 max_ms=0.000 candidate_blocks=0 candidate_bytes=0 verification_bytes=0 absent=true anchor_df=None anchor_width=None
+query="日本語" p50_ms=0.354 max_ms=0.411 candidate_blocks=96 candidate_bytes=100250783 verification_bytes=1048576 absent=false anchor_df=None anchor_width=None
+query="STRASSE" p50_ms=2.636 max_ms=2.663 candidate_blocks=1 candidate_bytes=1048537 verification_bytes=1052852 absent=false anchor_df=Some(1) anchor_width=Some(3)
+query="CAFÉ" p50_ms=2.361 max_ms=2.396 candidate_blocks=1 candidate_bytes=1048537 verification_bytes=1052852 absent=false anchor_df=Some(1) anchor_width=Some(3)
+kind=regex pattern="UNIQUE_V2_SENTINEL_[0-9A-F]{4}" p50_ms=78.993 max_ms=79.893 candidate_blocks=1 candidate_bytes=1048537 verification_bytes=1052852 absent=false anchor_df=Some(1) anchor_width=Some(3)
+kind=wildcard pattern="UNIQUE_V2_SENTINEL_*" p50_ms=62.196 max_ms=62.913 candidate_blocks=1 candidate_bytes=1048537 verification_bytes=1052852 absent=false anchor_df=Some(1) anchor_width=Some(3)

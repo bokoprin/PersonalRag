@@ -1,0 +1,23 @@
+[package]
+name = "personalrag-v2"
+version = "0.7.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+[lib]
+name = "personalrag_v2"
+path = "src/lib.rs"
+
+[[bin]]
+name = "personalrag-v2-bench"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = "warn"
+
+[profile.release]
+codegen-units = 1

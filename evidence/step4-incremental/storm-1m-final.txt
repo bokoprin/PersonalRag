@@ -1,0 +1,6 @@
+SEARCH case=created p50_ms=3.187 max_ms=8.016 hits=1
+SEARCH case=renamed_new p50_ms=2.816 max_ms=5.065 hits=1
+SEARCH case=renamed_old p50_ms=2.822 max_ms=3.299 hits=0
+SEARCH case=deleted p50_ms=2.892 max_ms=3.347 hits=0
+SEARCH case=base_rare p50_ms=2.863 max_ms=3.221 hits=1
+STORM base_records=1000000 base_bytes=135318629 build_ms=6823.645 create_count=10000 create_ms=5.789 rename_count=10000 rename_ms=8.679 delete_count=10000 delete_ms=2.323 delta_changes=30000 compact=true delta_bytes=1910064 publish_ms=20.633 reload_ms=131.341

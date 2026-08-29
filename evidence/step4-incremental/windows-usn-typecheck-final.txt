@@ -1,0 +1,4 @@
+Windows-only USN module forced-cfg typecheck: PASS
+Rust: 1.97.1
+Scope: src/usn.rs + src/windows_usn.rs with cfg(windows) forced on Linux host.
+This is NOT a live Windows USN E2E run and is not treated as one.

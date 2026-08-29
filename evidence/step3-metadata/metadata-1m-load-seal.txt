@@ -1,0 +1,3 @@
+load_only_ms=851.500 loaded_records=1000000 persistent_bytes=185743016 bytes_per_record=185.743
+steady_rss_kb=211240
+case=load_only_zero p50_ms=0.000 max_ms=0.000 returned=0 candidates=0 verified=0 anchor_width=None anchor_df=None absent=true

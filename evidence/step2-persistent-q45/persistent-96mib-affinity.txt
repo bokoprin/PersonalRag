@@ -1,0 +1,6 @@
+source_bytes=100663296 index_bytes=1310513 ratio=1.301878% q45_bytes=506920 blocks=96 publish_ms=3873.689 load_ms=10.643
+query="abd" p50_ms=1.032 max_ms=3.455 candidate_blocks=1 candidate_bytes=1048493 verification_bytes=1052807 absent=false anchor_df=Some(1) anchor_width=Some(3)
+query="wxyz" p50_ms=0.862 max_ms=1.432 candidate_blocks=1 candidate_bytes=1048493 verification_bytes=1052807 absent=false anchor_df=Some(1) anchor_width=Some(4)
+query="klmno" p50_ms=0.969 max_ms=1.169 candidate_blocks=1 candidate_bytes=1048493 verification_bytes=1052807 absent=false anchor_df=Some(1) anchor_width=Some(5)
+query="abcde" p50_ms=0.000 max_ms=0.000 candidate_blocks=0 candidate_bytes=0 verification_bytes=0 absent=true anchor_df=None anchor_width=None
+query="日本語" p50_ms=0.212 max_ms=0.380 candidate_blocks=96 candidate_bytes=100250783 verification_bytes=1048576 absent=false anchor_df=None anchor_width=None

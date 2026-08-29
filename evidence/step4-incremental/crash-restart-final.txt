@@ -1,0 +1,73 @@
+== bundle_is_commit_point_and_orphan_generations_do_not_replace_old_bundle ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test bundle_is_commit_point_and_orphan_generations_do_not_replace_old_bundle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 1.43s
+
+== corrupt_newest_bundle_or_reference_falls_back_to_previous_valid_bundle ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test corrupt_newest_bundle_or_reference_falls_back_to_previous_valid_bundle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 1.43s
+
+== bundle_gc_preserves_references_for_two_valid_fallback_bundles ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test bundle_gc_preserves_references_for_two_valid_fallback_bundles ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 2.21s
+
+== latest_delta_falls_back_when_advisory_current_points_to_corruption ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test latest_delta_falls_back_when_advisory_current_points_to_corruption ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 0.01s
+
+== incremental_state_persists_checkpoint_and_pending_rename ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test incremental_state_persists_checkpoint_and_pending_rename ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 0.00s
+
+== pending_rename_old_prevents_checkpoint_from_advancing_until_new_arrives ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test pending_rename_old_prevents_checkpoint_from_advancing_until_new_arrives ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 0.00s
+
+== reconciliation_repairs_create_modify_rename_and_delete ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test reconciliation_repairs_create_modify_rename_and_delete ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 0.41s
+
+== same_path_new_file_id_suppresses_old_content_and_exposes_new_content ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.00s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-149d9959aaeccc30)
+
+running 1 test
+test same_path_new_file_id_suppresses_old_content_and_exposes_new_content ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 1.00s
+
+CRASH_RESTART_EVIDENCE=PASS
