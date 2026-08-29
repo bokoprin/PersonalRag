@@ -1,6 +1,6 @@
 [package]
 name = "personalrag-v2"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 rust-version = "1.97"
 publish = false
@@ -16,6 +16,10 @@ path = "src/main.rs"
 [[bin]]
 name = "personalrag-v2-gui"
 path = "src/bin/personalrag_gui.rs"
+
+[[bin]]
+name = "personalrag-v2-indexer"
+path = "src/bin/personalrag_indexer.rs"
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

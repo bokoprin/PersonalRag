@@ -610,32 +610,30 @@ mod windows_ui {
             }
             WM_APP_SEARCH_DONE => {
                 let response = unsafe { Box::from_raw(l_param as *mut WorkerResponse) };
-                if let Some(state) = unsafe { state_mut(hwnd) } {
-                    if let WorkerResponse::Search(request_id, result) = *response {
-                        if request_id >= state.latest_request {
-                            state.latest_request = request_id;
-                            unsafe { apply_search_response(state, result) };
-                        }
-                    }
+                if let Some(state) = unsafe { state_mut(hwnd) }
+                    && let WorkerResponse::Search(request_id, result) = *response
+                    && request_id >= state.latest_request
+                {
+                    state.latest_request = request_id;
+                    unsafe { apply_search_response(state, result) };
                 }
                 0
             }
             WM_APP_RELOAD_DONE => {
                 let response = unsafe { Box::from_raw(l_param as *mut WorkerResponse) };
-                if let Some(state) = unsafe { state_mut(hwnd) } {
-                    if let WorkerResponse::Reload(request_id, result) = *response {
-                        if request_id >= state.latest_request {
-                            state.latest_request = request_id;
-                            match result {
-                                Ok(status) => {
-                                    state.index_status = status;
-                                    unsafe { submit_search(hwnd, state) };
-                                }
-                                Err(error) => unsafe {
-                                    set_text(state.status, &format!("Reload failed: {error}"))
-                                },
-                            }
+                if let Some(state) = unsafe { state_mut(hwnd) }
+                    && let WorkerResponse::Reload(request_id, result) = *response
+                    && request_id >= state.latest_request
+                {
+                    state.latest_request = request_id;
+                    match result {
+                        Ok(status) => {
+                            state.index_status = status;
+                            unsafe { submit_search(hwnd, state) };
                         }
+                        Err(error) => unsafe {
+                            set_text(state.status, &format!("Reload failed: {error}"))
+                        },
                     }
                 }
                 0
@@ -954,7 +952,6 @@ mod windows_ui {
             case_sensitive: unsafe { SendMessageW(state.case_check, BM_GETCHECK, 0, 0) }
                 == BST_CHECKED,
             max_files: state.max_files,
-            ..GuiSearchRequest::default()
         };
         unsafe { set_text(state.status, "Searching…") };
         if state

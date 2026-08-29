@@ -1,0 +1,174 @@
+===== cargo test --offline --locked --lib =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.54s
+     Running unittests src/lib.rs (target/debug/deps/personalrag_v2-ed99b85d55e8f172)
+
+running 24 tests
+test extraction::tests::utf16_xml_is_supported ... ok
+test extraction::tests::xlsx_shared_inline_formula_and_cell_boundaries_are_exact ... ok
+test extraction::tests::xml_entities_and_paragraph_boundaries_are_deterministic ... ok
+test gui::send_tests::gui_session_can_live_on_background_search_thread ... ok
+test gui::tests::context_preview_is_utf8_safe_and_bounded ... ok
+test gui::tests::file_size_and_modified_time_are_human_readable ... ok
+test incremental::content_mapping_path_tests::windows_content_mapping_canonicalizes_only_separator_direction ... ok
+test gui::tests::file_query_uses_frozen_unicode_and_separator_semantics ... ok
+test metadata::tests::separator_canonicalization_is_search_only ... ok
+test metadata::tests::metadata_format_identity_is_separate_from_content_index ... ok
+test pattern::tests::regex_rejects_unsafe_features_and_normalizes_escaped_literal_runs ... ok
+test pattern::tests::nfa_supports_frozen_core_grammar_without_backtracking ... ok
+test pattern::tests::wildcard_uses_same_nfa_and_escape_rules ... ok
+test persistent::crc_tests::crc64_ecma_matches_standard_check_vector ... ok
+test product::tests::metadata_scan_keeps_all_files_but_marks_only_supported_content ... ok
+test unicode::tests::every_table_composition_pair_normalizes_to_its_composed_scalar ... ok
+test unicode::tests::generated_python_unicode_15_1_oracle_vectors_match ... ok
+test unicode::tests::hangul_composition_is_algorithmic ... ok
+test unicode::tests::japanese_ascii_is_byte_preserving_but_unicode_special_cases_are_not ... ok
+test unicode::tests::nfc_and_casefold_semantics_match_frozen_examples ... ok
+test unicode::tests::unicode_version_is_frozen ... ok
+test persistent::format_version_tests::frozen_unicode_semantics_reject_prior_format_v1 ... ok
+test adaptive_tests::adaptive_presence_chooses_smallest_exact_representation_and_preserves_membership ... ok
+test pattern::tests::indexed_pattern_search_equals_candidate_free_verification ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.16s
+
+===== cargo test --offline --locked --test document_extraction =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.55s
+     Running tests/document_extraction.rs (target/debug/deps/document_extraction-238718b6fd32e361)
+
+running 9 tests
+test document_source_drift_is_rejected_before_exact_verification ... ok
+STEP5_SLO selected_bytes=4199696 verification_bytes=1136 combined_ratio=0.021714 cold_ms=19.189 p50_ms=0.044 p95_ms=0.134 p99_ms=0.134 max_ms=19.189 candidate_blocks=1 candidate_bytes=176 verification_scan_bytes=176
+test controlled_document_first_batch_stays_below_hard_slo ... ok
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... ok
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... ok
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... ok
+test verification_capacity_hard_gate_fails_closed_before_publish ... ok
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... ok
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... ok
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.59s
+
+===== cargo test --offline --locked --test gui_search =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.83s
+     Running tests/gui_search.rs (target/debug/deps/gui_search-2e87517cd2dcd6ac)
+
+running 2 tests
+test gui_session_searches_metadata_content_and_intersection ... ok
+test gui_session_supports_literal_regex_wildcard_and_case_mode ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.87s
+
+===== cargo test --offline --locked --test incremental_index =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running tests/incremental_index.rs (target/debug/deps/incremental_index-fdc4691c41739348)
+
+running 19 tests
+test additive_content_limits_bound_file_enumeration_without_changing_first_batch_api ... ok
+test checkpoint_validation_detects_journal_reset_and_gap ... ok
+test changed_content_cache_is_reused_and_invalidated_on_modify ... ok
+test compaction_threshold_uses_fifty_thousand_or_two_percent ... ok
+test bundle_is_commit_point_and_orphan_generations_do_not_replace_old_bundle ... ok
+test delta_overlay_create_rename_delete_and_same_path_replacement_are_exact ... ok
+test frn_tree_updates_directory_descendant_paths_without_rescan ... ok
+test incremental_state_persists_checkpoint_and_pending_rename ... ok
+test latest_delta_falls_back_when_advisory_current_points_to_corruption ... ok
+test delta_snapshot_round_trip_and_corruption_detection ... ok
+test pending_rename_old_prevents_checkpoint_from_advancing_until_new_arrives ... ok
+test bundle_gc_preserves_references_for_two_valid_fallback_bundles ... ok
+test corrupt_newest_bundle_or_reference_falls_back_to_previous_valid_bundle ... ok
+test reconciliation_repairs_create_modify_rename_and_delete ... ok
+test unmatched_rename_new_and_hardlink_change_require_reconciliation ... ok
+test usn_record_v2_parser_is_strict_and_lossless_for_utf16_names ... ok
+test overlay_created_then_deleted_does_not_leave_tombstone ... ok
+test rename_reuses_base_content_and_content_modify_suppresses_old_hit ... ok
+test same_path_new_file_id_suppresses_old_content_and_exposes_new_content ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.85s
+
+===== cargo test --offline --locked --test metadata_index =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running tests/metadata_index.rs (target/debug/deps/metadata_index-aa6618f20af01954)
+
+running 6 tests
+test duplicate_file_ids_are_rejected ... ok
+test filename_and_path_queries_match_independent_unicode_oracle ... ok
+test snapshot_round_trip_preserves_results_and_rejects_corruption_and_overwrite ... ok
+test metadata_snapshot_rejects_format_and_semantic_mismatch ... ok
+test unix_non_utf8_path_identity_round_trips_even_when_not_searchable ... ok
+test q4_q5_filter_reduces_common_q3_candidates_without_changing_result ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.91s
+
+===== cargo test --offline --locked --test p0_search =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running tests/p0_search.rs (target/debug/deps/p0_search-dafee4d4d9c80eaf)
+
+running 12 tests
+test adaptive_presence_reduces_small_corpus_fixed_overhead ... ok
+test dense_and_adaptive_global_presence_shortcut_same_zero_hits ... ok
+test literal_search_matches_oracle_for_short_long_case_japanese_and_overlaps ... ok
+test deterministic_pseudorandom_substrings_match_naive_oracle ... ok
+test rare_anchor_reduces_candidate_blocks_without_changing_results ... ok
+test logical_line_boundaries_are_hard_boundaries ... ok
+test serialized_capacity_matches_actual_file_size ... ok
+test sparse_anchor_budget_is_never_exceeded_and_fallback_remains_exact ... ok
+test adaptive_q4_q5_global_filter_shortcuts_adversarial_zero_hit ... ok
+test adaptive_q4_q5_filters_preserve_oracle_and_reduce_candidates ... ok
+test variant_d_actual_q4_q5_substrings_never_false_negative ... ok
+test variant_d_capacity_respects_hard_and_sparse_budgets ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.94s
+
+===== cargo test --offline --locked --test persistent_index =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running tests/persistent_index.rs (target/debug/deps/persistent_index-0cb8b84f69e254b8)
+
+running 9 tests
+===== cargo test --offline --locked --test persistent_index =====
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/persistent_index.rs (target/debug/deps/persistent_index-0cb8b84f69e254b8)
+
+running 9 tests
+test corrupt_current_and_latest_generation_fall_back_to_previous_valid_generation ... ok
+test persistent_v2_reload_preserves_unicode_regex_and_wildcard_semantics ... ok
+test gc_keeps_at_least_two_valid_generations_and_never_counts_corrupt_as_fallback ... ok
+test publish_next_generation_tracks_parent_and_current ... ok
+test publish_reload_preserves_q45_literal_results_and_line_boundaries ... ok
+test source_drift_is_explicit_and_checksum_validation_is_available ... ok
+test unix_non_utf8_relative_path_round_trips_without_loss ... ok
+test gc_preserves_valid_current_even_when_newer_orphan_generations_exist ... ok
+test four_mib_controlled_corpus_stays_below_capacity_hard_gate ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.46s
+
+===== cargo test --offline --locked --test product_lifecycle =====
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests/product_lifecycle.rs (target/debug/deps/product_lifecycle-135165cf586a8376)
+
+running 1 test
+test product_init_and_reconcile_drive_real_gui_bundle_lifecycle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.73s
+
+===== cargo test --offline --locked --test search_semantics =====
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running tests/search_semantics.rs (target/debug/deps/search_semantics-6629a76725f2576b)
+
+running 6 tests
+test pattern_safety_rejections_are_explicit ... ok
+test regex_and_wildcard_use_same_unicode_semantics_and_hard_line_boundaries ... ok
+test unicode_literal_index_matches_naive_oracle ... ok
+test empty_match_end_anchor_reports_original_utf8_end_offset ... ok
+test unicode_nfc_full_fold_and_original_offsets_are_frozen ... ok
+test mandatory_literal_reduces_regex_and_wildcard_candidates ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.81s
+

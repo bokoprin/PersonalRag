@@ -92,9 +92,12 @@ Completed:
 5. PDF / Office extraction and `PRV2VER1` verification store
 6. Everything-style Windows GUI with a second content-search field
 
+Current:
+
+7. target-Windows E2E stabilization + re-acceptance. The supported lifecycle binary is `personalrag-v2-indexer`; Step 7 fixes may wire/fix Windows product behavior but must preserve frozen Step 1–6 deterministic contracts.
+
 Next:
 
-7. target-Windows E2E / performance / failure / usability acceptance
 8. V2 1.0
 
 Semantic/LLM search is deferred until deterministic filename/path and content search are complete.
@@ -105,3 +108,5 @@ Step 5 is frozen. Document extraction-aware changes must preserve `PRV2VER1` v1 
 
 - Generated build outputs such as `target/` must not be included in source handoff packages.
 - `SOURCE_MANIFEST.sha256` must describe the sealed source package excluding itself.
+- Canonical repository text must remain LF-stable across platforms via `.gitattributes`; do not weaken this rule without replacing the manifest scheme.
+- Third-party extraction helpers are provisioned/discovered externally and must not be silently committed as source artifacts.

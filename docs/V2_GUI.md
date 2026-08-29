@@ -20,6 +20,16 @@ personalrag-v2-gui --root <indexed-root> --store <index-store> \
 
 The GUI opens only after `GuiSearchSession::load` successfully loads the current `PRV2BND1` bundle with the Step 5 verification checks. Loading and reload are fail-closed; the GUI does not invent an unverified in-memory substitute.
 
+## 2.1 Fresh-user prerequisite
+
+Step 7 stabilization adds the supported lifecycle binary `personalrag-v2-indexer`. A fresh root/store is created with:
+
+```text
+personalrag-v2-indexer init --root <indexed-root> --store <index-store>
+```
+
+After filesystem updates, either `update` or native-Windows `watch` publishes a successor bundle. The GUI's `Reload index` deliberately reloads a published bundle; it is not itself a filesystem crawler. See `docs/V2_PRODUCT_LIFECYCLE.md`.
+
 ## 3. Search controls
 
 The window exposes:

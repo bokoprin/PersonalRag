@@ -1,9 +1,9 @@
-# PersonalRag V2 — Steps 1–6 deterministic desktop search
+# PersonalRag V2 — deterministic Windows desktop search
 
 Date: 2026-08-29  
-Status: **Steps 1–6 COMPLETE / Step 6 GUI FROZEN**
+Status: **Steps 1–6 FROZEN / Step 7 stabilization implemented / target-Windows E2E retest pending**
 
-This repository contains the PersonalRag V2 deterministic search backend and the Step 6 Windows Everything-style GUI. The removed legacy implementation must not be restored as a compatibility layer.
+This repository contains the PersonalRag V2 deterministic search backend, native Win32 Everything-style GUI, and Step 7 product index lifecycle used to create/update/watch a Windows index store. The removed legacy implementation must not be restored as a compatibility layer.
 
 ## Frozen completed steps
 
@@ -83,13 +83,33 @@ personalrag-v2-gui --root <indexed-root> --store <index-store> [--pdftotext <pat
 
 The same paths may be supplied through `PERSONALRAG_ROOT` and `PERSONALRAG_STORE`. The GUI loads the frozen Step 1–5 bundle fail-closed, searches on a background worker, debounces live input, displays filename/path and content results, shows up to three snippets per file, and can open a result or reveal it in Explorer. `More` progressively expands the current result enumeration from the 100-file first batch.
 
-The Step 6 Windows-only source is forced-`cfg(windows)` type-checked on the Linux acceptance host. A real Windows window launch, ShellExecute/Explorer integration, pinned helper packaging, live NTFS/USN behavior, DPI/keyboard usability, and target-Windows latency/footprint acceptance are **not counted as PASS here**; they are Step 7.
+Step 6 itself remains frozen. Step 7 stabilization adds product wiring around it without changing Step 1–5 durable identities.
+
+## Step 7 product lifecycle
+
+Windows lifecycle binary: `personalrag-v2-indexer`
+
+```text
+personalrag-v2-indexer init   --root <indexed-root> --store <index-store> [helper overrides]
+personalrag-v2-indexer update --root <indexed-root> --store <index-store> [helper overrides]
+personalrag-v2-indexer watch  --root <indexed-root> --store <index-store> [--interval-ms 250] [--once] [helper overrides]
+personalrag-v2-indexer status --root <indexed-root> --store <index-store> [helper overrides]
+personalrag-v2-indexer helpers
+```
+
+`init` creates and verifies a fresh Step 1–5 bundle. `update` explicitly reconciles filesystem state. On native Windows, `watch` reads the NTFS USN Journal and uses relevant journal records to trigger deterministic reconciliation/publish. `status` verifies and reports the current bundle. See `docs/V2_PRODUCT_LIFECYCLE.md`.
+
+PDF/Office helper paths are auto-discovered from explicit environment variables, executable-local helper directories, and common Windows installations. `tools/setup_windows_helpers.ps1` reports helper availability and can provision the named helpers through WinGet when explicitly invoked with `-Install`. Third-party helper binaries are not stored in this repository.
+
+`.gitattributes` forces canonical text checkout to LF so `SOURCE_MANIFEST.sha256` is stable across Windows/Linux checkouts. Windows verification should use `tools/verify_source_manifest.ps1`.
+
+The first native-Windows Step 7 run exposed the path-mapping, clippy, manifest, initial-index, USN-producer, and helper gaps addressed by this stabilization wave. Passing CI does not replace the required real-machine retest. The Codex procedure is `STEP7_WINDOWS_RETEST_CODEX_2026-08-29.md`.
 
 ## Current product status
 
-The deterministic filename/path + content search application source is complete through the desktop GUI boundary. The next roadmap item is:
+The deterministic engine, GUI, and runnable index lifecycle are implemented. The remaining roadmap is:
 
-7. target-Windows E2E / performance / failure / usability acceptance
+7. re-run target-Windows E2E / performance / failure / usability acceptance against the stabilized product
 8. V2 1.0
 
 Semantic/LLM search remains deferred until deterministic Windows product acceptance is complete.

@@ -1,0 +1,26 @@
+# Canonical repository text is LF on every platform so SOURCE_MANIFEST hashes
+# are stable in clean Windows/Linux/macOS checkouts.
+* text=auto eol=lf
+
+# Never apply text conversion to binary/artifact formats.
+*.zip -text
+*.tar -text
+*.gz -text
+*.xz -text
+*.zst -text
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.pdf -text
+*.docx -text
+*.xlsx -text
+*.pptx -text
+*.exe -text
+*.dll -text
+*.prv2 -text
+*.prv2ver -text
+*.prmet -text
+*.prdelta -text
+*.princ -text
+*.prbnd -text

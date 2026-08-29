@@ -911,14 +911,14 @@ fn build_content_file_mapping(
     let mut path_to_stable = HashMap::<PathKey, u64>::new();
     for record in base_metadata.records() {
         if record.content_searchable {
-            path_to_stable.insert(PathKey::from_path(&record.path), record.file_id);
+            path_to_stable.insert(content_mapping_path_key(&record.path), record.file_id);
         }
     }
     let mut stable_to_internal = HashMap::new();
     let mut internal_to_stable = vec![None; base_content.file_count()];
     for internal in 0..base_content.file_count() as u32 {
         if let Some(path) = base_content.file_relative_path(internal)
-            && let Some(stable) = path_to_stable.get(&PathKey::from_path(path)).copied()
+            && let Some(stable) = path_to_stable.get(&content_mapping_path_key(path)).copied()
         {
             stable_to_internal.insert(stable, internal);
             internal_to_stable[internal as usize] = Some(stable);
@@ -929,6 +929,34 @@ fn build_content_file_mapping(
     ContentFileMapping {
         stable_to_internal,
         internal_to_stable,
+    }
+}
+
+#[cfg(any(windows, test))]
+fn canonicalize_windows_path_units(units: impl IntoIterator<Item = u16>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    for unit in units {
+        let unit = if unit == b'\\' as u16 {
+            b'/' as u16
+        } else {
+            unit
+        };
+        bytes.extend_from_slice(&unit.to_le_bytes());
+    }
+    bytes
+}
+
+fn content_mapping_path_key(path: &Path) -> PathKey {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        PathKey(canonicalize_windows_path_units(
+            path.as_os_str().encode_wide(),
+        ))
+    }
+    #[cfg(not(windows))]
+    {
+        PathKey::from_path(path)
     }
 }
 
@@ -1778,7 +1806,7 @@ fn state_file_name(generation: u64) -> String {
     format!("state-{generation:020}.princ")
 }
 
-fn next_generation_number(store: &Path) -> Result<u64> {
+pub(crate) fn next_generation_number(store: &Path) -> Result<u64> {
     let mut max = 0_u64;
     for (prefix, suffix) in [
         ("bundle-", ".prbnd"),
@@ -1992,4 +2020,23 @@ pub fn convert_search_hits(hits: Vec<SearchHit>, stable_ids: &[u64]) -> Vec<Incr
                 })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod content_mapping_path_tests {
+    use super::canonicalize_windows_path_units;
+
+    #[test]
+    fn windows_content_mapping_canonicalizes_only_separator_direction() {
+        let slash = "notes/alpha.txt".encode_utf16().collect::<Vec<_>>();
+        let backslash = "notes\\alpha.txt".encode_utf16().collect::<Vec<_>>();
+        assert_eq!(
+            canonicalize_windows_path_units(slash),
+            canonicalize_windows_path_units(backslash)
+        );
+        assert_ne!(
+            canonicalize_windows_path_units("notes/alpha.txt".encode_utf16()),
+            canonicalize_windows_path_units("notes/Alpha.txt".encode_utf16())
+        );
+    }
 }

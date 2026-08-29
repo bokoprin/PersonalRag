@@ -152,3 +152,16 @@ The canonical Step 4 implementation was built and tested on the available Linux 
 A **live NTFS/USN end-to-end run on Windows was not available in this environment and is not counted as PASS**. Actual target-Windows filesystem/USN behavior remains part of Step 7 product E2E/failure acceptance.
 
 This limitation does not change the frozen Step 4 data/state semantics.
+
+
+## Step 7 product wiring note
+
+The frozen Step 4 formats/state semantics remain unchanged. Step 7 stabilization adds a runnable native-Windows product producer around them:
+
+```text
+personalrag-v2-indexer watch --root <indexed-root> --store <index-store>
+```
+
+The producer resumes from `PRV2INC1`, reads the live NTFS USN Journal, treats indexed FileIDs/parent FileIDs as relevance anchors, and triggers deterministic reconciliation before publishing a new `PRV2BND1`. Journal reset/gap conditions reconcile instead of guessing. A relevant journal advance that changes only the durable checkpoint can publish a state-only successor bundle.
+
+This correctness-first producer does not alter Step 4 persistent identities and does not claim that full reconciliation is the final high-scale direct-FRN update strategy. Its live behavior remains subject to Step 7 target-Windows acceptance.

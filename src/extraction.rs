@@ -57,12 +57,137 @@ pub struct ExtractorConfig {
 
 impl Default for ExtractorConfig {
     fn default() -> Self {
+        Self::discover()
+    }
+}
+
+impl ExtractorConfig {
+    pub fn discover() -> Self {
         Self {
-            pdftotext: PathBuf::from("pdftotext"),
-            unzip: PathBuf::from("unzip"),
-            zstd: PathBuf::from("zstd"),
+            pdftotext: discover_helper("PERSONALRAG_PDFTOTEXT", "pdftotext"),
+            unzip: discover_helper("PERSONALRAG_UNZIP", "unzip"),
+            zstd: discover_helper("PERSONALRAG_ZSTD", "zstd"),
         }
     }
+
+    pub fn override_pdftotext(&mut self, path: impl Into<PathBuf>) {
+        self.pdftotext = path.into();
+    }
+
+    pub fn override_unzip(&mut self, path: impl Into<PathBuf>) {
+        self.unzip = path.into();
+    }
+
+    pub fn override_zstd(&mut self, path: impl Into<PathBuf>) {
+        self.zstd = path.into();
+    }
+}
+
+fn discover_helper(env_name: &str, base_name: &str) -> PathBuf {
+    if let Some(path) = std::env::var_os(env_name).filter(|value| !value.is_empty()) {
+        return PathBuf::from(path);
+    }
+
+    let executable_name = if cfg!(windows) {
+        format!("{base_name}.exe")
+    } else {
+        base_name.to_string()
+    };
+    if let Ok(current_exe) = std::env::current_exe()
+        && let Some(dir) = current_exe.parent()
+    {
+        for candidate in [
+            dir.join("helpers").join(&executable_name),
+            dir.join(&executable_name),
+        ] {
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(path) = discover_windows_helper(&executable_name) {
+            return path;
+        }
+    }
+
+    PathBuf::from(executable_name)
+}
+
+#[cfg(windows)]
+fn discover_windows_helper(executable_name: &str) -> Option<PathBuf> {
+    let mut direct = Vec::<PathBuf>::new();
+    if let Some(program_files) = std::env::var_os("ProgramFiles") {
+        direct.push(
+            PathBuf::from(&program_files)
+                .join("Git/usr/bin")
+                .join(executable_name),
+        );
+    }
+    if let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") {
+        direct.push(
+            PathBuf::from(&program_files_x86)
+                .join("Git/usr/bin")
+                .join(executable_name),
+        );
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        let local = PathBuf::from(local);
+        direct.push(local.join("Programs/Git/usr/bin").join(executable_name));
+        direct.push(local.join("Microsoft/WinGet/Links").join(executable_name));
+        if let Some(found) =
+            find_named_file(&local.join("Microsoft/WinGet/Packages"), executable_name, 6)
+        {
+            return Some(found);
+        }
+    }
+    if let Some(profile) = std::env::var_os("USERPROFILE") {
+        let profile = PathBuf::from(profile);
+        direct.push(
+            profile
+                .join("scoop/apps/poppler/current/Library/bin")
+                .join(executable_name),
+        );
+        direct.push(
+            profile
+                .join("scoop/apps/zstd/current")
+                .join(executable_name),
+        );
+    }
+    direct.into_iter().find(|path| path.is_file())
+}
+
+#[cfg(windows)]
+fn find_named_file(root: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    if depth == 0 || !root.is_dir() {
+        return None;
+    }
+    let mut entries = fs::read_dir(root)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in &entries {
+        let path = entry.path();
+        if path.is_file()
+            && path
+                .file_name()
+                .is_some_and(|value| value.eq_ignore_ascii_case(name))
+        {
+            return Some(path);
+        }
+    }
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir()
+            && let Some(found) = find_named_file(&path, name, depth - 1)
+        {
+            return Some(found);
+        }
+    }
+    None
 }
 
 #[derive(Debug)]

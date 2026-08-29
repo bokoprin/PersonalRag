@@ -4,6 +4,7 @@ pub mod extraction;
 pub mod gui;
 pub mod incremental;
 mod pattern;
+pub mod product;
 mod unicode;
 mod unicode_tables;
 pub mod usn;

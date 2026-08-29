@@ -1,0 +1,17 @@
+STEP7 STABILIZATION FINAL LOCAL GATE
+UTC 2026-08-29T12:20:22Z
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo 1.97.1 (c980f4866 2026-06-30)
+--- fmt ---
+FMT PASS
+--- clippy ---
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+CLIPPY PASS
+--- release ---
+   Compiling personalrag-v2 v0.9.0 (/mnt/data/personalrag_step7_stabilize)
+    Finished `release` profile [optimized] target(s) in 15.17s
+RELEASE_ELAPSED_SEC=15.18
+RELEASE PASS
+--- regression accounting ---
+lib=24 document_extraction=9 gui_search=2 incremental_index=19 metadata_index=6 p0_search=12 persistent_index=9 product_lifecycle=1 search_semantics=6 total=88
+REGRESSION 88/88 PASS (executed target-by-target; see full-regression-final.txt)
