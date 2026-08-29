@@ -1,0 +1,45 @@
+PersonalRag V2 Step 7 last-two fix evidence
+Date: 2026-08-30
+Base main: a33a32a81a344cdbdeee14431fe71a159afe2471
+
+SCOPE
+- tests/document_extraction.rs: Windows fixture ZIP generation no longer requires zip.exe
+- tools/measure_product_capacity.ps1: Windows PowerShell 5.1 compatibility + safe MiB parsing/bounds
+- no product src/ change
+
+GATE0
+Run: 33279610286
+Conclusion: PASS
+Linux full regression: 88/88 PASS
+Linux fmt/clippy/release: PASS
+Windows GUI 2/2 PASS
+Windows incremental 19/19 PASS
+Windows product lifecycle 1/1 PASS
+Windows watch 1/1 PASS
+Windows document helper 1/1 PASS
+Windows release: PASS
+Known PS5.1 parser defect reproduced before change
+
+FOCUSED
+Run: 33279766770
+Conclusion: PASS
+Linux document_extraction: 9/9 PASS
+Windows native fixture ZIP: 1/1 PASS
+Windows PowerShell 5.1 capacity request: 4,96,256 PASS
+4 MiB complete ratio: 5.087256%
+96 MiB complete ratio: 2.659954%
+256 MiB complete ratio: 2.637484%
+496256 MiB request rejected before data creation: PASS
+
+FULL REGRESSION
+Run: 33279968873
+Conclusion: PASS
+Linux full: 88/88 PASS
+Windows full: 89/89 PASS
+Windows document_extraction: 10/10 PASS
+Linux/Windows fmt: PASS
+Linux/Windows clippy -D warnings: PASS
+Linux/Windows release: PASS
+Windows PowerShell 5.1 capacity: PASS
+
+Real-machine targeted closure retest: PENDING / not counted as PASS
