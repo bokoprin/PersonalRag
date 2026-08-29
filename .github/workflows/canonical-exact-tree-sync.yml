@@ -1,0 +1,111 @@
+name: Canonical exact-tree sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/canonical-exact-tree-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct, verify, and publish canonical tree
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_LEGACY_MAIN='aab6c9151d194061d49565d135c089ccd9039a74'
+          EXPECTED_SEALED_SHA='9135abbc89c8ba0d7a628f7ed5c993b08c2308830cbccd40f71ec1565b49d99d'
+          EXPECTED_SOURCE_MANIFEST_SHA='8c1b594f929843eede27f2d7a55c722af6a6c819785a39df62450e619cff334f'
+          EXPECTED_TREE='7b2bef96686f7ed29abf091eddc8c6bf751fa190'
+          WORKFLOW_PATH='.github/workflows/canonical-exact-tree-sync.yml'
+          STAGING='origin/chatgpt-canonical-step1234-20260829'
+
+          git fetch origin main chatgpt-canonical-step1234-20260829
+          ACTUAL_MAIN="$(git rev-parse origin/main)"
+          PARENT="$(git rev-parse "$ACTUAL_MAIN^")"
+          test "$PARENT" = "$EXPECTED_LEGACY_MAIN"
+          CHANGED="$(git diff --name-only "$EXPECTED_LEGACY_MAIN" "$ACTUAL_MAIN")"
+          test "$CHANGED" = "$WORKFLOW_PATH"
+
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+
+          for n in 001 002 003; do
+            git show "$STAGING:.canonical-upload/chunk-$n" >> "$TMP/canonical.b64"
+          done
+          base64 --decode "$TMP/canonical.b64" > "$TMP/canonical.zip"
+          echo "$EXPECTED_SEALED_SHA  $TMP/canonical.zip" | sha256sum -c -
+
+          mkdir "$TMP/unzip"
+          unzip -q "$TMP/canonical.zip" -d "$TMP/unzip"
+          SRC="$TMP/unzip/PersonalRag_V2_CANONICAL_STEP1234_2026-08-29"
+          test -d "$SRC"
+
+          (
+            cd "$SRC"
+            sha256sum -c SOURCE_MANIFEST.sha256
+          )
+
+          rm -f "$SRC/HANDOFF.md" "$SRC/STATE.json"
+          (
+            cd "$SRC"
+            find . -type f ! -name SOURCE_MANIFEST.sha256 -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SOURCE_MANIFEST.sha256
+            echo "$EXPECTED_SOURCE_MANIFEST_SHA  SOURCE_MANIFEST.sha256" | sha256sum -c -
+          )
+
+          VERIFY="$TMP/verify"
+          mkdir "$VERIFY"
+          cp -a "$SRC"/. "$VERIFY"/
+          (
+            cd "$VERIFY"
+            git init -q
+            git add -A
+            TREE="$(git write-tree)"
+            COUNT="$(git ls-files | wc -l)"
+            echo "canonical source files=$COUNT tree=$TREE"
+            test "$COUNT" -eq 65
+            test "$TREE" = "$EXPECTED_TREE"
+          )
+
+          git switch --detach "$ACTUAL_MAIN"
+          git rm -r -q .
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "$SRC"/. .
+          git add -A
+
+          FINAL_TREE="$(git write-tree)"
+          FINAL_COUNT="$(git ls-files | wc -l)"
+          echo "final files=$FINAL_COUNT tree=$FINAL_TREE"
+          test "$FINAL_COUNT" -eq 65
+          test "$FINAL_TREE" = "$EXPECTED_TREE"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'V2 Step1-4正本をexact-tree同期' \
+            -m '2026-08-29 canonical source snapshotをbyte-identicalな65ファイルtreeとして同期。旧mainのコードはmergeせず、sealed archive SHA・source manifest SHA・Git tree SHAを検証後に正本化。'
+
+          NEW_COMMIT="$(git rev-parse HEAD)"
+          NEW_TREE="$(git rev-parse HEAD^{tree})"
+          test "$NEW_TREE" = "$EXPECTED_TREE"
+
+          # Fast-forward only. A concurrent main update fails closed.
+          git push origin "HEAD:refs/heads/main"
+
+          REMOTE_MAIN="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          echo "new_commit=$NEW_COMMIT"
+          echo "remote_main=$REMOTE_MAIN"
+          echo "tree=$NEW_TREE"
+          test "$REMOTE_MAIN" = "$NEW_COMMIT"
