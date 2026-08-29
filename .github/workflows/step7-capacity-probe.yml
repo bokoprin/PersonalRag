@@ -1,0 +1,77 @@
+name: Step7 current product capacity probe
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-final-stabilization-20260830
+    paths:
+      - .github/workflows/step7-capacity-probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  capacity:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mib: [4, 96, 256]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal
+          rustup override set 1.97.1
+      - name: Build release
+        run: cargo build --offline --locked --release --bin personalrag-v2-indexer
+      - name: Create deterministic corpus
+        env:
+          MIB: ${{ matrix.mib }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          mib=int(os.environ["MIB"])
+          root=pathlib.Path("/tmp/pr-cap-root")
+          root.mkdir(parents=True, exist_ok=True)
+          target=1024*1024
+          for i in range(mib):
+              line=(f"PR_CAP_FILE_{i:04d} The quick brown fox jumps over the deterministic local search corpus {i:04d}\n").encode()
+              data=(line*((target//len(line))+1))[:target]
+              (root/f"file-{i:04d}.txt").write_bytes(data)
+          PY
+      - name: Init, compacting update, measure complete store
+        env:
+          MIB: ${{ matrix.mib }}
+        run: |
+          set -euo pipefail
+          ROOT=/tmp/pr-cap-root
+          STORE=/tmp/pr-cap-store
+          ./target/release/personalrag-v2-indexer init --root "$ROOT" --store "$STORE"
+          SOURCE1=$(find "$ROOT" -type f -printf '%s\n' | awk '{s+=$1} END{print s}')
+          STORE1=$(find "$STORE" -type f -printf '%s\n' | awk '{s+=$1} END{print s}')
+          python3 - <<'PY'
+          import os, pathlib
+          mib=int(os.environ["MIB"])
+          root=pathlib.Path("/tmp/pr-cap-root")
+          changes=max(1,(mib*2 + 99)//100)
+          for i in range(changes):
+              p=root/f"file-{i:04d}.txt"
+              b=bytearray(p.read_bytes())
+              marker=f"UPDATED_{i:04d}".encode()
+              b[:len(marker)]=marker
+              p.write_bytes(b)
+          print("CHANGES", changes)
+          PY
+          ./target/release/personalrag-v2-indexer update --root "$ROOT" --store "$STORE"
+          SOURCE2=$(find "$ROOT" -type f -printf '%s\n' | awk '{s+=$1} END{print s}')
+          STORE2=$(find "$STORE" -type f -printf '%s\n' | awk '{s+=$1} END{print s}')
+          python3 - <<PY
+          s1=$SOURCE1; t1=$STORE1; s2=$SOURCE2; t2=$STORE2
+          print(f"CAPACITY mib=${{ matrix.mib }} init_source={s1} init_store={t1} init_ratio={t1/s1:.6%}")
+          print(f"CAPACITY mib=${{ matrix.mib }} update_source={s2} complete_store={t2} complete_ratio={t2/s2:.6%}")
+          PY
+          find "$STORE" -maxdepth 1 -type f -printf '%f %s\n' | sort
