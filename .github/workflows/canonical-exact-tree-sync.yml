@@ -1,4 +1,4 @@
-name: Canonical exact-tree sync
+name: Canonical exact-tree Step5 sync
 
 on:
   push:
@@ -19,15 +19,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reconstruct, verify, and publish canonical tree
+      - name: Reconstruct verify and publish Step5 canonical tree
         shell: bash
         run: |
           set -euo pipefail
 
-          EXPECTED_PREVIOUS_MAIN='e5c599d19fc5f1a2671a7e726b62c1718719ad3f'
-          EXPECTED_SEALED_SHA='9135abbc89c8ba0d7a628f7ed5c993b08c2308830cbccd40f71ec1565b49d99d'
-          EXPECTED_SOURCE_MANIFEST_SHA='8c1b594f929843eede27f2d7a55c722af6a6c819785a39df62450e619cff334f'
-          EXPECTED_TREE='7b2bef96686f7ed29abf091eddc8c6bf751fa190'
+          EXPECTED_PREVIOUS_MAIN='5f50b11db377b219d9bca5984f6744e368879251'
+          EXPECTED_OLD_TRANSPORT='57376db8ebe17dce14ddf52537158e0006756873980d3bd2e1d6d2bbf8d095e6'
+          EXPECTED_OLD_TREE='7b2bef96686f7ed29abf091eddc8c6bf751fa190'
+          EXPECTED_DELTA='887e9023f3cf76b603831dfc612a240ac96c4a79d3d4b5301e2b364aa3c662b4'
+          EXPECTED_MANIFEST='d317ed57757734dde3764f1c4331288185d1e1ba850c03700b9d13457808c7a3'
+          EXPECTED_FINAL_TREE='83cd7dbfb409eb5c632fc3541a53090420059bcb'
           WORKFLOW_PATH='.github/workflows/canonical-exact-tree-sync.yml'
           STAGING='origin/chatgpt-canonical-step1234-20260829'
 
@@ -37,71 +39,92 @@ jobs:
           test "$PARENT" = "$EXPECTED_PREVIOUS_MAIN"
           CHANGED="$(git diff --name-only "$EXPECTED_PREVIOUS_MAIN" "$ACTUAL_MAIN")"
           test "$CHANGED" = "$WORKFLOW_PATH"
+          echo "main precondition OK: $EXPECTED_PREVIOUS_MAIN -> $ACTUAL_MAIN"
 
           TMP="$(mktemp -d)"
           trap 'rm -rf "$TMP"' EXIT
+          mkdir "$TMP/src"
 
+          : > "$TMP/source.b64"
           for n in 000 001 002 003; do
-            git show "$STAGING:.canonical-upload/chunk-$n" >> "$TMP/canonical.b64"
+            git show "$STAGING:.canonical-upload/v2source-$n" >> "$TMP/source.b64"
           done
-          base64 --decode "$TMP/canonical.b64" > "$TMP/canonical.zip"
-          echo "$EXPECTED_SEALED_SHA  $TMP/canonical.zip" | sha256sum -c -
+          for p in 004a 004b 004c 004d; do
+            git show "$STAGING:.canonical-upload/v2source-$p" >> "$TMP/source.b64"
+          done
+          for n in 005 006 007 008 009; do
+            git show "$STAGING:.canonical-upload/v2source-$n" >> "$TMP/source.b64"
+          done
+          base64 --decode "$TMP/source.b64" > "$TMP/source.tar.xz"
+          echo "$EXPECTED_OLD_TRANSPORT  $TMP/source.tar.xz" | sha256sum -c -
+          xz -dc "$TMP/source.tar.xz" | tar -xf - -C "$TMP/src"
+          (cd "$TMP/src" && sha256sum -c SOURCE_MANIFEST.sha256)
 
-          mkdir "$TMP/unzip"
-          unzip -q "$TMP/canonical.zip" -d "$TMP/unzip"
-          SRC="$TMP/unzip/PersonalRag_V2_CANONICAL_STEP1234_2026-08-29"
-          test -d "$SRC"
-
+          VERIFY_OLD="$TMP/verify-old"
+          mkdir "$VERIFY_OLD"
+          cp -a "$TMP/src"/. "$VERIFY_OLD"/
           (
-            cd "$SRC"
-            sha256sum -c SOURCE_MANIFEST.sha256
-          )
-
-          rm -f "$SRC/HANDOFF.md" "$SRC/STATE.json"
-          (
-            cd "$SRC"
-            find . -type f ! -name SOURCE_MANIFEST.sha256 -print0 \
-              | sort -z \
-              | xargs -0 sha256sum > SOURCE_MANIFEST.sha256
-            echo "$EXPECTED_SOURCE_MANIFEST_SHA  SOURCE_MANIFEST.sha256" | sha256sum -c -
-          )
-
-          VERIFY="$TMP/verify"
-          mkdir "$VERIFY"
-          cp -a "$SRC"/. "$VERIFY"/
-          (
-            cd "$VERIFY"
+            cd "$VERIFY_OLD"
             git init -q
             git add -A
-            TREE="$(git write-tree)"
-            COUNT="$(git ls-files | wc -l)"
-            echo "canonical source files=$COUNT tree=$TREE"
-            test "$COUNT" -eq 65
-            test "$TREE" = "$EXPECTED_TREE"
+            OLD_COUNT="$(git ls-files | wc -l)"
+            OLD_TREE="$(git write-tree)"
+            echo "old canonical files=$OLD_COUNT tree=$OLD_TREE"
+            test "$OLD_COUNT" -eq 65
+            test "$OLD_TREE" = "$EXPECTED_OLD_TREE"
+          )
+
+          : > "$TMP/delta.b64"
+          for n in 00 01 02 03 04 05 06 07 08 09 10; do
+            git show "$STAGING:.canonical-upload/step5-delta-$n" >> "$TMP/delta.b64"
+          done
+          base64 --decode "$TMP/delta.b64" > "$TMP/delta.tar.xz"
+          echo "$EXPECTED_DELTA  $TMP/delta.tar.xz" | sha256sum -c -
+          xz -dc "$TMP/delta.tar.xz" | tar -xf - -C "$TMP/src"
+
+          (
+            cd "$TMP/src"
+            sha256sum -c SOURCE_MANIFEST.sha256
+            MANIFEST_COUNT="$(wc -l < SOURCE_MANIFEST.sha256)"
+            echo "final manifest entries=$MANIFEST_COUNT"
+            test "$MANIFEST_COUNT" -eq 70
+          )
+          echo "$EXPECTED_MANIFEST  $TMP/src/SOURCE_MANIFEST.sha256" | sha256sum -c -
+
+          VERIFY_FINAL="$TMP/verify-final"
+          mkdir "$VERIFY_FINAL"
+          cp -a "$TMP/src"/. "$VERIFY_FINAL"/
+          (
+            cd "$VERIFY_FINAL"
+            git init -q
+            git add -A
+            FINAL_COUNT="$(git ls-files | wc -l)"
+            FINAL_TREE="$(git write-tree)"
+            echo "canonical source files=$FINAL_COUNT tree=$FINAL_TREE"
+            test "$FINAL_COUNT" -eq 71
+            test "$FINAL_TREE" = "$EXPECTED_FINAL_TREE"
           )
 
           git switch --detach "$ACTUAL_MAIN"
           git rm -r -q .
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -a "$SRC"/. .
+          cp -a "$TMP/src"/. .
           git add -A
-
-          FINAL_TREE="$(git write-tree)"
           FINAL_COUNT="$(git ls-files | wc -l)"
+          FINAL_TREE="$(git write-tree)"
           echo "final files=$FINAL_COUNT tree=$FINAL_TREE"
-          test "$FINAL_COUNT" -eq 65
-          test "$FINAL_TREE" = "$EXPECTED_TREE"
+          test "$FINAL_COUNT" -eq 71
+          test "$FINAL_TREE" = "$EXPECTED_FINAL_TREE"
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'V2 Step1-4正本をexact-tree同期' \
-            -m '2026-08-29 canonical source snapshotをbyte-identicalな65ファイルtreeとして同期。旧mainのコードはmergeせず、sealed archive SHA・source manifest SHA・Git tree SHAを検証後に正本化。'
+          git commit -m 'Step5完了正本をexact-tree同期' \
+            -m 'PersonalRag V2 Step1-5 canonical sourceを71ファイルのexact treeとしてmainへ同期。manifest・transport・Git treeを検証し、旧main・一時workflow・transfer filesは最終treeへ含めない。'
 
           NEW_COMMIT="$(git rev-parse HEAD)"
-          NEW_TREE="$(git rev-parse HEAD^{tree})"
-          test "$NEW_TREE" = "$EXPECTED_TREE"
+          NEW_TREE="$(git rev-parse "$NEW_COMMIT^{tree}")"
+          test "$NEW_TREE" = "$EXPECTED_FINAL_TREE"
 
-          # Fast-forward only. A concurrent main update fails closed.
           git push origin "HEAD:refs/heads/main"
 
           REMOTE_MAIN="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
