@@ -1,0 +1,82 @@
+name: Step6 canonical exact-tree sync
+
+on:
+  push:
+    branches:
+      - chatgpt-step6-canonical-sync-20260829
+    paths:
+      - .github/workflows/step6-canonical-sync.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout temporary sync branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and publish Step6 canonical tree
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_MAIN='149d61021aa0b4c061f9d31c05abbbf5734cfec8'
+          EXPECTED_MAIN_TREE='83cd7dbfb409eb5c632fc3541a53090420059bcb'
+          EXPECTED_DELTA='91a3c0bf4b7970975a26b8de9288132b301bd0752db768697464067b5fb5856e'
+          EXPECTED_MANIFEST='98db28c386d146d27ea9a0a3e78ff14be15c1a6c24f26410e8b324d4b511c779'
+          EXPECTED_TREE='e51f8dc632ea475d2739e3cfac7e948f55a11874'
+
+          git fetch origin main
+          ACTUAL_MAIN="$(git rev-parse origin/main)"
+          ACTUAL_MAIN_TREE="$(git rev-parse origin/main^{tree})"
+          echo "main=$ACTUAL_MAIN"
+          echo "main_tree=$ACTUAL_MAIN_TREE"
+          test "$ACTUAL_MAIN" = "$EXPECTED_MAIN"
+          test "$ACTUAL_MAIN_TREE" = "$EXPECTED_MAIN_TREE"
+
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          : > "$TMP/delta.b64"
+          for n in 00 01 02 03 04 05; do
+            cat ".canonical-upload/step6-delta-$n" >> "$TMP/delta.b64"
+          done
+          base64 --decode "$TMP/delta.b64" > "$TMP/delta.tar.xz"
+          echo "$EXPECTED_DELTA  $TMP/delta.tar.xz" | sha256sum -c -
+
+          git switch --detach origin/main
+          git clean -fdx
+          xz -dc "$TMP/delta.tar.xz" | tar -xf -
+
+          test "$(wc -l < SOURCE_MANIFEST.sha256)" -eq 78
+          echo "$EXPECTED_MANIFEST  SOURCE_MANIFEST.sha256" | sha256sum -c -
+          sha256sum -c SOURCE_MANIFEST.sha256
+
+          git add -A
+          FILE_COUNT="$(git ls-files | wc -l)"
+          TREE="$(git write-tree)"
+          echo "files=$FILE_COUNT"
+          echo "tree=$TREE"
+          test "$FILE_COUNT" -eq 79
+          test "$TREE" = "$EXPECTED_TREE"
+          ! git ls-files | grep -q '^\.canonical-upload/'
+          ! git ls-files | grep -q '^\.github/workflows/step6-canonical-sync\.yml$'
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Step6 GUI完了正本をexact-tree同期' \
+            -m 'PersonalRag V2 Step1-6 canonical sourceを79ファイルのexact treeとしてmainへ同期。release・manifest・Git treeを検証し、一時workflow/transfer filesは最終treeへ含めない。'
+
+          NEW_COMMIT="$(git rev-parse HEAD)"
+          NEW_TREE="$(git rev-parse HEAD^{tree})"
+          test "$NEW_TREE" = "$EXPECTED_TREE"
+
+          git push origin "HEAD:refs/heads/main"
+          REMOTE_MAIN="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          echo "new_commit=$NEW_COMMIT"
+          echo "remote_main=$REMOTE_MAIN"
+          echo "tree=$NEW_TREE"
+          test "$REMOTE_MAIN" = "$NEW_COMMIT"
