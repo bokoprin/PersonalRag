@@ -688,6 +688,125 @@ impl WindowsUsnProducer {
     }
 }
 
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowsWatchMode {
+    Usn,
+    DirectoryNotification,
+}
+
+#[cfg(windows)]
+impl WindowsWatchMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Usn => "usn",
+            Self::DirectoryNotification => "directory-notify",
+        }
+    }
+}
+
+#[cfg(windows)]
+enum WindowsWatchInner {
+    Usn(WindowsUsnProducer),
+    DirectoryNotification {
+        root: PathBuf,
+        store: PathBuf,
+        extractor: ExtractorConfig,
+        notification: crate::windows_watch::live::ChangeNotification,
+        checkpoint: UsnCheckpoint,
+        fallback_reason: String,
+    },
+}
+
+#[cfg(windows)]
+pub struct WindowsWatchProducer {
+    inner: WindowsWatchInner,
+}
+
+#[cfg(windows)]
+impl WindowsWatchProducer {
+    pub fn open(
+        root: impl AsRef<Path>,
+        store: impl AsRef<Path>,
+        extractor: ExtractorConfig,
+    ) -> Result<Self> {
+        let root = absolute_existing_dir(root.as_ref())?;
+        let store = absolute_existing_dir(store.as_ref())?;
+        validate_root_store(&root, &store)?;
+        let loaded = load_bundle_with_verification(&root, &store, &extractor)?;
+
+        match WindowsUsnProducer::open(&root, &store, extractor.clone()) {
+            Ok(producer) => Ok(Self {
+                inner: WindowsWatchInner::Usn(producer),
+            }),
+            Err(usn_error) => {
+                let notification =
+                    crate::windows_watch::live::ChangeNotification::open(&root).map_err(
+                        |fallback_error| {
+                            ProductError::Unsupported(format!(
+                                "USN watch unavailable ({usn_error}); directory notification fallback unavailable: {fallback_error}"
+                            ))
+                        },
+                    )?;
+                Ok(Self {
+                    inner: WindowsWatchInner::DirectoryNotification {
+                        root,
+                        store,
+                        extractor,
+                        notification,
+                        checkpoint: loaded.state.checkpoint,
+                        fallback_reason: usn_error.to_string(),
+                    },
+                })
+            }
+        }
+    }
+
+    pub fn mode(&self) -> WindowsWatchMode {
+        match self.inner {
+            WindowsWatchInner::Usn(_) => WindowsWatchMode::Usn,
+            WindowsWatchInner::DirectoryNotification { .. } => {
+                WindowsWatchMode::DirectoryNotification
+            }
+        }
+    }
+
+    pub fn fallback_reason(&self) -> Option<&str> {
+        match &self.inner {
+            WindowsWatchInner::Usn(_) => None,
+            WindowsWatchInner::DirectoryNotification {
+                fallback_reason, ..
+            } => Some(fallback_reason),
+        }
+    }
+
+    pub fn checkpoint(&self) -> UsnCheckpoint {
+        match &self.inner {
+            WindowsWatchInner::Usn(producer) => producer.checkpoint(),
+            WindowsWatchInner::DirectoryNotification { checkpoint, .. } => *checkpoint,
+        }
+    }
+
+    pub fn poll_once(&mut self) -> Result<Option<ReconcileReport>> {
+        match &mut self.inner {
+            WindowsWatchInner::Usn(producer) => producer.poll_once(),
+            WindowsWatchInner::DirectoryNotification {
+                root,
+                store,
+                extractor,
+                notification,
+                ..
+            } => {
+                if !notification.poll_changed()? {
+                    return Ok(None);
+                }
+                let report = reconcile_store(root, store, extractor, None)?;
+                Ok(report.committed.then_some(report))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
