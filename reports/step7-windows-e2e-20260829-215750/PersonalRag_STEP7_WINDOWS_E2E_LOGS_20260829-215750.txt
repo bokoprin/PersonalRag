@@ -1,0 +1,350 @@
+PersonalRag V2 Step 7 Windows E2E major raw logs
+run=20260829-215750
+evidenceRoot=C:\Users\bokop\AppData\Local\PersonalRag\Step7-20260829-215750
+
+===== raw\verify_source_manifest.txt =====
+C:\shinsuke\app\PersonalRag\tools\verify_source_manifest.ps1 : Mismatch: ./.gitignore expected=77bd56e8931d992f68bd54ed
+63af38a1c6876005a91c40344615f3d5e3d1a05a actual=ef201bddb5a37dc649a3f2eca9b13f4bfc2e1a968981e93d99a207eac152eaec
+At C:\shinsuke\app\PersonalRag\tools\verify_source_manifest.ps1:26 char:30
++     $fail | ForEach-Object { Write-Error $_ }
++                              ~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+    + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,verify_source_manifest.ps1
+
+
+===== raw\cargo-fmt.txt =====
+MISSING
+
+===== raw\cargo-clippy.txt =====
+    Checking personalrag-v2 v0.9.0 (C:\shinsuke\app\PersonalRag)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.26s
+
+===== raw\cargo-test-rerun.txt =====
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src\lib.rs (target\debug\deps\personalrag_v2-579abc6223015d9a.exe)
+
+running 24 tests
+test extraction::tests::xml_entities_and_paragraph_boundaries_are_deterministic ... ok
+test extraction::tests::utf16_xml_is_supported ... ok
+test gui::tests::file_size_and_modified_time_are_human_readable ... ok
+test extraction::tests::xlsx_shared_inline_formula_and_cell_boundaries_are_exact ... ok
+test gui::tests::context_preview_is_utf8_safe_and_bounded ... ok
+test incremental::content_mapping_path_tests::windows_content_mapping_canonicalizes_only_separator_direction ... ok
+test gui::send_tests::gui_session_can_live_on_background_search_thread ... ok
+test gui::tests::file_query_uses_frozen_unicode_and_separator_semantics ... ok
+test metadata::tests::separator_canonicalization_is_search_only ... ok
+test pattern::tests::nfa_supports_frozen_core_grammar_without_backtracking ... ok
+test persistent::crc_tests::crc64_ecma_matches_standard_check_vector ... ok
+test pattern::tests::regex_rejects_unsafe_features_and_normalizes_escaped_literal_runs ... ok
+test pattern::tests::wildcard_uses_same_nfa_and_escape_rules ... ok
+test metadata::tests::metadata_format_identity_is_separate_from_content_index ... ok
+test unicode::tests::hangul_composition_is_algorithmic ... ok
+test unicode::tests::japanese_ascii_is_byte_preserving_but_unicode_special_cases_are_not ... ok
+test unicode::tests::nfc_and_casefold_semantics_match_frozen_examples ... ok
+test unicode::tests::unicode_version_is_frozen ... ok
+test unicode::tests::every_table_composition_pair_normalizes_to_its_composed_scalar ... ok
+test product::tests::metadata_scan_keeps_all_files_but_marks_only_supported_content ... ok
+test unicode::tests::generated_python_unicode_15_1_oracle_vectors_match ... ok
+test adaptive_tests::adaptive_presence_chooses_smallest_exact_representation_and_preserves_membership ... ok
+test persistent::format_version_tests::frozen_unicode_semantics_reject_prior_format_v1 ... ok
+test pattern::tests::indexed_pattern_search_equals_candidate_free_verification ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.07s
+
+     Running unittests src\bin\incremental_storm_bench.rs (target\debug\deps\incremental_storm_bench-48c2e69dc8287a56.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\metadata_bench.rs (target\debug\deps\metadata_bench-c86ed790092ef626.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\persistent_bench.rs (target\debug\deps\persistent_bench-17af29d45fdd7e78.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\personalrag_v2_bench-f04b951f22437990.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\personalrag_gui.rs (target\debug\deps\personalrag_v2_gui-6b1f9d0968fa2633.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\personalrag_indexer.rs (target\debug\deps\personalrag_v2_indexer-ec292fdf99722c4f.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\document_extraction.rs (target\debug\deps\document_extraction-e46c5933f44e64b7.exe)
+
+running 9 tests
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... FAILED
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... FAILED
+test verification_capacity_hard_gate_fails_closed_before_publish ... FAILED
+test document_source_drift_is_rejected_before_exact_verification ... FAILED
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... FAILED
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... FAILED
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... FAILED
+test controlled_document_first_batch_stays_below_hard_slo ... FAILED
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... FAILED
+
+failures:
+
+---- pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units stdout ----
+
+thread 'pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units' (24484) panicked at tests\document_extraction.rs:134:51:
+called `Result::unwrap()` on an `Err` value: Io(Error { kind: NotFound, message: "program not found" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics stdout ----
+
+thread 'extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics' (26332) panicked at tests\document_extraction.rs:99:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: NotFound, message: "program not found" }
+
+---- verification_capacity_hard_gate_fails_closed_before_publish stdout ----
+
+thread 'verification_capacity_hard_gate_fails_closed_before_publish' (17068) panicked at tests\document_extraction.rs:355:5:
+assertion failed: matches!(error, PersistentError::CapacityExceeded(_))
+
+---- document_source_drift_is_rejected_before_exact_verification stdout ----
+
+thread 'document_source_drift_is_rejected_before_exact_verification' (16832) panicked at tests\document_extraction.rs:454:70:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+
+---- corrupt_new_verification_generation_falls_back_without_reextracting_old_index stdout ----
+
+thread 'corrupt_new_verification_generation_falls_back_without_reextracting_old_index' (10428) panicked at tests\document_extraction.rs:259:70:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+
+---- persistent_pdf_search_uses_exact_verification_store_and_combined_capacity stdout ----
+
+thread 'persistent_pdf_search_uses_exact_verification_store_and_combined_capacity' (18188) panicked at tests\document_extraction.rs:199:86:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+
+---- incremental_document_rename_reuses_base_verification_and_modify_reextracts stdout ----
+
+thread 'incremental_document_rename_reuses_base_verification_and_modify_reextracts' (24972) panicked at tests\document_extraction.rs:290:70:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+
+---- controlled_document_first_batch_stays_below_hard_slo stdout ----
+
+thread 'controlled_document_first_batch_stays_below_hard_slo' (25064) panicked at tests\document_extraction.rs:482:86:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+
+---- bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt stdout ----
+
+thread 'bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt' (17952) panicked at tests\document_extraction.rs:380:10:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+
+
+failures:
+    bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt
+    controlled_document_first_batch_stays_below_hard_slo
+    corrupt_new_verification_generation_falls_back_without_reextracting_old_index
+    document_source_drift_is_rejected_before_exact_verification
+    extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics
+    incremental_document_rename_reuses_base_verification_and_modify_reextracts
+    pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units
+    persistent_pdf_search_uses_exact_verification_store_and_combined_capacity
+    verification_capacity_hard_gate_fails_closed_before_publish
+
+test result: FAILED. 0 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+error: test failed, to rerun pass `--test document_extraction`
+
+===== raw\cargo-build-release.txt =====
+   Compiling personalrag-v2 v0.9.0 (C:\shinsuke\app\PersonalRag)
+    Finished `release` profile [optimized] target(s) in 26.05s
+
+===== raw\helpers-before-setup.txt =====
+COMMAND: .\target\release\personalrag-v2-indexer.exe helpers
+HELPER name=pdftotext available=false path=pdftotext.exe error="program not found"
+HELPER name=unzip available=true path=C:\Program Files\Git/usr/bin\unzip.exe version="UnZip 6.00 of 20 April 2009, by Info-ZIP.  Maintained by C. Spieler.  Send"
+HELPER name=zstd available=false path=zstd.exe error="program not found"
+COMMAND: powershell -ExecutionPolicy Bypass -File .\tools\setup_windows_helpers.ps1
+HELPER pdftotext=MISSING
+HELPER unzip=PASS path=C:\Program Files\Git\usr\bin\unzip.exe
+HELPER zstd=MISSING
+PERSONALRAG_UNZIP=C:\Program Files\Git\usr\bin\unzip.exe
+COMMAND: .\target\release\personalrag-v2-indexer.exe helpers (after setup)
+HELPER name=pdftotext available=false path=pdftotext.exe error="program not found"
+HELPER name=unzip available=true path=C:\Program Files\Git/usr/bin\unzip.exe version="UnZip 6.00 of 20 April 2009, by Info-ZIP.  Maintained by C. Spieler.  Send"
+HELPER name=zstd available=false path=zstd.exe error="program not found"
+
+===== raw\indexer-init-success.txt =====
+COMMAND: C:\shinsuke\app\PersonalRag\target\release\personalrag-v2-indexer.exe init --root "C:\Users\bokop\AppData\Local\Temp\PersonalRag-Step7-20260829-215750\corpus" --store "C:\Users\bokop\AppData\Local\Temp\PersonalRag-Step7-20260829-215750\store-success"
+INIT_OK bundle=1 metadata=139 searchable=132 store_bytes=147884 usn_available=false journal_id=0 next_usn=0
+
+===== raw\indexer-status-initial.txt =====
+COMMAND: C:\shinsuke\app\PersonalRag\target\release\personalrag-v2-indexer.exe status --root "C:\Users\bokop\AppData\Local\Temp\PersonalRag-Step7-20260829-215750\corpus" --store "C:\Users\bokop\AppData\Local\Temp\PersonalRag-Step7-20260829-215750\store-success"
+STATUS_OK bundle=1 content=1 metadata=1 delta=1 state=1 metadata_records=139 delta_changes=0 journal_id=0 next_usn=0
+
+===== raw\document-indexer-init.txt =====
+ERROR: persistent error: verification error: helper C:\Program Files\Git/usr/bin\unzip.exe failed with status 9: zipinfo:  cannot find or open \?C:UsersbokopAppDataLocalTempPersonalRag-Step7-20260829-215750document-corpusdocsfixture.docx, \?C:UsersbokopAppDataLocalTempPersonalRag-Step7-20260829-215750document-corpusdocsfixture.docx.zip or \?C:UsersbokopAppDataLocalTempPersonalRag-Step7-20260829-215750document-corpusdocsfixture.docx.ZIP.
+
+===== raw\cargo-test-document-extraction.txt =====
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests\document_extraction.rs (target\debug\deps\document_extraction-e46c5933f44e64b7.exe)
+
+running 9 tests
+
+thread 'pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units' (14704) panicked at tests\document_extraction.rs:134:51:
+called `Result::unwrap()` on an `Err` value: Io(Error { kind: NotFound, message: "program not found" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... FAILED
+
+thread 'extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics' (18664) panicked at tests\document_extraction.rs:99:10:
+called `Result::unwrap()` on an `Err` value: Error { kind: NotFound, message: "program not found" }
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... FAILED
+
+thread 'verification_capacity_hard_gate_fails_closed_before_publish' (4204) panicked at tests\document_extraction.rs:355:5:
+assertion failed: matches!(error, PersistentError::CapacityExceeded(_))
+test verification_capacity_hard_gate_fails_closed_before_publish ... FAILED
+
+thread 'incremental_document_rename_reuses_base_verification_and_modify_reextracts' (13644) panicked at tests\document_extraction.rs:290:70:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... FAILED
+
+thread 'corrupt_new_verification_generation_falls_back_without_reextracting_old_index' (12108) panicked at tests\document_extraction.rs:259:70:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... FAILED
+
+thread 'document_source_drift_is_rejected_before_exact_verification' (3176) panicked at tests\document_extraction.rs:454:70:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+test document_source_drift_is_rejected_before_exact_verification ... FAILED
+
+thread 'persistent_pdf_search_uses_exact_verification_store_and_combined_capacity' (25352) panicked at tests\document_extraction.rs:199:86:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... FAILED
+
+thread 'controlled_document_first_batch_stays_below_hard_slo' (4200) panicked at tests\document_extraction.rs:482:86:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+test controlled_document_first_batch_stays_below_hard_slo ... FAILED
+
+thread 'bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt' (22600) panicked at tests\document_extraction.rs:380:10:
+called `Result::unwrap()` on an `Err` value: Verification(Io(Error { kind: NotFound, message: "program not found" }))
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... FAILED
+
+failures:
+
+failures:
+    bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt
+    controlled_document_first_batch_stays_below_hard_slo
+    corrupt_new_verification_generation_falls_back_without_reextracting_old_index
+    document_source_drift_is_rejected_before_exact_verification
+    extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics
+    incremental_document_rename_reuses_base_verification_and_modify_reextracts
+    pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units
+    persistent_pdf_search_uses_exact_verification_store_and_combined_capacity
+    verification_capacity_hard_gate_fails_closed_before_publish
+
+test result: FAILED. 0 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+error: test failed, to rerun pass `--test document_extraction`
+
+===== raw\watch.stderr.txt =====
+ERROR: I/O error: アクセスが拒否されました。 (os error 5)
+
+===== raw\watch-after-restart.stderr.txt =====
+ERROR: I/O error: アクセスが拒否されました。 (os error 5)
+
+===== raw\ntfs-create.json =====
+{"operation":"create","path":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\corpus\\text\\created-live.txt","timestamp":"2026-08-29T22:23:42.5260436+09:00","exists":true,"length":9628,"sha256":"B5F17FFCE4084E23F0D36A7DABACE5FBABA8869086EFA3D6C2D6545D9BD22607"}
+
+===== raw\ntfs-modify.json =====
+{"operation":"modify","path":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\corpus\\modify\\modify-me.txt","timestamp":"2026-08-29T22:23:52.5440868+09:00","oldMarker":"PR_STEP7_MODIFY_OLD_5C33","newMarker":"PR_STEP7_MODIFY_NEW_5D44","beforeSha256":"C4B942B918DE6C6305A9E1A58CF211E61A95B0EF5DFF14FABCF2B2C7051FD528","afterSha256":"08B0C77C5FD3CD8E5FE174BBB8B0C5AF46C9021D6E8F14F715824AE7EC87BD3C","length":9027}
+
+===== raw\ntfs-rename.json =====
+{"operation":"rename","from":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\corpus\\rename\\before-rename.txt","to":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\corpus\\rename\\after-rename.txt","timestamp":"2026-08-29T22:24:02.6940550+09:00","fromExists":false,"toExists":true,"sha256":"BCDD4ECEA2A998D12B67F346AB47EFF3E5C1C03F041A5D8B4BDDE7D2AD5BCFC1"}
+
+===== raw\ntfs-move.json =====
+{"operation":"move","from":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\corpus\\move\\before-move.txt","to":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\corpus\\text\\after-move.txt","timestamp":"2026-08-29T22:24:12.1667427+09:00","fromExists":false,"toExists":true,"sha256":"DB702900E384E6BFC2EFEF15A44A5817461CAFE7941D1664670CAC31E7E38908"}
+
+===== raw\ntfs-delete.json =====
+{"operation":"delete","path":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\corpus\\delete\\delete-me.txt","timestamp":"2026-08-29T22:24:31.6903507+09:00","beforeSha256":"FCEB23F3D642C73C567B4D8B2CC996DF36ED60DFE072F8449520E2DFA0686C99","existsAfter":false}
+
+===== raw\indexer-update-after-ntfs.txt =====
+UPDATE_OK committed=true compacted=true bundle=2 metadata=139 delta_changes=0
+
+===== raw\indexer-status-after-ntfs.txt =====
+STATUS_OK bundle=2 content=2 metadata=2 delta=2 state=2 metadata_records=139 delta_changes=0 journal_id=0 next_usn=0
+
+===== raw\indexer-status-after-restart.txt =====
+STATUS_OK bundle=2 content=2 metadata=2 delta=2 state=2 metadata_records=139 delta_changes=0 journal_id=0 next_usn=0
+
+===== raw\recovery-corruption.json =====
+{"artifact":"C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-Step7-20260829-215750\\recovery-store\\gen-00000000000000000002.prv2","mutation":"overwrite copy only with invalid bytes","beforeLength":103322,"beforeSha256":"7DFEF98F80759487E124ACBC24A49FF07C37E67199B77EDDB1EB1E8A20A03B4C","afterLength":12,"afterSha256":"EB8F9443FC2DFD55EAFE4ED5F25A66696249276C648B25908260F8D9609648E3","timestamp":"2026-08-29T22:29:14.5281158+09:00"}
+
+===== raw\recovery-status-corrupt-gen2.txt =====
+STATUS_OK bundle=1 content=1 metadata=1 delta=1 state=1 metadata_records=139 delta_changes=0 journal_id=0 next_usn=0
+
+===== raw\usn-queryjournal.txt =====
+Usn Journal ID   : 0x01dc8c98d965008b
+First Usn        : 0x00000004325e0000
+Next Usn         : 0x00000004348defa0
+Lowest Valid Usn : 0x0000000000000000
+Max Usn          : 0x00000fffffff0000
+Maximum Size     : 0x0000000002000000 (32.0 MB)
+Allocation Delta : 0x0000000000800000 ( 8.0 MB)
+Minimum record version supported : 2
+Maximum record version supported : 4
+Write range tracking: Disabled
+
+===== raw\gui-matrix.txt =====
+
+id                   condition                              query                                       status observed
+--                   ---------                              -----                                       ------ --------
+GUI-FILENAME-001     filename alpha                         alpha                                       PASS   1 files;…
+GUI-FULLPATH-001     relative path with slash normalization text/alpha.txt                              PASS   1 files;…
+GUI-CASE-001         filename case-insensitive              MIXEDCASENAME.TXT                           PASS   1 files;…
+GUI-CASE-002         filename case-sensitive negative       MIXEDCASENAME.TXT; Case sensitive ON        PASS   0 files
+GUI-CONTENT-001      literal shared content                 PR_STEP7_SHARED_TOKEN_8C22                  PASS   2 files;…
+GUI-AND-001          filename AND content                   file alpha + shared literal                 PASS   1 file; …
+GUI-REGEX-001        regex content                          ERROR_[0-9]{4}                              PASS   2 files;…
+GUI-WILDCARD-001     wildcard More expansion                PR_STEP7_BULK_SHARED_0F0E; Wildcard         PASS   100 file…
+GUI-JA-001           Japanese content and preview           PR_STEP7_日本語検索_9A73                    PASS   1 file a…
+GUI-CONTENT-CASE-001 content case-sensitive negative        pr_step7_日本語検索_9a73; Case sensitive ON PASS   0 files
+GUI-OPEN-001         Open selected result                   alpha; selected row                         PASS   Sakura e…
+GUI-EXPLORER-001     Show in Explorer selected result       alpha; selected row                         PASS   Explorer…
+GUI-RELOAD-001       Reload index after update              button Reload index                         PASS   Ready/bu…
+GUI-RESIZE-001       resize/responsiveness                  window resize gesture                       PASS   window r…
+GUI-RESTART-001      relaunch representative search         PR_STEP7_SHARED_TOKEN_8C22                  PASS   Ready bu…
+
+
+
+===== raw\api-key-presence.json =====
+{"timestamp":"2026-08-29T22:34:20.4473787+09:00","openaiApiKeyPresent":false,"codexApiKeyPresent":false,"valuesLogged":false}
+
+===== raw\source-checkout-clean-pre-report.json =====
+{
+  "timestamp": "2026-08-29T22:30:25.3617807+09:00",
+  "branch": "reports/step7-windows-e2e-20260829-215750",
+  "head": "5ecb941010d2822befc7dd1ccace89b8be040171",
+  "statusPorcelain": [],
+  "sourceCheckoutClean": true
+}
+
+===== raw\final-source-pre-report.json =====
+{
+  "timestamp": "2026-08-29T22:32:57.2670285+09:00",
+  "origin": "https://github.com/bokoprin/PersonalRag.git",
+  "branch": "reports/step7-windows-e2e-20260829-215750",
+  "head": "5ecb941010d2822befc7dd1ccace89b8be040171",
+  "tree": "d0e0dcf49f0b079e72b63720a5f2ea79e0fb23c4",
+  "statusPorcelain": [],
+  "sourceCheckoutClean": true,
+  "diffCheck": [],
+  "diffCheckPass": true
+}

@@ -1,0 +1,80 @@
+PersonalRag V2 Step 7 Windows実機E2E再検証 command log
+run=20260829-215750
+repo=C:\shinsuke\app\PersonalRag
+origin=https://github.com/bokoprin/PersonalRag.git
+
+[Git and instructions]
+git status --porcelain
+git fetch origin main --prune
+git switch main
+git pull --ff-only origin main
+git switch reports/step7-windows-e2e-20260829-215750
+git rev-parse HEAD
+git rev-parse 'HEAD^{tree}'
+Get-Content -LiteralPath AGENTS.md
+Get-Content -LiteralPath STEP7_WINDOWS_RETEST_CODEX_2026-08-29.md
+git status --porcelain
+
+[Preflight and build]
+powershell -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+rustc --version
+cargo --version
+git --version
+cargo fmt --all -- --check
+cargo clippy --offline --locked --all-targets -- -D warnings
+cargo test --offline --locked
+cargo build --offline --locked --release
+
+[Helper discovery]
+.\target\release\personalrag-v2-indexer.exe helpers
+powershell -ExecutionPolicy Bypass -File .\tools\setup_windows_helpers.ps1
+No -Install was used.
+
+[Disposable corpus and initial product path]
+Get-Volume -DriveLetter C
+fsutil fsinfo volumeinfo C:
+New-Item / WriteAllText for disposable corpus outside the repository
+.\target\release\personalrag-v2-indexer.exe init --root <lifecycleRoot> --store <store-success>
+.\target\release\personalrag-v2-indexer.exe status --root <lifecycleRoot> --store <store-success>
+Start-Process .\target\release\personalrag-v2-gui.exe --root <lifecycleRoot> --store <store-success>
+Native Win32 GUI search matrix, preview, Open, Show in Explorer, More, Reload, resize
+
+[Document fixture checks]
+System.IO.Compression.ZipArchive for DOCX/XLSX/PPTX
+unzip -t <fixture.docx/xlsx/pptx>
+.\target\release\personalrag-v2-indexer.exe init --root <documentRoot> --store <documentStore>
+cargo test --offline --locked --test document_extraction -- --nocapture
+
+[USN and NTFS lifecycle]
+.\target\release\personalrag-v2-indexer.exe watch --root <lifecycleRoot> --store <store-success> --interval-ms 250
+Create text\created-live.txt with a unique marker
+Modify modify\modify-me.txt: PR_STEP7_MODIFY_OLD_5C33 -> PR_STEP7_MODIFY_NEW_5D44
+Rename rename\before-rename.txt -> rename\after-rename.txt
+Move move\before-move.txt -> text\after-move.txt
+Delete delete\delete-me.txt (explicit disposable path)
+.\target\release\personalrag-v2-indexer.exe update --root <lifecycleRoot> --store <store-success>
+.\target\release\personalrag-v2-indexer.exe status --root <lifecycleRoot> --store <store-success>
+GUI Reload index and verify new/old markers and paths
+fsutil usn queryjournal C:
+
+[Restart and recovery]
+Native GUI close button
+Get-Process -Name personalrag-v2-gui
+Start-Process .\target\release\personalrag-v2-gui.exe --root <lifecycleRoot> --store <store-success>
+.\target\release\personalrag-v2-indexer.exe status --root <lifecycleRoot> --store <store-success>
+Native GUI representative search and Reload index
+.\target\release\personalrag-v2-indexer.exe watch --root <lifecycleRoot> --store <store-success> --interval-ms 250
+Copy store-success to disposable recovery-store
+Corrupt recovery-store\gen-00000000000000000002.prv2 only
+.\target\release\personalrag-v2-indexer.exe status --root <lifecycleRoot> --store <recovery-store>
+
+[Final evidence and publication]
+git status --porcelain
+git diff --check
+git status --short
+git add -- reports/step7-windows-e2e-20260829-215750
+git commit -m "Step 7 Windows実機E2E再検証結果を記録"
+git push -u origin reports/step7-windows-e2e-20260829-215750
+git status --porcelain
+git diff origin/main...HEAD --name-status
+git ls-remote origin refs/heads/reports/step7-windows-e2e-20260829-215750
