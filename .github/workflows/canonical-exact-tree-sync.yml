@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          EXPECTED_PREVIOUS_MAIN='807d6c12e720d5b3a2e417e574bbd8f098ca1cc4'
+          EXPECTED_PREVIOUS_MAIN='024c4afa7f4c8f0d1a778f9d8e3d094cfa730150'
           EXPECTED_OLD_TRANSPORT='57376db8ebe17dce14ddf52537158e0006756873980d3bd2e1d6d2bbf8d095e6'
           EXPECTED_OLD_TREE='7b2bef96686f7ed29abf091eddc8c6bf751fa190'
           EXPECTED_DELTA='887e9023f3cf76b603831dfc612a240ac96c4a79d3d4b5301e2b364aa3c662b4'
@@ -86,7 +86,11 @@ jobs:
           )
 
           : > "$TMP/delta.b64"
-          for n in 00 01 02 03 04 05 06 07 08 09 10; do
+          for n in 00 01 02 03 04 05; do
+            git show "$STAGING:.canonical-upload/step5-delta-$n" >> "$TMP/delta.b64"
+          done
+          git show "$STAGING:.canonical-upload/step5-delta-06-exact" >> "$TMP/delta.b64"
+          for n in 07 08 09 10; do
             git show "$STAGING:.canonical-upload/step5-delta-$n" >> "$TMP/delta.b64"
           done
           base64 --decode "$TMP/delta.b64" > "$TMP/delta.tar.xz"
