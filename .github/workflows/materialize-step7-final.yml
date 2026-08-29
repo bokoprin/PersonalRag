@@ -1,0 +1,173 @@
+name: Materialize Step7 final canonical source
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-stabilization-20260829
+    paths:
+      - .github/workflows/materialize-step7-final.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct validated stabilization patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .ci-upload/step7-patch-00 .ci-upload/step7-patch-01 .ci-upload/step7-patch-02 > "$RUNNER_TEMP/patch.b64"
+          base64 --decode "$RUNNER_TEMP/patch.b64" > "$RUNNER_TEMP/step7.patch.xz"
+          echo "f7a24680c3ccf3bb1caf96b84b066095b733d2e3ff917e2a97eeccc64b4bef9d  $RUNNER_TEMP/step7.patch.xz" | sha256sum -c -
+          xz -dc "$RUNNER_TEMP/step7.patch.xz" > "$RUNNER_TEMP/step7.patch"
+
+      - name: Apply to canonical main base
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git switch --detach origin/main
+          test "$(git rev-parse HEAD)" = "60bd15a63218c7f9ef7d64757f99c8d07ed88107"
+          git clean -fdx
+          patch -p1 < "$RUNNER_TEMP/step7.patch"
+
+      - name: Finalize canonical report
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > STEP7_STABILIZATION_CANONICAL_2026-08-29.md <<'EOF'
+          # PersonalRag V2 Step 7 Stabilization
+
+          Date: 2026-08-29  
+          Status: **STABILIZATION COMPLETE / CANONICAL / SEALED — real-machine Step 7 E2E retest pending**
+
+          ## Trigger
+
+          The first native-Windows Step 7 run reported:
+
+          - source-manifest mismatches caused by Windows CRLF checkout,
+          - Windows-only clippy findings,
+          - nested-path content mapping failures caused by `/` vs `\\`,
+          - no supported fresh-user initial index/store command,
+          - no runnable live USN -> publish producer,
+          - missing PDF/Office helper discovery/provisioning.
+
+          ## Stabilization changes
+
+          1. Windows content mapping canonicalizes separator direction only for metadata/content cross-index lookup.
+          2. Win32 source is clean under target-Windows clippy with warnings denied.
+          3. `.gitattributes` fixes canonical repository text to LF; `tools/verify_source_manifest.ps1` verifies the seal on Windows.
+          4. `personalrag-v2-indexer init/update/status` provides a supported product lifecycle.
+          5. `personalrag-v2-indexer watch` wires native NTFS USN detection to deterministic reconcile/publish.
+          6. helper auto-discovery and `tools/setup_windows_helpers.ps1` provide deterministic helper resolution/provisioning.
+          7. `tests/product_lifecycle.rs` drives init -> GUI search -> modify -> rename -> move -> delete -> create and durable checkpoint publication.
+
+          Crate version: **0.9.0**.
+
+          ## Durable compatibility
+
+          No frozen persistent-format/semantic identity is changed.
+
+          ## Acceptance boundary
+
+          Passing Linux/full regression and Windows CI prove build/test portability but do **not** replace the real-machine Step 7 GUI/USN/helper/performance E2E. The final Codex retest procedure is `STEP7_WINDOWS_RETEST_CODEX_2026-08-29.md`.
+
+          ## Final stabilization gate
+
+          Local acceptance host, Rust/Cargo 1.97.1:
+
+          - `cargo fmt --all -- --check`: PASS
+          - `cargo clippy --offline --locked --all-targets -- -D warnings`: PASS
+          - regression: **88/88 PASS**
+          - `cargo build --offline --locked --release`: PASS
+
+          Native Windows CI run `33252517910` passed on the exact stabilization source:
+
+          - Rust 1.97.1 / Cargo 1.97.1
+          - fmt: PASS
+          - clippy with warnings denied: PASS
+          - GUI regression: 2/2 PASS
+          - incremental regression: 19/19 PASS
+          - product lifecycle: 1/1 PASS
+          - library regression: 24/24 PASS
+          - release build: PASS, 22.51 s
+          - `personalrag-v2-gui.exe`: present
+          - `personalrag-v2-indexer.exe`: present
+
+          This Windows CI gate is portability/build evidence only; it does not replace the user-machine Step 7 GUI/NTFS-USN/helper/performance retest.
+
+          ## Next acceptance action
+
+          Codex must fetch the latest GitHub `main`, read `AGENTS.md` and `STEP7_WINDOWS_RETEST_CODEX_2026-08-29.md`, and execute the real native-Windows E2E without modifying product source. The resulting report may be published only to a dedicated `reports/step7-windows-e2e-<timestamp>` branch.
+          EOF
+          sed -i 's/^          //' STEP7_STABILIZATION_CANONICAL_2026-08-29.md
+          mkdir -p evidence/step7-stabilization
+          cat > evidence/step7-stabilization/final-gate-summary.txt <<'EOF'
+          PersonalRag V2 Step 7 stabilization final gate
+          Date: 2026-08-29
+          Rust: 1.97.1
+          Cargo: 1.97.1
+          fmt: PASS
+          clippy --offline --locked --all-targets -- -D warnings: PASS
+          regression: 88/88 PASS
+          release build: PASS
+          Windows CI run: 33252517910 / PASS
+          Windows GUI regression: 2/2 PASS
+          Windows incremental regression: 19/19 PASS
+          Windows product lifecycle: 1/1 PASS
+          Windows library regression: 24/24 PASS
+          Windows release build: PASS (22.51 s)
+          Real user-machine Step 7 E2E: PENDING / not counted as PASS
+          EOF
+          sed -i 's/^          //' evidence/step7-stabilization/final-gate-summary.txt
+
+      - name: Install Rust 1.97.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+
+      - name: Final Linux acceptance gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --offline --locked --all-targets -- -D warnings
+          cargo test --offline --locked
+          cargo build --offline --locked --release
+
+      - name: Seal manifest and exact tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf target
+          rm -f SOURCE_MANIFEST.sha256
+          find . -type f ! -path './.git/*' ! -name 'SOURCE_MANIFEST.sha256' -print0 | sort -z | xargs -0 sha256sum > SOURCE_MANIFEST.sha256
+          sha256sum -c SOURCE_MANIFEST.sha256
+          echo "CANONICAL_FILES=$(find . -type f ! -path './.git/*' | wc -l)"
+          echo "MANIFEST_ENTRIES=$(wc -l < SOURCE_MANIFEST.sha256)"
+          echo "MANIFEST_SHA256=$(sha256sum SOURCE_MANIFEST.sha256 | awk '{print $1}')"
+          git add -A
+          echo "EXACT_TREE=$(git write-tree)"
+          echo "TRACKED_FILES=$(git ls-files | wc -l)"
+
+      - name: Commit final canonical candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "ChatGPT Canonicalizer"
+          git config user.email "chatgpt-canonicalizer@users.noreply.github.com"
+          git commit -m "Step7 stabilizationをWindows再検証可能な正本へ更新"
+          echo "FINAL_COMMIT=$(git rev-parse HEAD)"
+          echo "FINAL_TREE=$(git rev-parse HEAD^{tree})"
+          git push origin HEAD:refs/heads/chatgpt-step7-final-source-20260829-v1
