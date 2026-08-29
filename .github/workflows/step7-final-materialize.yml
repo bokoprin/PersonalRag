@@ -1,0 +1,70 @@
+name: Materialize Step7 final canonical
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-final-stabilization-20260830
+    paths:
+      - .github/workflows/step7-final-materialize.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout final stabilization branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail-closed base check
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          MAIN=$(git rev-parse origin/main)
+          test "$MAIN" = "5ecb941010d2822befc7dd1ccace89b8be040171"
+          echo "MAIN=$MAIN"
+
+      - name: Remove temporary CI-only files
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f             .github/workflows/step7-final-gate0.yml             .github/workflows/step7-capacity-probe.yml             .github/workflows/step7-manifest-focused.yml             .github/workflows/step7-final-focused.yml             .github/workflows/step7-final-acceptance.yml             .github/workflows/step7-final-materialize.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+          test ! -d .ci-upload
+
+      - name: Regenerate and verify source manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf target
+          rm -f SOURCE_MANIFEST.sha256
+          find . -type f ! -path './.git/*' ! -name 'SOURCE_MANIFEST.sha256' -print0             | sort -z             | xargs -0 sha256sum > SOURCE_MANIFEST.sha256
+          sha256sum -c SOURCE_MANIFEST.sha256
+          FILES=$(find . -type f ! -path './.git/*' | wc -l)
+          ENTRIES=$(wc -l < SOURCE_MANIFEST.sha256)
+          MANIFEST_SHA=$(sha256sum SOURCE_MANIFEST.sha256 | awk '{print $1}')
+          echo "CANONICAL_FILES=$FILES"
+          echo "MANIFEST_ENTRIES=$ENTRIES"
+          echo "MANIFEST_SHA256=$MANIFEST_SHA"
+          test "$FILES" -eq "$((ENTRIES + 1))"
+
+      - name: Build exact tree and squashed candidate commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          test -z "$(git ls-files | grep -E '^\.github/workflows/step7-|^\.ci-upload/' || true)"
+          TREE=$(git write-tree)
+          MAIN=$(git rev-parse origin/main)
+          git config user.name "ChatGPT Canonicalizer"
+          git config user.email "chatgpt-canonicalizer@users.noreply.github.com"
+          COMMIT=$(printf '%s\n' 'Step7 final stabilizationをWindows最終再検証可能な正本へ更新' | git commit-tree "$TREE" -p "$MAIN")
+          echo "FINAL_TREE=$TREE"
+          echo "FINAL_COMMIT=$COMMIT"
+          echo "TRACKED_FILES=$(git ls-files | wc -l)"
+          git push --force origin "$COMMIT:refs/heads/chatgpt-step7-final-canonical-20260830-v1"
