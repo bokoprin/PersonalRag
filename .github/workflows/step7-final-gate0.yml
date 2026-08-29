@@ -1,0 +1,73 @@
+name: Step7 final stabilization Gate0
+
+on:
+  push:
+    branches:
+      - chatgpt-step7-final-stabilization-20260830
+    paths:
+      - .github/workflows/step7-final-gate0.yml
+
+permissions:
+  contents: read
+
+jobs:
+  gate0-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Install Rust 1.97.1
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: Install document helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils unzip zstd
+      - name: Verify manifest
+        run: sha256sum -c SOURCE_MANIFEST.sha256
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: clippy
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: full regression
+        run: cargo test --offline --locked
+      - name: release build
+        run: cargo build --offline --locked --release
+
+  gate0-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Install Rust 1.97.1
+        shell: pwsh
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+          rustup override set 1.97.1
+          rustc --version
+          cargo --version
+      - name: fmt
+        shell: pwsh
+        run: cargo fmt --all -- --check
+      - name: clippy
+        shell: pwsh
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: GUI regression
+        shell: pwsh
+        run: cargo test --offline --locked --test gui_search -- --nocapture
+      - name: Incremental regression
+        shell: pwsh
+        run: cargo test --offline --locked --test incremental_index -- --nocapture
+      - name: Product lifecycle
+        shell: pwsh
+        run: cargo test --offline --locked --test product_lifecycle -- --nocapture
+      - name: release build
+        shell: pwsh
+        run: cargo build --offline --locked --release
