@@ -1,0 +1,72 @@
+name: Step5 Gate0 canonical source
+
+on:
+  push:
+    branches:
+      - chatgpt-canonical-step1234-20260829
+    paths:
+      - .github/workflows/step5-gate0.yml
+
+permissions:
+  contents: read
+
+jobs:
+  gate0:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Reconstruct canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          TMP="$(mktemp -d)"
+          cat \
+            .canonical-upload/v2source-000 \
+            .canonical-upload/v2source-001 \
+            .canonical-upload/v2source-002 \
+            .canonical-upload/v2source-003 \
+            .canonical-upload/v2source-004a \
+            .canonical-upload/v2source-004b \
+            .canonical-upload/v2source-004c \
+            .canonical-upload/v2source-004d \
+            .canonical-upload/v2source-005 \
+            .canonical-upload/v2source-006 \
+            .canonical-upload/v2source-007 \
+            .canonical-upload/v2source-008 \
+            .canonical-upload/v2source-009 \
+            > "$TMP/source.b64"
+          base64 --decode "$TMP/source.b64" > "$TMP/source.tar.xz"
+          echo "57376db8ebe17dce14ddf52537158e0006756873980d3bd2e1d6d2bbf8d095e6  $TMP/source.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/personalrag"
+          tar -xJf "$TMP/source.tar.xz" -C "$RUNNER_TEMP/personalrag"
+          cd "$RUNNER_TEMP/personalrag"
+          sha256sum -c SOURCE_MANIFEST.sha256
+          test "$(find . -type f | wc -l)" -eq 65
+          echo "SOURCE=$RUNNER_TEMP/personalrag" >> "$GITHUB_ENV"
+
+      - name: Install Rust 1.97.1
+        shell: bash
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
+          rustup override set 1.97.1 --path "$SOURCE"
+          rustc --version
+          cargo --version
+
+      - name: Gate0 fmt
+        working-directory: ${{ env.SOURCE }}
+        run: cargo fmt -- --check
+
+      - name: Gate0 clippy
+        working-directory: ${{ env.SOURCE }}
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+
+      - name: Gate0 tests
+        working-directory: ${{ env.SOURCE }}
+        run: cargo test --offline --locked
+
+      - name: Gate0 release
+        working-directory: ${{ env.SOURCE }}
+        run: cargo build --offline --locked --release
