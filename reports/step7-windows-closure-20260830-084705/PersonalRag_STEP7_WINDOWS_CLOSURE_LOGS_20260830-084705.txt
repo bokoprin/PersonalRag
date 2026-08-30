@@ -1,0 +1,1060 @@
+===== RAW FILE: AGENTS.md.txt =====
+# PersonalRag Codex Instructions
+
+## Step 7 targeted Windows closure
+
+When the user asks Codex to finish PersonalRag Step 7 verification, this repository is a **verification target**, not an implementation workspace.
+
+### Hard rules
+
+- Run on the user's real native Windows machine.
+- Use a **fresh disposable clone** of latest GitHub `main`.
+- Do not modify product source, tests, specifications, Cargo files, or `SOURCE_MANIFEST.sha256`.
+- Do not repair failures during verification.
+- Never claim an unexecuted check as PASS.
+- Do not install a separate `zip.exe`; the final test verifies that it is no longer required.
+- Required Poppler/Zstandard provisioning may use only the repository-provided `tools/setup_windows_helpers.ps1 -Install` when needed.
+- Publish reports only to `reports/step7-windows-closure-<timestamp>`; never push or merge `main`.
+
+## Required procedure
+
+1. Fresh-clone latest `main`; record HEAD/tree and clean status.
+2. Verify `SOURCE_MANIFEST.sha256`.
+3. Read `STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md` completely.
+4. Run its product-source diff guard against `a33a32a81a344cdbdeee14431fe71a159afe2471`.
+5. If unexpected product `src/` or Cargo-format/dependency changes exist, stop with `TARGETED_RETEST_INVALID`.
+6. Otherwise execute the targeted Windows full test/document/capacity closure exactly as documented.
+7. Windows PowerShell **5.1** (`powershell.exe`) must execute the 4/96/256 MiB capacity measurement.
+8. The oversized `496256` request must be rejected before creating test data.
+9. Final source checkout must remain clean.
+10. If all targeted checks pass, report `S7-DOC-002 = PASS` and final `STEP7_COMPLETE`.
+
+The previous full real-machine E2E evidence is report commit `2ee23681f9f1a09864c421fa9e974fb003ea84af`. Do not rerun the entire manual GUI/watch matrix unless the diff guard proves product implementation changed.
+
+
+===== RAW FILE: capacity-powershell-5.1-4-96-256.txt =====
+command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB "4,96,256" -Indexer ".\target\release\personalrag-v2-indexer.exe"
+started=2026-08-30T08:52:40.0730542+09:00
+ended=2026-08-30T08:53:30.5833540+09:00
+elapsedSeconds=50.51
+exit=0
+output:
+CAPACITY_REQUEST mib=4,96,256
+INIT_OK bundle=1 metadata=4 searchable=4 store_bytes=106525 usn_available=false journal_id=0 next_usn=0
+UPDATE_OK committed=true compacted=true bundle=2 metadata=4 delta_changes=0
+CAPACITY mib=4 changes=1 init_ratio=2.539754% complete_ratio=5.087256% hard_gate=True
+INIT_OK bundle=1 metadata=96 searchable=96 store_bytes=1338609 usn_available=false journal_id=0 next_usn=0
+UPDATE_OK committed=true compacted=true bundle=2 metadata=96 delta_changes=0
+CAPACITY mib=96 changes=2 init_ratio=1.329789% complete_ratio=2.659954% hard_gate=True
+INIT_OK bundle=1 metadata=256 searchable=256 store_bytes=3539747 usn_available=false journal_id=0 next_usn=0
+UPDATE_OK committed=true compacted=true bundle=2 metadata=256 delta_changes=0
+CAPACITY mib=256 changes=6 init_ratio=1.318659% complete_ratio=2.637484% hard_gate=True
+
+MiB ChangedFiles InitSourceBytes InitStoreBytes          InitRatio FinalSourceBytes CompleteStoreBytes    CompleteRatio
+--- ------------ --------------- --------------          --------- ---------------- ------------------    -------------
+  4            1         4194304         106525 0.0253975391387939          4194304             213375 ...8725643157959
+ 96            2       100663296        1338609 0.0132978856563568        100663296            2677597 ...5995363394419
+256            6       268435456        3539747 0.0131865851581097        268435456            7079943 ...3748429715633
+
+
+afterTempCapacityDirs:
+beforeCount=0
+afterCount=0
+
+===== RAW FILE: capacity-powershell-5.1-invalid-496256.txt =====
+command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB "496256" -Indexer ".\target\release\personalrag-v2-indexer.exe"
+started=2026-08-30T08:53:47.8328923+09:00
+ended=2026-08-30T08:53:48.9718386+09:00
+elapsedSeconds=1.139
+exit=1
+output:
+MiB must be between 1 and 1024: 496256
+At C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705\tools\measure_product_capacity.ps1:25 c
+har:17
++                 throw "MiB must be between 1 and 1024: $size"
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (MiB must be between 1 and 1024: 496256:String) [], RuntimeException
+    + FullyQualifiedErrorId : MiB must be between 1 and 1024: 496256
+
+beforeTempCapacityDirs:
+afterTempCapacityDirs:
+newTempCapacityDirs:
+beforeCount=0
+afterCount=0
+newCount=0
+
+===== RAW FILE: capacity-temp-before-normal.txt =====
+beforeTempCapacityDirs:
+
+===== RAW FILE: cargo-build-release.txt =====
+label=cargo build --offline --locked --release
+command=cargo build --offline --locked --release
+workingDirectory=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705
+started=2026-08-30T08:50:49.3454389+09:00
+   Compiling personalrag-v2 v0.9.1 (C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705)
+    Finished `release` profile [optimized] target(s) in 13.01s
+ended=2026-08-30T08:51:02.4159126+09:00
+elapsedSeconds=13.07
+exit=0
+
+===== RAW FILE: cargo-clippy.txt =====
+label=cargo clippy --offline --locked --all-targets -- -D warnings
+command=cargo clippy --offline --locked --all-targets -- -D warnings
+workingDirectory=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705
+started=2026-08-30T08:50:46.8862917+09:00
+    Checking personalrag-v2 v0.9.1 (C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.30s
+ended=2026-08-30T08:50:49.3419498+09:00
+elapsedSeconds=2.456
+exit=0
+
+===== RAW FILE: cargo-fmt.txt =====
+label=cargo fmt --all -- --check
+command=cargo fmt --all -- --check
+workingDirectory=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705
+started=2026-08-30T08:50:45.7092021+09:00
+ended=2026-08-30T08:50:46.8687111+09:00
+elapsedSeconds=1.159
+exit=0
+
+===== RAW FILE: cargo-test-counts.txt =====
+resultLines=18
+totalPassed=89
+totalFailed=0
+totalIgnored=0
+totalMeasured=0
+totalFiltered=0
+resultLines:
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.86s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.47s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.63s
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.07s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.31s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.55s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.65s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.60s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.80s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+===== RAW FILE: cargo-test-document-extraction.txt =====
+label=cargo test --offline --locked --test document_extraction -- --nocapture
+command=cargo test --offline --locked --test document_extraction -- --nocapture
+workingDirectory=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705
+started=2026-08-30T08:51:45.0905436+09:00
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running tests\document_extraction.rs (target\debug\deps\document_extraction-49f3cf6444f1e9d2.exe)
+
+running 10 tests
+test windows_fixture_zip_generation_uses_native_tar ... ok
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... ok
+test verification_capacity_hard_gate_fails_closed_before_publish ... ok
+test document_source_drift_is_rejected_before_exact_verification ... ok
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... ok
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... ok
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... ok
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... ok
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... ok
+STEP5_SLO selected_bytes=4199696 verification_bytes=1136 combined_ratio=0.021731 cold_ms=288.322 p50_ms=0.172 p95_ms=0.319 p99_ms=0.319 max_ms=288.322 candidate_blocks=1 candidate_bytes=176 verification_scan_bytes=176
+test controlled_document_first_batch_stays_below_hard_slo ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.23s
+
+ended=2026-08-30T08:51:46.4152371+09:00
+elapsedSeconds=1.325
+exit=0
+
+===== RAW FILE: cargo-test-full.txt =====
+label=cargo test --offline --locked
+command=cargo test --offline --locked
+workingDirectory=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705
+started=2026-08-30T08:51:02.4568933+09:00
+   Compiling personalrag-v2 v0.9.1 (C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.01s
+     Running unittests src\lib.rs (target\debug\deps\personalrag_v2-6ad2216dafab0128.exe)
+
+running 24 tests
+test gui::send_tests::gui_session_can_live_on_background_search_thread ... ok
+test metadata::tests::separator_canonicalization_is_search_only ... ok
+test metadata::tests::metadata_format_identity_is_separate_from_content_index ... ok
+test incremental::content_mapping_path_tests::windows_content_mapping_canonicalizes_only_separator_direction ... ok
+test gui::tests::file_size_and_modified_time_are_human_readable ... ok
+test extraction::tests::utf16_xml_is_supported ... ok
+test extraction::tests::xlsx_shared_inline_formula_and_cell_boundaries_are_exact ... ok
+test persistent::crc_tests::crc64_ecma_matches_standard_check_vector ... ok
+test pattern::tests::regex_rejects_unsafe_features_and_normalizes_escaped_literal_runs ... ok
+test gui::tests::context_preview_is_utf8_safe_and_bounded ... ok
+test gui::tests::file_query_uses_frozen_unicode_and_separator_semantics ... ok
+test pattern::tests::wildcard_uses_same_nfa_and_escape_rules ... ok
+test extraction::tests::xml_entities_and_paragraph_boundaries_are_deterministic ... ok
+test pattern::tests::nfa_supports_frozen_core_grammar_without_backtracking ... ok
+test unicode::tests::hangul_composition_is_algorithmic ... ok
+test unicode::tests::japanese_ascii_is_byte_preserving_but_unicode_special_cases_are_not ... ok
+test unicode::tests::unicode_version_is_frozen ... ok
+test unicode::tests::nfc_and_casefold_semantics_match_frozen_examples ... ok
+test product::tests::metadata_scan_keeps_all_files_but_marks_only_supported_content ... ok
+test unicode::tests::every_table_composition_pair_normalizes_to_its_composed_scalar ... ok
+test unicode::tests::generated_python_unicode_15_1_oracle_vectors_match ... ok
+test adaptive_tests::adaptive_presence_chooses_smallest_exact_representation_and_preserves_membership ... ok
+test persistent::format_version_tests::frozen_unicode_semantics_reject_prior_format_v1 ... ok
+test pattern::tests::indexed_pattern_search_equals_candidate_free_verification ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.86s
+
+     Running unittests src\bin\incremental_storm_bench.rs (target\debug\deps\incremental_storm_bench-808b02a6ee6443b5.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\metadata_bench.rs (target\debug\deps\metadata_bench-2bb1b16980371144.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\persistent_bench.rs (target\debug\deps\persistent_bench-9cdd89cdf9286da5.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\personalrag_v2_bench-608a45e9f7af2b8a.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\personalrag_gui.rs (target\debug\deps\personalrag_v2_gui-9077253ddc9e8ad6.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\bin\personalrag_indexer.rs (target\debug\deps\personalrag_v2_indexer-02574824bf255e53.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\document_extraction.rs (target\debug\deps\document_extraction-49f3cf6444f1e9d2.exe)
+
+running 10 tests
+test windows_fixture_zip_generation_uses_native_tar ... ok
+test extracted_docx_uses_frozen_unicode_nfc_and_full_fold_semantics ... ok
+test pdf_docx_xlsx_pptx_extractors_produce_expected_hard_units ... ok
+test verification_capacity_hard_gate_fails_closed_before_publish ... ok
+test persistent_pdf_search_uses_exact_verification_store_and_combined_capacity ... ok
+test document_source_drift_is_rejected_before_exact_verification ... ok
+test corrupt_new_verification_generation_falls_back_without_reextracting_old_index ... ok
+test bundle_loader_falls_back_when_matching_verification_sidecar_is_corrupt ... ok
+test controlled_document_first_batch_stays_below_hard_slo ... ok
+test incremental_document_rename_reuses_base_verification_and_modify_reextracts ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.47s
+
+     Running tests\gui_search.rs (target\debug\deps\gui_search-9c65c26479a15bc5.exe)
+
+running 2 tests
+test gui_session_searches_metadata_content_and_intersection ... ok
+test gui_session_supports_literal_regex_wildcard_and_case_mode ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.63s
+
+     Running tests\incremental_index.rs (target\debug\deps\incremental_index-c29505778e0fd4ba.exe)
+
+running 19 tests
+test checkpoint_validation_detects_journal_reset_and_gap ... ok
+test frn_tree_updates_directory_descendant_paths_without_rescan ... ok
+test pending_rename_old_prevents_checkpoint_from_advancing_until_new_arrives ... ok
+test unmatched_rename_new_and_hardlink_change_require_reconciliation ... ok
+test usn_record_v2_parser_is_strict_and_lossless_for_utf16_names ... ok
+test incremental_state_persists_checkpoint_and_pending_rename ... ok
+test latest_delta_falls_back_when_advisory_current_points_to_corruption ... ok
+test reconciliation_repairs_create_modify_rename_and_delete ... ok
+test delta_snapshot_round_trip_and_corruption_detection ... ok
+test overlay_created_then_deleted_does_not_leave_tombstone ... ok
+test delta_overlay_create_rename_delete_and_same_path_replacement_are_exact ... ok
+test compaction_threshold_uses_fifty_thousand_or_two_percent ... ok
+test additive_content_limits_bound_file_enumeration_without_changing_first_batch_api ... ok
+test rename_reuses_base_content_and_content_modify_suppresses_old_hit ... ok
+test same_path_new_file_id_suppresses_old_content_and_exposes_new_content ... ok
+test changed_content_cache_is_reused_and_invalidated_on_modify ... ok
+test bundle_is_commit_point_and_orphan_generations_do_not_replace_old_bundle ... ok
+test corrupt_newest_bundle_or_reference_falls_back_to_previous_valid_bundle ... ok
+test bundle_gc_preserves_references_for_two_valid_fallback_bundles ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.07s
+
+     Running tests\metadata_index.rs (target\debug\deps\metadata_index-ca8f323c45983812.exe)
+
+running 5 tests
+test duplicate_file_ids_are_rejected ... ok
+test filename_and_path_queries_match_independent_unicode_oracle ... ok
+test snapshot_round_trip_preserves_results_and_rejects_corruption_and_overwrite ... ok
+test metadata_snapshot_rejects_format_and_semantic_mismatch ... ok
+test q4_q5_filter_reduces_common_q3_candidates_without_changing_result ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+
+     Running tests\p0_search.rs (target\debug\deps\p0_search-d8bd1ee4e9af337e.exe)
+
+running 12 tests
+test logical_line_boundaries_are_hard_boundaries ... ok
+test rare_anchor_reduces_candidate_blocks_without_changing_results ... ok
+test dense_and_adaptive_global_presence_shortcut_same_zero_hits ... ok
+test literal_search_matches_oracle_for_short_long_case_japanese_and_overlaps ... ok
+test adaptive_presence_reduces_small_corpus_fixed_overhead ... ok
+test sparse_anchor_budget_is_never_exceeded_and_fallback_remains_exact ... ok
+test serialized_capacity_matches_actual_file_size ... ok
+test deterministic_pseudorandom_substrings_match_naive_oracle ... ok
+test variant_d_actual_q4_q5_substrings_never_false_negative ... ok
+test variant_d_capacity_respects_hard_and_sparse_budgets ... ok
+test adaptive_q4_q5_global_filter_shortcuts_adversarial_zero_hit ... ok
+test adaptive_q4_q5_filters_preserve_oracle_and_reduce_candidates ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.31s
+
+     Running tests\persistent_index.rs (target\debug\deps\persistent_index-994bf5a64e65c200.exe)
+
+running 8 tests
+test publish_reload_preserves_q45_literal_results_and_line_boundaries ... ok
+test persistent_v2_reload_preserves_unicode_regex_and_wildcard_semantics ... ok
+test source_drift_is_explicit_and_checksum_validation_is_available ... ok
+test publish_next_generation_tracks_parent_and_current ... ok
+test corrupt_current_and_latest_generation_fall_back_to_previous_valid_generation ... ok
+test gc_keeps_at_least_two_valid_generations_and_never_counts_corrupt_as_fallback ... ok
+test gc_preserves_valid_current_even_when_newer_orphan_generations_exist ... ok
+test four_mib_controlled_corpus_stays_below_capacity_hard_gate ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.55s
+
+     Running tests\product_lifecycle.rs (target\debug\deps\product_lifecycle-65049acf9eb1ada9.exe)
+
+running 1 test
+test product_init_and_reconcile_drive_real_gui_bundle_lifecycle ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.65s
+
+     Running tests\search_semantics.rs (target\debug\deps\search_semantics-9f441236880c10d0.exe)
+
+running 6 tests
+test pattern_safety_rejections_are_explicit ... ok
+test empty_match_end_anchor_reports_original_utf8_end_offset ... ok
+test unicode_literal_index_matches_naive_oracle ... ok
+test regex_and_wildcard_use_same_unicode_semantics_and_hard_line_boundaries ... ok
+test unicode_nfc_full_fold_and_original_offsets_are_frozen ... ok
+test mandatory_literal_reduces_regex_and_wildcard_candidates ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.60s
+
+     Running tests\windows_document_helper.rs (target\debug\deps\windows_document_helper-b2967a3db4a4be9f.exe)
+
+running 1 test
+test native_zip_reader_handles_verbatim_windows_document_paths ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+
+     Running tests\windows_watch.rs (target\debug\deps\windows_watch-953b0af8bf0d8cb2.exe)
+
+running 1 test
+test non_elevated_watch_path_publishes_a_real_content_change ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.80s
+
+   Doc-tests personalrag_v2
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+ended=2026-08-30T08:51:45.0875450+09:00
+elapsedSeconds=42.631
+exit=0
+
+===== RAW FILE: cargo-test-windows-document-helper.txt =====
+label=cargo test --offline --locked --test windows_document_helper -- --nocapture
+command=cargo test --offline --locked --test windows_document_helper -- --nocapture
+workingDirectory=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705
+started=2026-08-30T08:51:46.4179126+09:00
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running tests\windows_document_helper.rs (target\debug\deps\windows_document_helper-b2967a3db4a4be9f.exe)
+
+running 1 test
+test native_zip_reader_handles_verbatim_windows_document_paths ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.08s
+
+ended=2026-08-30T08:51:47.5843924+09:00
+elapsedSeconds=1.166
+exit=0
+
+===== RAW FILE: document-fixture-zip-reference-scan.txt =====
+command: rg -n -i Command::new(zip)|zip.exe|7z.exe|Compress-Archive tests\document_extraction.rs
+exit=0
+matches:
+98:    Command::new("zip")
+
+===== RAW FILE: final-publication-verification.txt =====
+HEAD=385f9071c631c015f4d8536d3a8fa9fbe256bce7
+branch=reports/step7-windows-closure-20260830-084705
+statusCount=0
+diffCheckExit=0
+branchDiffExit=0
+branchDiff:
+A	reports/step7-windows-closure-20260830-084705/PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+A	reports/step7-windows-closure-20260830-084705/PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+A	reports/step7-windows-closure-20260830-084705/PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip
+A	reports/step7-windows-closure-20260830-084705/SHA256SUMS.txt
+remoteMain=a668f73058f2966b2688909cfa6dc673e37d52a1	refs/heads/main
+remoteClosure=385f9071c631c015f4d8536d3a8fa9fbe256bce7	refs/heads/reports/step7-windows-closure-20260830-084705
+status:
+diffCheck:
+
+===== RAW FILE: final-source-cleanliness.txt =====
+command: git diff --check
+exit=0
+command: git status --porcelain
+exit=0
+lines=0
+HEAD=a668f73058f2966b2688909cfa6dc673e37d52a1
+HEAD_TREE=5aacff6bc19e12e2b769c5e819a1a280ced4206b
+origin/main=a668f73058f2966b2688909cfa6dc673e37d52a1
+headEqualsOriginMain=True
+finalClean=True
+
+===== RAW FILE: fresh-clone.txt =====
+Cloning into 'C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705'...
+
+===== RAW FILE: indexer-helpers.txt =====
+command: .\target\release\personalrag-v2-indexer.exe helpers
+exit=0
+HELPER name=pdftotext available=true path=C:\Users\bokop\AppData\Local\Microsoft/WinGet/Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe version="pdftotext version 25.07.0"
+HELPER name=zip_reader available=true path=C:\WINDOWS\System32/tar.exe version="bsdtar 3.8.8 - libarchive 3.8.8 zlib/1.2.13.1-motley liblzma/5.8.1 bz2lib/1.0.8 libzstd/1.5.7 cng/2.0 libb2/bundled"
+HELPER name=zstd available=true path=C:\Users\bokop\AppData\Local\Microsoft/WinGet/Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe version="*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***"
+
+===== RAW FILE: instruction-metadata.txt =====
+AGENTS.md lines=32 bytes=1882 sha256=6491A0EA33EBAB2E11D6B61FD4E85899C79BA4EC385F6FA2729AB123DB8F65D1
+target lines=209 bytes=6602 sha256=A4E59954E5B2C255E267F12ED06E30E5B3E67FE147A81C8F2F662B3E5A14D681
+
+===== RAW FILE: powershell-version.txt =====
+command: powershell.exe -NoProfile -Command $PSVersionTable.PSVersion.ToString(); $PSVersionTable.PSEdition
+exit=0
+5.1.26100.9278
+Desktop
+
+===== RAW FILE: publication-final-integrity.txt =====
+final publication integrity before commit
+reportExists=True
+logsExists=True
+zipExists=True
+shaExists=True
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md expected=ddd36969f34f628e80ca177cadd524421303b3a7135e93a618901d3ec9d6e91f actual=ddd36969f34f628e80ca177cadd524421303b3a7135e93a618901d3ec9d6e91f match=True
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt expected=d9af203684ff1bfe7be58afdcd7c725aff5f8f45c6b9afa1b278599f6b785d45 actual=d9af203684ff1bfe7be58afdcd7c725aff5f8f45c6b9afa1b278599f6b785d45 match=True
+PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip expected=6df127c9b002b4177e7cb78ccf6d431c12f370fced5642696b8f22af0c64a116 actual=6df127c9b002b4177e7cb78ccf6d431c12f370fced5642696b8f22af0c64a116 match=True
+zipListingExit=0
+zipEntryCount=26
+zipForbiddenSourceEntries=0
+SHA256SUMS:
+ddd36969f34f628e80ca177cadd524421303b3a7135e93a618901d3ec9d6e91f  PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+d9af203684ff1bfe7be58afdcd7c725aff5f8f45c6b9afa1b278599f6b785d45  PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+6df127c9b002b4177e7cb78ccf6d431c12f370fced5642696b8f22af0c64a116  PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip
+zip listing:
+raw/AGENTS.md.txt
+raw/capacity-powershell-5.1-4-96-256.txt
+raw/capacity-powershell-5.1-invalid-496256.txt
+raw/capacity-temp-before-normal.txt
+raw/cargo-build-release.txt
+raw/cargo-clippy.txt
+raw/cargo-fmt.txt
+raw/cargo-test-counts.txt
+raw/cargo-test-document-extraction.txt
+raw/cargo-test-full.txt
+raw/cargo-test-windows-document-helper.txt
+raw/document-fixture-zip-reference-scan.txt
+raw/final-source-cleanliness.txt
+raw/fresh-clone.txt
+raw/indexer-helpers.txt
+raw/instruction-metadata.txt
+raw/powershell-version.txt
+raw/publication-precommit-integrity.txt
+raw/setup-windows-helpers.txt
+raw/source-seal-and-diff-guard.txt
+raw/STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md.txt
+raw/targeted-build-test-summary.txt
+raw/toolchain-and-helper-state.txt
+raw/where-zip.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+
+===== RAW FILE: publication-precommit-integrity.txt =====
+publication precommit integrity
+publishDir=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705\reports\step7-windows-closure-20260830-084705
+publishFilesBeforeRegeneration:
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip
+SHA256SUMS.txt
+git status before staging:
+?? reports/
+zip listing before regeneration:
+raw/AGENTS.md.txt
+raw/capacity-powershell-5.1-4-96-256.txt
+raw/capacity-powershell-5.1-invalid-496256.txt
+raw/capacity-temp-before-normal.txt
+raw/cargo-build-release.txt
+raw/cargo-clippy.txt
+raw/cargo-fmt.txt
+raw/cargo-test-counts.txt
+raw/cargo-test-document-extraction.txt
+raw/cargo-test-full.txt
+raw/cargo-test-windows-document-helper.txt
+raw/document-fixture-zip-reference-scan.txt
+raw/final-source-cleanliness.txt
+raw/fresh-clone.txt
+raw/indexer-helpers.txt
+raw/instruction-metadata.txt
+raw/powershell-version.txt
+raw/setup-windows-helpers.txt
+raw/source-seal-and-diff-guard.txt
+raw/STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md.txt
+raw/targeted-build-test-summary.txt
+raw/toolchain-and-helper-state.txt
+raw/where-zip.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+zipListingExit=0
+zip excludes source/Cargo check:
+forbiddenEntries=0
+
+===== RAW FILE: remote-publication-verification-v2.txt =====
+remoteClone=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Verify-20260830-084705-v2
+remoteHead=385f9071c631c015f4d8536d3a8fa9fbe256bce7
+expectedHead=385f9071c631c015f4d8536d3a8fa9fbe256bce7
+remoteHeadMatch=True
+remoteMainRef=a668f73058f2966b2688909cfa6dc673e37d52a1	refs/heads/main
+remoteMainSha=a668f73058f2966b2688909cfa6dc673e37d52a1
+remoteCloneStatusLines=0
+remoteFiles:
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip
+SHA256SUMS.txt
+unexpectedFiles=0
+missingFiles=0
+checksumResults:
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md match=True expected=ddd36969f34f628e80ca177cadd524421303b3a7135e93a618901d3ec9d6e91f actual=ddd36969f34f628e80ca177cadd524421303b3a7135e93a618901d3ec9d6e91f
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt match=True expected=856923ba5147366f0fcb1dbee0b8c4424f51e0fe4d8d617627a235a175dcdbcf actual=856923ba5147366f0fcb1dbee0b8c4424f51e0fe4d8d617627a235a175dcdbcf
+PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip match=True expected=e5e9e9f3e874ae1f8f704eba7c6d0b1ff5828e2032b9ca79aea7700207d6fd16 actual=e5e9e9f3e874ae1f8f704eba7c6d0b1ff5828e2032b9ca79aea7700207d6fd16
+checksumMismatches=0
+zipListingExit=0
+zipEntryCount=26
+zipListing:
+raw/AGENTS.md.txt
+raw/capacity-powershell-5.1-4-96-256.txt
+raw/capacity-powershell-5.1-invalid-496256.txt
+raw/capacity-temp-before-normal.txt
+raw/cargo-build-release.txt
+raw/cargo-clippy.txt
+raw/cargo-fmt.txt
+raw/cargo-test-counts.txt
+raw/cargo-test-document-extraction.txt
+raw/cargo-test-full.txt
+raw/cargo-test-windows-document-helper.txt
+raw/document-fixture-zip-reference-scan.txt
+raw/final-source-cleanliness.txt
+raw/fresh-clone.txt
+raw/indexer-helpers.txt
+raw/instruction-metadata.txt
+raw/powershell-version.txt
+raw/publication-precommit-integrity.txt
+raw/setup-windows-helpers.txt
+raw/source-seal-and-diff-guard.txt
+raw/STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md.txt
+raw/targeted-build-test-summary.txt
+raw/toolchain-and-helper-state.txt
+raw/where-zip.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+
+===== RAW FILE: remote-publication-verification.txt =====
+remoteClone=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Verify-20260830-084705
+remoteHead=b816307fdd329f58a7db4c3df007e9939a9a0273
+expectedHead=b816307fdd329f58a7db4c3df007e9939a9a0273
+remoteHeadMatch=True
+remoteMainRef=a668f73058f2966b2688909cfa6dc673e37d52a1	refs/heads/main
+remoteCloneStatusLines=0
+remoteFiles:
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip
+SHA256SUMS.txt
+unexpectedFiles=0
+missingFiles=0
+checksumResults:
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md match=True expected=ddd36969f34f628e80ca177cadd524421303b3a7135e93a618901d3ec9d6e91f actual=ddd36969f34f628e80ca177cadd524421303b3a7135e93a618901d3ec9d6e91f
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt match=False expected=365b7d221efc6a5d1629df56f439874b28d0cb66258df7811666efb06999e04a actual=856923ba5147366f0fcb1dbee0b8c4424f51e0fe4d8d617627a235a175dcdbcf
+PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip match=True expected=317f8b1c461dd5a586a94786d79bb0751d4db6c672b508e10e635a807fb21e4f actual=317f8b1c461dd5a586a94786d79bb0751d4db6c672b508e10e635a807fb21e4f
+checksumMismatches=1
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+zipListingExit=0
+zipEntryCount=26
+zipListing:
+raw/AGENTS.md.txt
+raw/capacity-powershell-5.1-4-96-256.txt
+raw/capacity-powershell-5.1-invalid-496256.txt
+raw/capacity-temp-before-normal.txt
+raw/cargo-build-release.txt
+raw/cargo-clippy.txt
+raw/cargo-fmt.txt
+raw/cargo-test-counts.txt
+raw/cargo-test-document-extraction.txt
+raw/cargo-test-full.txt
+raw/cargo-test-windows-document-helper.txt
+raw/document-fixture-zip-reference-scan.txt
+raw/final-source-cleanliness.txt
+raw/fresh-clone.txt
+raw/indexer-helpers.txt
+raw/instruction-metadata.txt
+raw/powershell-version.txt
+raw/publication-precommit-integrity.txt
+raw/setup-windows-helpers.txt
+raw/source-seal-and-diff-guard.txt
+raw/STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md.txt
+raw/targeted-build-test-summary.txt
+raw/toolchain-and-helper-state.txt
+raw/where-zip.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+
+===== RAW FILE: results-zip-listing.txt =====
+command: Compress-Archive stage=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Evidence-20260830-084705\package-stage destination=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705\reports\step7-windows-closure-20260830-084705\PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_20260830-084705.zip
+compressSuccess=True
+zipBytes=31828
+command: tar.exe -tf results.zip
+tarExit=0
+raw/AGENTS.md.txt
+raw/capacity-powershell-5.1-4-96-256.txt
+raw/capacity-powershell-5.1-invalid-496256.txt
+raw/capacity-temp-before-normal.txt
+raw/cargo-build-release.txt
+raw/cargo-clippy.txt
+raw/cargo-fmt.txt
+raw/cargo-test-counts.txt
+raw/cargo-test-document-extraction.txt
+raw/cargo-test-full.txt
+raw/cargo-test-windows-document-helper.txt
+raw/document-fixture-zip-reference-scan.txt
+raw/final-source-cleanliness.txt
+raw/fresh-clone.txt
+raw/indexer-helpers.txt
+raw/instruction-metadata.txt
+raw/powershell-version.txt
+raw/setup-windows-helpers.txt
+raw/source-seal-and-diff-guard.txt
+raw/STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md.txt
+raw/targeted-build-test-summary.txt
+raw/toolchain-and-helper-state.txt
+raw/where-zip.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_20260830-084705.txt
+PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_20260830-084705.md
+
+===== RAW FILE: setup-windows-helpers.txt =====
+command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\setup_windows_helpers.ps1 -Install
+started=08/30/2026 08:50:02
+ended=08/30/2026 08:50:05
+elapsedSeconds=2.807
+exit=0
+HELPER pdftotext=PASS path=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe
+HELPER zip_reader=PASS path=C:\WINDOWS\System32\tar.exe
+HELPER zstd=PASS path=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe
+PERSONALRAG_PDFTOTEXT=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\pdftotext.exe
+PERSONALRAG_UNZIP=C:\WINDOWS\System32\tar.exe
+PERSONALRAG_ZSTD=C:\Users\bokop\AppData\Local\Microsoft\WinGet\Packages\oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe\poppler-25.07.0\Library\bin\zstd.exe
+
+===== RAW FILE: source-seal-and-diff-guard.txt =====
+===== git switch main =====
+command: git -C C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705 switch main
+Your branch is up to date with 'origin/main'.
+Already on 'main'
+exit=0
+elapsedSeconds=0.062
+
+===== git pull --ff-only origin main =====
+command: git -C C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705 pull --ff-only origin main
+From https://github.com/bokoprin/PersonalRag
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+exit=0
+elapsedSeconds=0.624
+
+===== source seal =====
+HEAD=a668f73058f2966b2688909cfa6dc673e37d52a1
+HEAD_TREE=5aacff6bc19e12e2b769c5e819a1a280ced4206b
+branch=main
+statusExit=0
+statusPorcelainLines=0
+
+===== verify_source_manifest =====
+command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705\tools\verify_source_manifest.ps1
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./.gitignore
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./P0_RESULT_2026-08-28.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./STEP12_CONTENT_SEARCH_CANONICAL_2026-08-28.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./STEP2_PERSISTENT_Q45_INTEGRATION_2026-08-28.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./STEP2_Q45_FILTER_VERIFIER_WAVE_2026-08-28.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./STEP3_METADATA_INDEX_CANONICAL_2026-08-28.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./STEP4_INCREMENTAL_INDEX_CANONICAL_2026-08-29.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./STEP5_DOCUMENT_EXTRACTION_CANONICAL_2026-08-29.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./STEP6_GUI_CANONICAL_2026-08-29.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./docs/PERFORMANCE_SLO.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./docs/V2_DOCUMENT_EXTRACTION.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./docs/V2_METADATA_INDEX.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./docs/V2_PERSISTENT_FORMAT.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./docs/V2_SEARCH_ARCHITECTURE.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./docs/V2_SEARCH_SEMANTICS.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./docs/V2_SEARCH_SEMANTICS_FROZEN_STEP1.md
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/controlled-4mib-affinity.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/controlled-96mib-affinity.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/q45-wave/baseline-96mib-before.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/q45-wave/final-96mib-q45.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/q45-wave/scale-256mib-cd.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/q45-wave/small-4mib-d.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/q45-wave/verifier-after-same-96mib.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step12-final/persistent-256mib-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step12-final/persistent-4mib-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step12-final/persistent-96mib-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file:
+./evidence/step2-persistent-q45/persistent-256mib-affinity.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file:
+./evidence/step2-persistent-q45/persistent-96mib-affinity.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step3-metadata/metadata-100k-seal.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step3-metadata/metadata-1m-load-seal.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step3-metadata/metadata-1m-seal.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file:
+./evidence/step4-incremental/crash-restart-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step4-incremental/crash-restart.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file:
+./evidence/step4-incremental/full-regression-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step4-incremental/full-regression.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file:
+./evidence/step4-incremental/storm-1m-final.time.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step4-incremental/storm-1m-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step4-incremental/storm-1m.time.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step4-incremental/storm-1m.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file:
+./evidence/step4-incremental/windows-usn-typecheck-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file:
+./evidence/step5-document/document-focused-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step5-document/full-regression-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step6-gui/full-regression-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step6-gui/gui-focused-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./evidence/step6-gui/release-final.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./rust-toolchain.toml
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/bin/incremental_storm_bench.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/bin/metadata_bench.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/bin/persistent_bench.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/gui.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/main.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/metadata.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/pattern.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/persistent.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/unicode.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/unicode_tables.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/usn.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./src/windows_usn.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/document_extraction.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/gui_search.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/incremental_index.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/metadata_index.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/p0_search.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/persistent_index.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/search_semantics.rs
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tests/unicode_oracle_vectors.txt
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tools/generate_unicode_oracle_vectors.py
+WARNING: Accepted legacy CRLF worktree bytes for LF-canonical file: ./tools/generate_unicode_tables.py
+SOURCE_MANIFEST: 91/91 PASS normalized_legacy_crlf=68
+exit=0
+elapsedSeconds=2.985
+
+===== diff guard =====
+baseCommit=a33a32a81a344cdbdeee14431fe71a159afe2471
+baseCommitExists=True
+diffExit=0
+M	AGENTS.md
+M	README.md
+M	SOURCE_MANIFEST.sha256
+A	STEP7_LAST_TWO_FIX_CANONICAL_2026-08-30.md
+A	STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md
+A	evidence/step7-last-two/final-summary.txt
+M	tests/document_extraction.rs
+M	tools/measure_product_capacity.ps1
+
+unexpectedProductOrCargoChanges=0
+
+diffGuardResult=PASS
+
+===== RAW FILE: STEP7_WINDOWS_TARGETED_CLOSURE_CODEX_2026-08-30.md.txt =====
+# PersonalRag Step 7 Windows Targeted Closure — Codex Instructions
+
+Date: 2026-08-30
+Purpose: close the two final verification defects after the full real-machine E2E report `2ee23681f9f1a09864c421fa9e974fb003ea84af`.
+
+## 1. Why this is targeted
+
+The previous real-machine E2E already passed:
+
+- `S7-BUILD-001`
+- `S7-BUILD-002`
+- `S7-GUI-001`
+- `S7-INCREMENTAL-001`
+- `S7-INIT-001`
+- `S7-USN-001`
+- `S7-DOC-001`
+- `S7-CAPACITY-001`
+
+and also passed real PDF/DOCX/XLSX/PPTX product GUI search, restart, fail-closed recovery, and normal-user live watch.
+
+The only unresolved Step 7 issue was `S7-DOC-002`: the repository test fixture generator required a separate `zip.exe`. A second verification-tool anomaly was Windows PowerShell 5.1 incompatibility in `tools/measure_product_capacity.ps1`.
+
+The new canonical source is expected to differ from the previous product-E2E source only in tests/tools/documentation/evidence. If `src/`, Cargo dependency files, or frozen-format/product implementation files changed unexpectedly, do not use this targeted procedure; report `TARGETED_RETEST_INVALID`.
+
+## 2. Hard rules
+
+- Run on the user's real native Windows machine.
+- Use a brand-new disposable clone of latest GitHub `main`.
+- Do not modify source, tests, Cargo files, specifications, or `SOURCE_MANIFEST.sha256`.
+- Do not repair failures during verification.
+- No unexecuted item may be called PASS.
+- Do not rerun the entire manual GUI/watch matrix unless the source-diff guard below shows product implementation changed.
+- Reports only may be pushed to `reports/step7-windows-closure-<timestamp>`; never push/merge `main`.
+
+## 3. Fresh clone and source seal
+
+```powershell
+git clone https://github.com/bokoprin/PersonalRag.git PersonalRag-Step7-Closure
+cd PersonalRag-Step7-Closure
+git switch main
+git pull --ff-only origin main
+git rev-parse HEAD
+git rev-parse HEAD^{tree}
+git status --porcelain
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\verify_source_manifest.ps1
+```
+
+Required: clean checkout and manifest PASS.
+
+## 4. Product-source diff guard
+
+Previous full real-machine E2E product source:
+
+```text
+a33a32a81a344cdbdeee14431fe71a159afe2471
+```
+
+Run:
+
+```powershell
+git diff --name-status a33a32a81a344cdbdeee14431fe71a159afe2471..HEAD
+```
+
+Expected functional changes are limited to:
+
+- `tests/document_extraction.rs`
+- `tools/measure_product_capacity.ps1`
+- final Step 7 documentation / AGENTS / evidence / manifest
+
+There must be **no unexpected `src/` change and no Cargo dependency/format change**. If such a change exists, stop and report `TARGETED_RETEST_INVALID`.
+
+## 5. Toolchain and helpers
+
+Required Rust/Cargo: 1.97.1.
+
+```powershell
+rustc --version
+cargo --version
+git --version
+.\target\release\personalrag-v2-indexer.exe helpers
+```
+
+If release binaries do not exist yet, build them first.
+
+The previous E2E already installed/located Poppler, native Windows `tar.exe`, and Zstandard. If a required helper is missing, the user authorizes only:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\setup_windows_helpers.ps1 -Install
+```
+
+Do not install a separate `zip.exe`; this retest specifically verifies it is no longer required.
+
+## 6. Final Windows build/test gate
+
+Run exactly:
+
+```powershell
+cargo fmt --all -- --check
+cargo clippy --offline --locked --all-targets -- -D warnings
+cargo build --offline --locked --release
+where.exe zip
+cargo test --offline --locked
+cargo test --offline --locked --test document_extraction -- --nocapture
+cargo test --offline --locked --test windows_document_helper -- --nocapture
+```
+
+`where.exe zip` may return not found; that is acceptable and desirable evidence that the repository test no longer depends on a separate `zip.exe`.
+
+Acceptance:
+
+- fmt PASS,
+- clippy PASS,
+- release build PASS,
+- full `cargo test` has zero failures,
+- Windows `document_extraction` is expected to report **10/10 PASS**,
+- `windows_document_helper` PASS,
+- no failure may be attributed to missing `zip.exe`.
+
+Re-evaluate `S7-DOC-002`.
+
+## 7. Windows PowerShell 5.1 capacity-tool closure
+
+This section must use **Windows PowerShell 5.1**, i.e. `powershell.exe`, not only `pwsh`.
+
+Run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB "4,96,256" -Indexer ".\target\release\personalrag-v2-indexer.exe"
+```
+
+Expected:
+
+- `CAPACITY_REQUEST mib=4,96,256`
+- 4 MiB hard gate PASS
+- 96 MiB hard gate PASS
+- 256 MiB hard gate PASS
+- no parser error
+- no accidental giant request
+
+Record exact ratios.
+
+Then verify the safety bound:
+
+```powershell
+$before = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'PersonalRag-Capacity-*' -ErrorAction SilentlyContinue).Count
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\measure_product_capacity.ps1 -MiB "496256" -Indexer ".\target\release\personalrag-v2-indexer.exe"
+$oversizedExit = $LASTEXITCODE
+$after = @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter 'PersonalRag-Capacity-*' -ErrorAction SilentlyContinue).Count
+```
+
+Acceptance:
+
+- oversized invocation returns non-zero,
+- error explicitly rejects the MiB value,
+- `$after -eq $before`,
+- no large temporary tree is created.
+
+## 8. Final source cleanliness
+
+```powershell
+git diff --check
+git status --porcelain
+```
+
+Both must be clean/zero before report publication.
+
+## 9. Closure decision
+
+If all targeted checks pass:
+
+- `S7-DOC-002 = PASS`
+- capacity PowerShell 5.1 anomaly = CLOSED
+- retain all unchanged product-path PASS results from report commit `2ee23681f9f1a09864c421fa9e974fb003ea84af`
+- final result: **`STEP7_COMPLETE`**
+
+If any targeted check fails, final result is **`STEP7_NOT_COMPLETE`** and record the exact command/error without modifying product source.
+
+## 10. Report publication
+
+Create only:
+
+```text
+reports/step7-windows-closure-<timestamp>/
+  PersonalRag_STEP7_WINDOWS_CLOSURE_REPORT_<timestamp>.md
+  PersonalRag_STEP7_WINDOWS_CLOSURE_COMMANDS_<timestamp>.txt
+  PersonalRag_STEP7_WINDOWS_CLOSURE_LOGS_<timestamp>.txt
+  PersonalRag_STEP7_WINDOWS_CLOSURE_RESULTS_<timestamp>.zip
+  SHA256SUMS.txt
+  README.md
+```
+
+Commit/push that directory only to `reports/step7-windows-closure-<timestamp>`.
+
+The report must state:
+
+- latest HEAD/tree,
+- source manifest result,
+- diff-guard result,
+- Rust/Cargo versions,
+- helper state,
+- full cargo-test counts,
+- `document_extraction` count,
+- `where.exe zip` result,
+- exact PowerShell 5.1 capacity ratios,
+- oversized-request rejection evidence,
+- source checkout final cleanliness,
+- `S7-DOC-002` result,
+- final `STEP7_COMPLETE` or `STEP7_NOT_COMPLETE`.
+
+
+===== RAW FILE: targeted-build-test-summary.txt =====
+cargo fmt --all -- --check exit=0 elapsedSeconds=1.159 log=cargo-fmt.txt
+cargo clippy --offline --locked --all-targets -- -D warnings exit=0 elapsedSeconds=2.456 log=cargo-clippy.txt
+cargo build --offline --locked --release exit=0 elapsedSeconds=13.07 log=cargo-build-release.txt
+where.exe zip exit=1 elapsedSeconds=0.036 log=where-zip.txt
+cargo test --offline --locked exit=0 elapsedSeconds=42.631 log=cargo-test-full.txt
+cargo test --offline --locked --test document_extraction -- --nocapture exit=0 elapsedSeconds=1.325 log=cargo-test-document-extraction.txt
+cargo test --offline --locked --test windows_document_helper -- --nocapture exit=0 elapsedSeconds=1.166 log=cargo-test-windows-document-helper.txt
+
+===== RAW FILE: toolchain-and-helper-state.txt =====
+===== rustc --version =====
+command: rustc --version
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+exit=0
+elapsedSeconds=0.136
+
+===== cargo --version =====
+command: cargo --version
+cargo 1.97.1 (c980f4866 2026-06-30)
+exit=0
+elapsedSeconds=0.054
+
+===== git --version =====
+command: git --version
+git version 2.52.0.windows.1
+exit=0
+elapsedSeconds=0.022
+
+===== release binary precheck =====
+indexer=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705\target\release\personalrag-v2-indexer.exe
+exists=False
+
+helper.pdftotext=NOT_FOUND
+helper.tar=C:\WINDOWS\system32\tar.exe
+helper.zstd=NOT_FOUND
+helper.zip=NOT_FOUND
+
+
+===== RAW FILE: where-zip.txt =====
+label=where.exe zip
+command=where.exe zip
+workingDirectory=C:\Users\bokop\AppData\Local\PersonalRag\Step7-Closure-Fresh-20260830-084705
+started=2026-08-30T08:51:02.4182438+09:00
+INFO: Could not find files for the given pattern(s).
+ended=2026-08-30T08:51:02.4547488+09:00
+elapsedSeconds=0.036
+exit=1
