@@ -1121,8 +1121,14 @@ mod tests {
         let volume = fake_volume(&root, "resume");
         let calls = AtomicUsize::new(0);
         let mut stop = || calls.fetch_add(1, Ordering::SeqCst) >= 1;
-        let first =
-            build_or_resume_metadata(&paths, &volume, std::slice::from_ref(&app_root), 2, &mut stop).unwrap();
+        let first = build_or_resume_metadata(
+            &paths,
+            &volume,
+            std::slice::from_ref(&app_root),
+            2,
+            &mut stop,
+        )
+        .unwrap();
         assert!(!first.complete);
         assert!(first.committed_segments > 0);
 
