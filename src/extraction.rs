@@ -555,6 +555,33 @@ pub(crate) fn build_corpus_with_documents(
     let mut paths = Vec::new();
     collect_ingest_files(root, root, &mut paths)?;
     paths.sort();
+    let relative_paths = paths
+        .into_iter()
+        .map(|path| path.strip_prefix(root).unwrap_or(&path).to_path_buf())
+        .collect::<Vec<_>>();
+    let (corpus, draft, skipped) = build_corpus_from_relative_paths_with_documents(
+        root,
+        &relative_paths,
+        generation,
+        parent_generation,
+        config,
+        false,
+    )?;
+    debug_assert!(skipped.is_empty());
+    Ok((corpus, draft))
+}
+
+pub(crate) fn build_corpus_from_relative_paths_with_documents(
+    root: &Path,
+    relative_paths: &[PathBuf],
+    generation: u64,
+    parent_generation: u64,
+    config: &ExtractorConfig,
+    best_effort: bool,
+) -> Result<(Corpus, VerificationDraft, Vec<PathBuf>)> {
+    let mut paths = relative_paths.to_vec();
+    paths.sort();
+    paths.dedup();
 
     let mut corpus = Corpus::from_documents(Vec::<(String, Vec<u8>)>::new());
     let mut draft = VerificationDraft {
@@ -562,9 +589,19 @@ pub(crate) fn build_corpus_with_documents(
         parent_generation,
         records: Vec::new(),
     };
-    for path in paths {
-        let source = fs::read(&path)?;
-        let relative_exact = path.strip_prefix(root).unwrap_or(&path).to_path_buf();
+    let mut skipped = Vec::new();
+
+    for relative_exact in paths {
+        let path = root.join(&relative_exact);
+        let source = match fs::read(&path) {
+            Ok(source) => source,
+            Err(error) if best_effort => {
+                let _ = error;
+                skipped.push(relative_exact);
+                continue;
+            }
+            Err(error) => return Err(error.into()),
+        };
         let display = relative_exact.to_string_lossy().replace('\\', "/");
         let source_modified_ns = fs::metadata(&path)
             .ok()
@@ -575,10 +612,23 @@ pub(crate) fn build_corpus_with_documents(
 
         let file_id = corpus.files.len() as u32;
         let source_crc64 = crc64_ecma(&source);
-        if let Some(_kind) = document_kind(&relative_exact) {
-            let extracted = extract_document(&path, config)?;
+        if document_kind(&relative_exact).is_some() {
+            let document = (|| -> Result<(ExtractedDocument, Vec<u8>)> {
+                let extracted = extract_document(&path, config)?;
+                let raw = extracted.verification_stream();
+                let compressed = run_filter(&config.zstd, &["-q", "-3", "-c"], &raw)?;
+                Ok((extracted, compressed))
+            })();
+            let (extracted, compressed) = match document {
+                Ok(value) => value,
+                Err(error) if best_effort => {
+                    let _ = error;
+                    skipped.push(relative_exact);
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             let raw = extracted.verification_stream();
-            let compressed = run_filter(&config.zstd, &["-q", "-3", "-c"], &raw)?;
             corpus.selected_source_bytes = corpus
                 .selected_source_bytes
                 .saturating_add(source.len() as u64);
@@ -625,10 +675,12 @@ pub(crate) fn build_corpus_with_documents(
                 &mut corpus.units,
                 &mut corpus.searchable_normalized_bytes,
             );
+        } else if best_effort {
+            skipped.push(relative_exact);
         }
     }
     corpus.blocks = crate::pack_blocks(&corpus.units);
-    Ok((corpus, draft))
+    Ok((corpus, draft, skipped))
 }
 
 pub(crate) fn verification_file_name(generation: u64) -> String {

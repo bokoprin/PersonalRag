@@ -313,6 +313,17 @@ impl PersistentIndex {
             .map(|entry| entry.path.as_path())
     }
 
+    pub fn file_source_identity(&self, file_id: u32) -> Option<(&Path, u64, u64, u128)> {
+        self.files.get(file_id as usize).map(|entry| {
+            (
+                entry.path.as_path(),
+                entry.selected_bytes,
+                entry.source_crc64,
+                entry.source_modified_ns,
+            )
+        })
+    }
+
     pub fn search_first_batch_with_overlay(
         &self,
         query: &str,
@@ -836,6 +847,66 @@ pub fn publish_generation_with_extraction(
             block_count: corpus.blocks.len(),
         },
     })
+}
+
+pub fn publish_generation_from_paths_with_extraction(
+    root: impl AsRef<Path>,
+    store_dir: impl AsRef<Path>,
+    generation: u64,
+    parent_generation: u64,
+    relative_paths: &[PathBuf],
+    config: &crate::extraction::ExtractorConfig,
+) -> Result<(PublishedGeneration, Vec<PathBuf>)> {
+    const PRODUCT_CAPACITY_FLOOR: u64 = 4 * 1024 * 1024;
+
+    let root = root.as_ref();
+    let store_dir = store_dir.as_ref();
+    fs::create_dir_all(store_dir)?;
+    let (corpus, verification_draft, skipped) =
+        crate::extraction::build_corpus_from_relative_paths_with_documents(
+            root,
+            relative_paths,
+            generation,
+            parent_generation,
+            config,
+            true,
+        )?;
+    let filter = PrototypeIndex::build(&corpus);
+    let (bytes, q45_bytes) = serialize_production(&corpus, &filter, generation, parent_generation)?;
+    let verification_bytes = verification_draft.serialize()?;
+    let combined = bytes.len().saturating_add(verification_bytes.len()) as u64;
+    let combined_ratio = ratio(combined, corpus.selected_source_bytes);
+    if corpus.selected_source_bytes >= PRODUCT_CAPACITY_FLOOR && combined_ratio > 0.10 {
+        return Err(PersistentError::CapacityExceeded(combined_ratio));
+    }
+    let verification_path = store_dir.join(crate::extraction::verification_file_name(generation));
+    atomic_write_new(&verification_path, &verification_bytes)?;
+    let file_name = generation_file_name(generation);
+    let path = store_dir.join(&file_name);
+    if let Err(error) = atomic_write_new(&path, &bytes) {
+        let _ = fs::remove_file(&verification_path);
+        return Err(error);
+    }
+    write_advisory_current(store_dir, &file_name)?;
+    sync_directory(store_dir)?;
+    Ok((
+        PublishedGeneration {
+            generation,
+            parent_generation,
+            path,
+            capacity: PersistentCapacityReport {
+                generation,
+                selected_source_bytes: corpus.selected_source_bytes,
+                searchable_normalized_bytes: corpus.searchable_normalized_bytes,
+                total_index_bytes: bytes.len() as u64,
+                verification_bytes: verification_bytes.len() as u64,
+                q45_bytes: q45_bytes as u64,
+                file_count: corpus.files.len(),
+                block_count: corpus.blocks.len(),
+            },
+        },
+        skipped,
+    ))
 }
 
 pub fn publish_next_generation(
