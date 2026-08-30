@@ -1,5 +1,7 @@
 mod content;
+mod runtime;
 pub use content::*;
+pub use runtime::*;
 
 use crate::metadata::{MetadataFileKind, MetadataIndex, MetadataRecord, MetadataSearchRequest};
 use crate::persistent::crc64_ecma;
