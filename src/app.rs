@@ -1,4 +1,6 @@
 mod content;
+mod content_dirty;
+mod incremental_runtime;
 mod metadata_build;
 mod runtime;
 mod startup;
@@ -6,6 +8,8 @@ mod state_io;
 mod volume;
 
 pub use content::*;
+pub use content_dirty::{DirtyContentStatus, dirty_content_status};
+pub use incremental_runtime::{IncrementalCheckpointStatus, IncrementalMetadataStatus};
 pub use metadata_build::*;
 pub use runtime::*;
 pub use startup::*;
@@ -15,6 +19,7 @@ pub use volume::{
 };
 pub(super) use volume::{write_app_catalog, write_volume_manifest};
 
+use crate::incremental::DeltaOverlay;
 use crate::metadata::{MetadataIndex, MetadataRecord, MetadataSearchRequest};
 use std::fmt;
 use std::io;
@@ -25,6 +30,7 @@ pub enum AppError {
     Io(io::Error),
     Metadata(crate::metadata::MetadataError),
     Persistent(crate::persistent::PersistentError),
+    Incremental(crate::incremental::IncrementalError),
     Product(crate::product::ProductError),
     InvalidState(String),
     Unsupported(String),
@@ -36,6 +42,7 @@ impl fmt::Display for AppError {
             Self::Io(error) => write!(f, "I/O error: {error}"),
             Self::Metadata(error) => write!(f, "metadata error: {error}"),
             Self::Persistent(error) => write!(f, "persistent error: {error}"),
+            Self::Incremental(error) => write!(f, "incremental error: {error}"),
             Self::Product(error) => write!(f, "product error: {error}"),
             Self::InvalidState(message) => f.write_str(message),
             Self::Unsupported(message) => f.write_str(message),
@@ -63,6 +70,12 @@ impl From<crate::persistent::PersistentError> for AppError {
     }
 }
 
+impl From<crate::incremental::IncrementalError> for AppError {
+    fn from(value: crate::incremental::IncrementalError) -> Self {
+        Self::Incremental(value)
+    }
+}
+
 impl From<crate::product::ProductError> for AppError {
     fn from(value: crate::product::ProductError) -> Self {
         Self::Product(value)
@@ -79,7 +92,12 @@ pub struct AppMetadataHit {
 }
 
 pub struct FederatedMetadataIndex {
-    volumes: Vec<(DiscoveredVolume, VolumeManifest, MetadataIndex)>,
+    volumes: Vec<(
+        DiscoveredVolume,
+        VolumeManifest,
+        MetadataIndex,
+        Option<DeltaOverlay>,
+    )>,
 }
 
 impl FederatedMetadataIndex {
@@ -94,7 +112,11 @@ impl FederatedMetadataIndex {
                 continue;
             };
             let metadata = MetadataIndex::load_snapshot(store.join("metadata").join(file_name))?;
-            loaded.push((volume.clone(), manifest, metadata));
+            let delta = incremental_runtime::load_volume_incremental_with_base(
+                paths, volume, &manifest, &metadata,
+            )?
+            .map(|loaded| loaded.delta);
+            loaded.push((volume.clone(), manifest, metadata, delta));
         }
         Ok(Self { volumes: loaded })
     }
@@ -102,7 +124,12 @@ impl FederatedMetadataIndex {
     pub fn metadata_records(&self) -> usize {
         self.volumes
             .iter()
-            .map(|(_, _, metadata)| metadata.records().len())
+            .map(|(_, _, metadata, delta)| {
+                delta.as_ref().map_or_else(
+                    || metadata.records().len(),
+                    |value| value.materialize_records(metadata).len(),
+                )
+            })
             .sum()
     }
 
@@ -115,27 +142,41 @@ impl FederatedMetadataIndex {
     ) -> Vec<AppMetadataHit> {
         let max_results = max_results.max(1);
         let mut out = Vec::new();
-        for (volume, _, metadata) in &self.volumes {
+        for (volume, _, metadata, delta) in &self.volumes {
             let path_query =
                 full_path.and_then(|query| path_query_for_volume(query, &volume.mount));
             if full_path.is_some() && path_query.is_none() {
                 continue;
             }
-            let outcome = metadata.search(MetadataSearchRequest {
+            let request = MetadataSearchRequest {
                 filename,
                 full_path: path_query,
                 case_sensitive,
                 max_results,
-            });
-            for hit in outcome.hits {
-                let Some(record) = metadata.records().get(hit.record_index as usize) else {
-                    continue;
-                };
-                out.push(AppMetadataHit {
-                    volume: volume.key.clone(),
-                    absolute_path: volume.mount.join(&record.path),
-                    record: record.clone(),
-                });
+            };
+            if let Some(delta) = delta {
+                for hit in delta.metadata_search(metadata, request) {
+                    let Some(record) = delta.current_record(metadata, hit.file_id) else {
+                        continue;
+                    };
+                    out.push(AppMetadataHit {
+                        volume: volume.key.clone(),
+                        absolute_path: volume.mount.join(&record.path),
+                        record: record.clone(),
+                    });
+                }
+            } else {
+                let outcome = metadata.search(request);
+                for hit in outcome.hits {
+                    let Some(record) = metadata.records().get(hit.record_index as usize) else {
+                        continue;
+                    };
+                    out.push(AppMetadataHit {
+                        volume: volume.key.clone(),
+                        absolute_path: volume.mount.join(&record.path),
+                        record: record.clone(),
+                    });
+                }
             }
         }
         out.sort_by(|left, right| {
@@ -241,6 +282,55 @@ mod tests {
             mount: root.to_path_buf(),
             serial: 1,
         }
+    }
+
+    #[test]
+    fn startup_recovers_from_corrupt_latest_metadata_manifest() {
+        let base = temp_dir("manifest-recovery");
+        let app_root = base.join("app");
+        let root = base.join("root");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("stable.txt"), "stable").unwrap();
+
+        let paths = AppPaths::for_root(&app_root);
+        paths.ensure().unwrap();
+        let volume = fake_volume(&root, "recover");
+        let mut never_stop = || false;
+        build_or_resume_metadata(
+            &paths,
+            &volume,
+            std::slice::from_ref(&app_root),
+            1,
+            &mut never_stop,
+        )
+        .unwrap();
+
+        let store = paths.volume_store(&volume.key);
+        let valid = load_volume_manifest(&store).unwrap().unwrap();
+        let corrupt_name = "metadata-corrupt.prmet".to_string();
+        fs::write(store.join("metadata").join(&corrupt_name), b"corrupt").unwrap();
+        let corrupt = VolumeManifest {
+            generation: valid.generation + 1,
+            key: valid.key.clone(),
+            mount: valid.mount.clone(),
+            phase: VolumePhase::Ready,
+            metadata_generation: valid.metadata_generation + 1,
+            metadata_file: Some(corrupt_name),
+            metadata_records: valid.metadata_records,
+            inaccessible_directories: valid.inaccessible_directories,
+        };
+        write_volume_manifest(&store, &corrupt).unwrap();
+        assert_eq!(
+            load_volume_manifest(&store).unwrap().unwrap().generation,
+            corrupt.generation
+        );
+
+        let recovered = volume::recover_volume_manifest(&store).unwrap().unwrap();
+        assert_eq!(recovered.metadata_file, valid.metadata_file);
+        assert!(recovered.generation > corrupt.generation);
+        let current = load_volume_manifest(&store).unwrap().unwrap();
+        assert_eq!(current.metadata_file, valid.metadata_file);
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

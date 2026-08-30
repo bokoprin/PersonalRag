@@ -272,6 +272,56 @@ where
     })
 }
 
+#[cfg(any(windows, test))]
+pub(super) fn metadata_record_for_existing_path(
+    volume: &DiscoveredVolume,
+    path: &Path,
+) -> Result<Option<MetadataRecord>> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let file_type = metadata.file_type();
+    let relative = path
+        .strip_prefix(&volume.mount)
+        .unwrap_or(path)
+        .to_path_buf();
+    let kind = if file_type.is_file() {
+        MetadataFileKind::File
+    } else if file_type.is_dir() {
+        MetadataFileKind::Directory
+    } else if file_type.is_symlink() {
+        MetadataFileKind::Symlink
+    } else {
+        MetadataFileKind::Other
+    };
+    let file_id = product::platform_file_id(path, &metadata)?;
+    let searchable = file_type.is_file()
+        && (crate::is_searchable_path(&relative)
+            || crate::extraction::is_extractable_document(&relative));
+    Ok(Some(MetadataRecord {
+        file_id,
+        path: relative.clone(),
+        source_root: 0,
+        size: if file_type.is_file() {
+            metadata.len()
+        } else {
+            0
+        },
+        modified_ns: metadata_modified_ns(&metadata),
+        kind,
+        content_searchable: searchable,
+        extractable: file_type.is_file() && crate::extraction::is_extractable_document(&relative),
+    }))
+}
+
+#[cfg(any(windows, test))]
+pub(super) fn directory_is_reparse_point(path: &Path) -> Result<bool> {
+    let metadata = fs::symlink_metadata(path)?;
+    Ok(metadata.is_dir() && is_directory_reparse_point(&metadata))
+}
+
 fn metadata_modified_ns(metadata: &fs::Metadata) -> u128 {
     metadata
         .modified()

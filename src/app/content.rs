@@ -84,6 +84,7 @@ struct LoadedContentVolume {
     metadata: MetadataIndex,
     stable_to_record: HashMap<u64, usize>,
     shards: Vec<LoadedShard>,
+    content_dirty_ids: HashSet<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -114,8 +115,26 @@ impl FederatedContentIndex {
             let Some(metadata_file) = manifest.metadata_file.as_deref() else {
                 continue;
             };
-            let metadata =
+            let base_metadata =
                 MetadataIndex::load_snapshot(store.join("metadata").join(metadata_file))?;
+            let metadata = match super::incremental_runtime::load_volume_incremental_with_base(
+                paths,
+                volume,
+                &manifest,
+                &base_metadata,
+            )? {
+                Some(loaded) if loaded.delta.change_count() > 0 => {
+                    MetadataIndex::build(loaded.delta.materialize_records(&base_metadata))?
+                }
+                _ => base_metadata,
+            };
+            let content_dirty_ids = super::content_dirty::load_for_metadata(
+                paths,
+                volume,
+                manifest.metadata_generation,
+            )?
+            .map(|state| state.ids.into_iter().collect::<HashSet<_>>())
+            .unwrap_or_default();
             let stable_to_record = metadata
                 .records()
                 .iter()
@@ -133,6 +152,7 @@ impl FederatedContentIndex {
                 metadata,
                 stable_to_record,
                 shards,
+                content_dirty_ids,
             });
         }
         Ok(Self {
@@ -167,7 +187,9 @@ impl FederatedContentIndex {
                         continue;
                     };
                     let record = &volume.metadata.records()[*record_index];
-                    if record.size != entry.source_size
+                    if volume.content_dirty_ids.contains(&entry.stable_file_id)
+                        || !record.content_searchable
+                        || record.size != entry.source_size
                         || record.modified_ns != entry.modified_ns
                         || newest_valid.get(&entry.stable_file_id).copied()
                             != Some(shard.generation)
@@ -266,7 +288,11 @@ fn newest_valid_shards(volume: &LoadedContentVolume) -> HashMap<u64, u64> {
                 continue;
             };
             let record = &volume.metadata.records()[*record_index];
-            if record.size == entry.source_size && record.modified_ns == entry.modified_ns {
+            if !volume.content_dirty_ids.contains(&entry.stable_file_id)
+                && record.content_searchable
+                && record.size == entry.source_size
+                && record.modified_ns == entry.modified_ns
+            {
                 newest.insert(entry.stable_file_id, shard.generation);
             }
         }
@@ -321,6 +347,17 @@ pub(super) fn build_content_step_trusted(
     build_content_step_impl(app_paths, volume, extractor, options, false)
 }
 
+fn completed_volume_phase(app_paths: &AppPaths, volume: &DiscoveredVolume) -> Result<VolumePhase> {
+    Ok(
+        if super::incremental_runtime::incremental_metadata_status(app_paths, volume)?.content_dirty
+        {
+            VolumePhase::ContentCatchUp
+        } else {
+            VolumePhase::Ready
+        },
+    )
+}
+
 fn build_content_step_impl(
     app_paths: &AppPaths,
     volume: &DiscoveredVolume,
@@ -354,7 +391,11 @@ fn build_content_step_impl(
         && state.complete
         && state.cursor >= total_files
     {
-        ensure_volume_phase(&volume_store, &metadata_manifest, VolumePhase::Ready)?;
+        ensure_volume_phase(
+            &volume_store,
+            &metadata_manifest,
+            completed_volume_phase(app_paths, volume)?,
+        )?;
         return Ok(report_from_state(state));
     }
 
@@ -393,7 +434,11 @@ fn build_content_step_impl(
         state.complete = true;
         state.cursor = total_files;
         write_content_set(&volume_store, &state)?;
-        ensure_volume_phase(&volume_store, &metadata_manifest, VolumePhase::Ready)?;
+        ensure_volume_phase(
+            &volume_store,
+            &metadata_manifest,
+            completed_volume_phase(app_paths, volume)?,
+        )?;
         return Ok(report_from_state(&state));
     }
 
@@ -478,9 +523,450 @@ fn build_content_step_impl(
     state.complete = state.cursor >= total_files;
     write_content_set(&volume_store, &state)?;
     if state.complete {
-        ensure_volume_phase(&volume_store, &metadata_manifest, VolumePhase::Ready)?;
+        ensure_volume_phase(
+            &volume_store,
+            &metadata_manifest,
+            completed_volume_phase(app_paths, volume)?,
+        )?;
     }
     Ok(report_from_state(&state))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContentCatchUpReport {
+    pub pending_before: usize,
+    pub pending_after: usize,
+    pub published_files: usize,
+    pub skipped_files: usize,
+    pub shard_count: usize,
+    pub complete: bool,
+}
+
+pub(super) fn reuse_complete_content_set_for_metadata_generation(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    metadata: &MetadataIndex,
+    metadata_generation: u64,
+) -> Result<bool> {
+    reuse_complete_content_set_for_metadata_generation_with_dirty(
+        app_paths,
+        volume,
+        extractor,
+        metadata,
+        metadata_generation,
+        &std::collections::BTreeSet::new(),
+    )
+}
+
+pub(super) fn reuse_complete_content_set_for_metadata_generation_with_dirty(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    metadata: &MetadataIndex,
+    metadata_generation: u64,
+    dirty_ids: &std::collections::BTreeSet<u64>,
+) -> Result<bool> {
+    let volume_store = app_paths.volume_store(&volume.key);
+    let Some((previous, mut shards)) =
+        load_valid_content_set_with_shards(&volume_store, volume, extractor)?
+    else {
+        return Ok(false);
+    };
+    if !previous.complete {
+        return Ok(false);
+    }
+    let records = metadata
+        .records()
+        .iter()
+        .map(|record| (record.file_id, record))
+        .collect::<HashMap<_, _>>();
+    shards.sort_by_key(|shard| std::cmp::Reverse(shard.generation));
+    let mut covered = HashSet::new();
+    for shard in &shards {
+        for entry in &shard.entries {
+            if covered.contains(&entry.stable_file_id) || dirty_ids.contains(&entry.stable_file_id)
+            {
+                continue;
+            }
+            let Some(record) = records.get(&entry.stable_file_id).copied() else {
+                continue;
+            };
+            if record.content_searchable
+                && record.size == entry.source_size
+                && record.modified_ns == entry.modified_ns
+            {
+                covered.insert(entry.stable_file_id);
+            }
+        }
+    }
+    if metadata.records().iter().any(|record| {
+        record.content_searchable
+            && !dirty_ids.contains(&record.file_id)
+            && !covered.contains(&record.file_id)
+    }) {
+        return Ok(false);
+    }
+    let total_files = metadata
+        .records()
+        .iter()
+        .filter(|record| record.content_searchable)
+        .count();
+    let next = ContentSetState {
+        generation: next_content_set_generation(&volume_store)?,
+        metadata_generation,
+        cursor: total_files,
+        total_files,
+        skipped_files: previous.skipped_files,
+        complete: true,
+        shards: previous.shards,
+    };
+    write_content_set(&volume_store, &next)?;
+    Ok(true)
+}
+
+pub fn catch_up_dirty_content_step(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    options: ContentBuildOptions,
+) -> Result<ContentCatchUpReport> {
+    let volume_store = app_paths.volume_store(&volume.key);
+    let manifest = load_volume_manifest(&volume_store)?.ok_or_else(|| {
+        AppError::InvalidState("content catch-up requires metadata manifest".into())
+    })?;
+    let metadata = super::incremental_runtime::materialized_volume_metadata(app_paths, volume)?
+        .ok_or_else(|| AppError::InvalidState("content catch-up requires metadata".into()))?;
+    let dirty =
+        super::content_dirty::load_for_metadata(app_paths, volume, manifest.metadata_generation)?
+            .unwrap_or_default();
+    let pending_before = dirty.ids.len();
+    if pending_before == 0 {
+        if let Some(progress) = validated_content_progress(app_paths, volume, extractor)?
+            && progress.complete
+        {
+            ensure_volume_phase(&volume_store, &manifest, VolumePhase::Ready)?;
+        }
+        return Ok(ContentCatchUpReport {
+            pending_before: 0,
+            pending_after: 0,
+            published_files: 0,
+            skipped_files: 0,
+            shard_count: content_progress(app_paths, volume)?.map_or(0, |p| p.shard_count),
+            complete: true,
+        });
+    }
+
+    ensure_volume_phase(&volume_store, &manifest, VolumePhase::ContentCatchUp)?;
+    let records_by_id = metadata
+        .records()
+        .iter()
+        .map(|record| (record.file_id, record))
+        .collect::<HashMap<_, _>>();
+    let max_files = options.max_files_per_shard.max(1);
+    let max_bytes = options.max_source_bytes_per_shard.max(1);
+    let mut selected = Vec::new();
+    let mut remove_without_index = Vec::new();
+    let mut selected_bytes = 0_u64;
+    for file_id in &dirty.ids {
+        let Some(record) = records_by_id.get(file_id).copied() else {
+            remove_without_index.push(*file_id);
+            continue;
+        };
+        if !record.content_searchable {
+            remove_without_index.push(*file_id);
+            continue;
+        }
+        if selected.len() >= max_files {
+            break;
+        }
+        if !selected.is_empty() && selected_bytes.saturating_add(record.size) > max_bytes {
+            break;
+        }
+        selected_bytes = selected_bytes.saturating_add(record.size);
+        selected.push(record);
+    }
+
+    if !remove_without_index.is_empty() {
+        super::content_dirty::merge(
+            app_paths,
+            volume,
+            manifest.metadata_generation,
+            std::iter::empty(),
+            remove_without_index,
+        )?;
+    }
+
+    let mut published_files = 0_usize;
+    let mut skipped_files = 0_usize;
+    if !selected.is_empty() {
+        let content_dir = volume_store.join("content");
+        fs::create_dir_all(&content_dir)?;
+        let generation = next_content_generation(&content_dir)?;
+        let current = load_valid_content_set(&volume_store, volume, extractor)?;
+        let parent_generation = current
+            .as_ref()
+            .and_then(|state| state.shards.last().copied())
+            .unwrap_or(0);
+        let relative_paths = selected
+            .iter()
+            .map(|record| record.path.clone())
+            .collect::<Vec<_>>();
+        let (published, skipped) = publish_generation_from_paths_with_extraction(
+            &volume.mount,
+            &content_dir,
+            generation,
+            parent_generation,
+            &relative_paths,
+            extractor,
+        )?;
+        let index = load_generation_with_verification(
+            &volume.mount,
+            &content_dir,
+            published.generation,
+            extractor,
+        )?;
+        let path_to_record = selected
+            .iter()
+            .map(|record| (record.path.clone(), *record))
+            .collect::<HashMap<_, _>>();
+        let mut map = Vec::with_capacity(index.file_count());
+        for internal in 0..index.file_count() as u32 {
+            let relative = index.file_relative_path(internal).ok_or_else(|| {
+                AppError::InvalidState("content catch-up shard catalog is incomplete".into())
+            })?;
+            let record = path_to_record.get(relative).ok_or_else(|| {
+                AppError::InvalidState(format!(
+                    "content catch-up shard path missing from metadata: {}",
+                    relative.display()
+                ))
+            })?;
+            map.push(ContentShardEntry {
+                stable_file_id: record.file_id,
+                source_size: record.size,
+                modified_ns: record.modified_ns,
+            });
+        }
+        write_shard_map(
+            &content_dir,
+            published.generation,
+            manifest.metadata_generation,
+            &map,
+        )?;
+
+        let mut state = current.unwrap_or(ContentSetState {
+            generation: 0,
+            metadata_generation: manifest.metadata_generation,
+            cursor: 0,
+            total_files: 0,
+            skipped_files: 0,
+            complete: true,
+            shards: Vec::new(),
+        });
+        state.generation = next_content_set_generation(&volume_store)?;
+        state.metadata_generation = manifest.metadata_generation;
+        state.total_files = metadata
+            .records()
+            .iter()
+            .filter(|record| record.content_searchable)
+            .count();
+        state.cursor = state.total_files;
+        state.complete = true;
+        state.skipped_files = state.skipped_files.saturating_add(skipped.len());
+        state.shards.push(published.generation);
+        write_content_set(&volume_store, &state)?;
+
+        let selected_ids = selected
+            .iter()
+            .map(|record| record.file_id)
+            .collect::<Vec<_>>();
+        super::content_dirty::merge(
+            app_paths,
+            volume,
+            manifest.metadata_generation,
+            std::iter::empty(),
+            selected_ids,
+        )?;
+        published_files = map.len();
+        skipped_files = skipped.len();
+    }
+
+    let remaining =
+        super::content_dirty::load_for_metadata(app_paths, volume, manifest.metadata_generation)?
+            .map_or(0, |state| state.ids.len());
+    let latest_manifest = load_volume_manifest(&volume_store)?.unwrap_or(manifest);
+    ensure_volume_phase(
+        &volume_store,
+        &latest_manifest,
+        if remaining == 0 {
+            VolumePhase::Ready
+        } else {
+            VolumePhase::ContentCatchUp
+        },
+    )?;
+    let _ = super::content_dirty::gc(app_paths, volume, 2);
+    Ok(ContentCatchUpReport {
+        pending_before,
+        pending_after: remaining,
+        published_files,
+        skipped_files,
+        shard_count: content_progress(app_paths, volume)?.map_or(0, |p| p.shard_count),
+        complete: remaining == 0,
+    })
+}
+
+pub(super) fn compact_content_if_needed(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    max_shards: usize,
+) -> Result<bool> {
+    let volume_store = app_paths.volume_store(&volume.key);
+    let Some(manifest) = load_volume_manifest(&volume_store)? else {
+        return Ok(false);
+    };
+    if super::content_dirty::load_for_metadata(app_paths, volume, manifest.metadata_generation)?
+        .is_some_and(|state| !state.ids.is_empty())
+    {
+        return Ok(false);
+    }
+    let Some(current) = load_valid_content_set(&volume_store, volume, extractor)? else {
+        return Ok(false);
+    };
+    if !current.complete || current.shards.len() <= max_shards.max(2) {
+        return Ok(false);
+    }
+    let metadata = super::incremental_runtime::materialized_volume_metadata(app_paths, volume)?
+        .ok_or_else(|| AppError::InvalidState("content compaction requires metadata".into()))?;
+    let searchable = metadata
+        .records()
+        .iter()
+        .filter(|record| record.content_searchable)
+        .collect::<Vec<_>>();
+    let content_dir = volume_store.join("content");
+    fs::create_dir_all(&content_dir)?;
+    let options = ContentBuildOptions::default();
+    let mut new_shards = Vec::new();
+    let mut skipped_total = 0_usize;
+    let mut start = 0_usize;
+    while start < searchable.len() {
+        let mut end = start;
+        let mut bytes = 0_u64;
+        while end < searchable.len()
+            && end.saturating_sub(start) < options.max_files_per_shard.max(1)
+        {
+            let size = searchable[end].size;
+            if end > start && bytes.saturating_add(size) > options.max_source_bytes_per_shard.max(1)
+            {
+                break;
+            }
+            bytes = bytes.saturating_add(size);
+            end += 1;
+        }
+        if end == start {
+            end = (start + 1).min(searchable.len());
+        }
+        let batch = &searchable[start..end];
+        let relative_paths = batch
+            .iter()
+            .map(|record| record.path.clone())
+            .collect::<Vec<_>>();
+        let generation = next_content_generation(&content_dir)?;
+        let parent = new_shards.last().copied().unwrap_or(0);
+        let (published, skipped) = publish_generation_from_paths_with_extraction(
+            &volume.mount,
+            &content_dir,
+            generation,
+            parent,
+            &relative_paths,
+            extractor,
+        )?;
+        let index = load_generation_with_verification(
+            &volume.mount,
+            &content_dir,
+            published.generation,
+            extractor,
+        )?;
+        let path_to_record = batch
+            .iter()
+            .map(|record| (record.path.clone(), *record))
+            .collect::<HashMap<_, _>>();
+        let mut map = Vec::with_capacity(index.file_count());
+        for internal in 0..index.file_count() as u32 {
+            let relative = index.file_relative_path(internal).ok_or_else(|| {
+                AppError::InvalidState("content compaction shard catalog is incomplete".into())
+            })?;
+            let record = path_to_record.get(relative).ok_or_else(|| {
+                AppError::InvalidState("content compaction map record missing".into())
+            })?;
+            map.push(ContentShardEntry {
+                stable_file_id: record.file_id,
+                source_size: record.size,
+                modified_ns: record.modified_ns,
+            });
+        }
+        write_shard_map(
+            &content_dir,
+            published.generation,
+            manifest.metadata_generation,
+            &map,
+        )?;
+        new_shards.push(published.generation);
+        skipped_total = skipped_total.saturating_add(skipped.len());
+        start = end;
+    }
+    let state = ContentSetState {
+        generation: next_content_set_generation(&volume_store)?,
+        metadata_generation: manifest.metadata_generation,
+        cursor: searchable.len(),
+        total_files: searchable.len(),
+        skipped_files: skipped_total,
+        complete: true,
+        shards: new_shards,
+    };
+    write_content_set(&volume_store, &state)?;
+    gc_content_storage(app_paths, volume, extractor, 2)?;
+    Ok(true)
+}
+
+pub(super) fn gc_content_storage(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    keep_valid_sets: usize,
+) -> Result<usize> {
+    let volume_store = app_paths.volume_store(&volume.key);
+    let mut files = numbered_files(&volume_store, "content-set-", ".state")?;
+    files.sort_unstable_by_key(|(generation, _)| std::cmp::Reverse(*generation));
+    let mut keep_states = std::collections::BTreeSet::new();
+    let mut keep_shards = std::collections::BTreeSet::new();
+    for (generation, path) in &files {
+        if keep_states.len() >= keep_valid_sets.max(2) {
+            break;
+        }
+        let Ok(text) = fs::read_to_string(path) else {
+            continue;
+        };
+        let Some(state) = parse_content_set_state(*generation, &text) else {
+            continue;
+        };
+        if load_validated_shards(&volume_store, volume, extractor, &state).is_err() {
+            continue;
+        }
+        keep_states.insert(*generation);
+        keep_shards.extend(state.shards);
+    }
+    let mut removed = 0_usize;
+    for (generation, path) in files {
+        if !keep_states.contains(&generation) && fs::remove_file(path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed = removed.saturating_add(super::content_dirty::remove_generation_files_except(
+        &volume_store.join("content"),
+        &keep_shards,
+    )?);
+    Ok(removed)
 }
 
 fn ensure_volume_phase(

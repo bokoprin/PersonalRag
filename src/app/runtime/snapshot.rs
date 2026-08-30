@@ -1,3 +1,4 @@
+use super::super::incremental_runtime::incremental_metadata_status;
 use super::super::{
     AppPaths, DiscoveredVolume, VolumeKey, VolumePhase, content_progress, load_volume_manifest,
 };
@@ -17,6 +18,8 @@ pub struct RuntimeVolumeStatus {
     pub content_total_files: usize,
     pub content_skipped_files: usize,
     pub content_shards: usize,
+    pub metadata_delta_changes: usize,
+    pub content_dirty_files: usize,
     pub last_error: Option<String>,
 }
 
@@ -54,6 +57,8 @@ impl RuntimeSnapshot {
                     content_total_files: 0,
                     content_skipped_files: 0,
                     content_shards: 0,
+                    metadata_delta_changes: 0,
+                    content_dirty_files: 0,
                     last_error: None,
                 })
                 .collect(),
@@ -107,6 +112,7 @@ pub(super) fn publish_snapshot(
         let store = paths.volume_store(&volume.key);
         let manifest = load_volume_manifest(&store).ok().flatten();
         let progress = content_progress(paths, volume).ok().flatten();
+        let incremental = incremental_metadata_status(paths, volume).unwrap_or_default();
         if manifest
             .as_ref()
             .and_then(|value| value.metadata_file.as_ref())
@@ -114,7 +120,12 @@ pub(super) fn publish_snapshot(
         {
             metadata_ready += 1;
         }
-        if progress.as_ref().is_some_and(|value| value.complete) {
+        if progress.as_ref().is_some_and(|value| value.complete)
+            && manifest
+                .as_ref()
+                .is_some_and(|value| value.phase == VolumePhase::Ready)
+            && !incremental.content_dirty
+        {
             content_ready += 1;
         }
         if progress
@@ -143,6 +154,8 @@ pub(super) fn publish_snapshot(
             content_total_files: progress.as_ref().map_or(0, |value| value.total_files),
             content_skipped_files: progress.as_ref().map_or(0, |value| value.skipped_files),
             content_shards: progress.as_ref().map_or(0, |value| value.shard_count),
+            metadata_delta_changes: incremental.change_count,
+            content_dirty_files: incremental.content_dirty_files,
             last_error: error,
         });
     }

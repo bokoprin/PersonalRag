@@ -1,6 +1,7 @@
+use super::incremental_runtime::incremental_checkpoint_status;
 use super::{
-    AppPaths, DiscoveredVolume, Result, VolumePhase, load_volume_manifest,
-    validated_content_progress,
+    AppPaths, DiscoveredVolume, IncrementalCheckpointStatus, Result, VolumePhase,
+    load_volume_manifest, validated_content_progress,
 };
 use crate::extraction::ExtractorConfig;
 
@@ -9,6 +10,7 @@ pub enum StartupAction {
     FreshMetadataBuild,
     ResumeMetadataBuild,
     ResumeContentBuild,
+    CatchUpChanges,
     Reconcile,
     Ready,
 }
@@ -32,11 +34,45 @@ pub fn determine_startup_action(
     }
 
     if watch_changes {
-        return Ok(StartupAction::Reconcile);
+        return Ok(startup_action_for_checkpoint_status(
+            incremental_checkpoint_status(paths, volume)?,
+        ));
     }
 
     match validated_content_progress(paths, volume, extractor)? {
         Some(progress) if progress.complete => Ok(StartupAction::Ready),
         _ => Ok(StartupAction::ResumeContentBuild),
+    }
+}
+
+fn startup_action_for_checkpoint_status(status: IncrementalCheckpointStatus) -> StartupAction {
+    match status {
+        IncrementalCheckpointStatus::Valid => StartupAction::CatchUpChanges,
+        IncrementalCheckpointStatus::Missing
+        | IncrementalCheckpointStatus::ReconcileRequired
+        | IncrementalCheckpointStatus::Unavailable => StartupAction::Reconcile,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_incremental_checkpoint_selects_catch_up() {
+        assert_eq!(
+            startup_action_for_checkpoint_status(IncrementalCheckpointStatus::Valid),
+            StartupAction::CatchUpChanges
+        );
+        for status in [
+            IncrementalCheckpointStatus::Missing,
+            IncrementalCheckpointStatus::ReconcileRequired,
+            IncrementalCheckpointStatus::Unavailable,
+        ] {
+            assert_eq!(
+                startup_action_for_checkpoint_status(status),
+                StartupAction::Reconcile
+            );
+        }
     }
 }

@@ -150,6 +150,46 @@ pub(crate) fn write_volume_manifest(store: &Path, manifest: &VolumeManifest) -> 
     Ok(path)
 }
 
+fn parse_volume_manifest_candidate(
+    store: &Path,
+    generation: u64,
+    text: &str,
+    require_metadata_exists: bool,
+) -> Option<VolumeManifest> {
+    let values = parse_key_values(text);
+    let key_hex = values.get("key")?;
+    let mount_hex = values.get("mount")?;
+    let key_bytes = hex_decode(key_hex).ok()?;
+    let mount_bytes = hex_decode(mount_hex).ok()?;
+    let key = String::from_utf8(key_bytes).ok()?;
+    let mount = String::from_utf8(mount_bytes).ok()?;
+    let phase = VolumePhase::parse(values.get("phase")?).ok()?;
+    let metadata_generation = parse_u64(&values, "metadata_generation")?;
+    let metadata_records = usize::try_from(parse_u64(&values, "metadata_records")?).ok()?;
+    let inaccessible_directories = usize::try_from(parse_u64(&values, "inaccessible")?).ok()?;
+    let metadata_file = values
+        .get("metadata_file")
+        .filter(|value| !value.is_empty())
+        .cloned();
+    if require_metadata_exists
+        && metadata_file
+            .as_deref()
+            .is_some_and(|file_name| !store.join("metadata").join(file_name).exists())
+    {
+        return None;
+    }
+    Some(VolumeManifest {
+        generation,
+        key: VolumeKey(key),
+        mount: PathBuf::from(mount),
+        phase,
+        metadata_generation,
+        metadata_file,
+        metadata_records,
+        inaccessible_directories,
+    })
+}
+
 pub fn load_volume_manifest(store: &Path) -> Result<Option<VolumeManifest>> {
     let mut states = numbered_files(store, "volume-", ".state")?;
     states.sort_unstable_by_key(|(generation, _)| std::cmp::Reverse(*generation));
@@ -157,59 +197,44 @@ pub fn load_volume_manifest(store: &Path) -> Result<Option<VolumeManifest>> {
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        let values = parse_key_values(&text);
-        let Some(key_hex) = values.get("key") else {
+        if let Some(manifest) = parse_volume_manifest_candidate(store, generation, &text, true) {
+            return Ok(Some(manifest));
+        }
+    }
+    Ok(None)
+}
+
+pub(super) fn recover_volume_manifest(store: &Path) -> Result<Option<VolumeManifest>> {
+    let mut states = numbered_files(store, "volume-", ".state")?;
+    states.sort_unstable_by_key(|(generation, _)| std::cmp::Reverse(*generation));
+    let newest_generation = states
+        .first()
+        .map(|(generation, _)| *generation)
+        .unwrap_or(0);
+    for (generation, path) in states {
+        let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        let Some(mount_hex) = values.get("mount") else {
+        let Some(mut manifest) = parse_volume_manifest_candidate(store, generation, &text, true)
+        else {
             continue;
         };
-        let Ok(key_bytes) = hex_decode(key_hex) else {
-            continue;
-        };
-        let Ok(mount_bytes) = hex_decode(mount_hex) else {
-            continue;
-        };
-        let Ok(key) = String::from_utf8(key_bytes) else {
-            continue;
-        };
-        let Ok(mount) = String::from_utf8(mount_bytes) else {
-            continue;
-        };
-        let Some(phase_text) = values.get("phase") else {
-            continue;
-        };
-        let Ok(phase) = VolumePhase::parse(phase_text) else {
-            continue;
-        };
-        let Some(metadata_generation) = parse_u64(&values, "metadata_generation") else {
-            continue;
-        };
-        let Some(metadata_records) = parse_u64(&values, "metadata_records") else {
-            continue;
-        };
-        let Some(inaccessible) = parse_u64(&values, "inaccessible") else {
-            continue;
-        };
-        let metadata_file = values
-            .get("metadata_file")
-            .filter(|value| !value.is_empty())
-            .cloned();
-        if let Some(file_name) = metadata_file.as_deref()
-            && !store.join("metadata").join(file_name).exists()
-        {
+        if let Some(file_name) = manifest.metadata_file.as_deref() {
+            let metadata_path = store.join("metadata").join(file_name);
+            let Ok(metadata) = crate::metadata::MetadataIndex::load_snapshot(&metadata_path) else {
+                continue;
+            };
+            if metadata.records().len() != manifest.metadata_records {
+                continue;
+            }
+        } else if manifest.metadata_generation != 0 || manifest.metadata_records != 0 {
             continue;
         }
-        return Ok(Some(VolumeManifest {
-            generation,
-            key: VolumeKey(key),
-            mount: PathBuf::from(mount),
-            phase,
-            metadata_generation,
-            metadata_file,
-            metadata_records: metadata_records as usize,
-            inaccessible_directories: inaccessible as usize,
-        }));
+        if generation != newest_generation {
+            manifest.generation = newest_generation.saturating_add(1).max(1);
+            write_volume_manifest(store, &manifest)?;
+        }
+        return Ok(Some(manifest));
     }
     Ok(None)
 }
