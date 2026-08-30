@@ -334,7 +334,7 @@ fn should_skip_dir(root: &Path, path: &Path) -> bool {
         )
 }
 
-fn modified_ns(metadata: &fs::Metadata) -> u128 {
+pub(crate) fn modified_ns(metadata: &fs::Metadata) -> u128 {
     metadata
         .modified()
         .ok()
@@ -343,7 +343,7 @@ fn modified_ns(metadata: &fs::Metadata) -> u128 {
         .unwrap_or(0)
 }
 
-fn disambiguated_file_id(base: u64, path: &Path, used: &HashSet<u64>) -> u64 {
+pub(crate) fn disambiguated_file_id(base: u64, path: &Path, used: &HashSet<u64>) -> u64 {
     let mut salt = 0_u64;
     loop {
         let mut hash = 0xcbf2_9ce4_8422_2325_u64 ^ base ^ salt;
@@ -408,7 +408,7 @@ fn directory_file_bytes(root: &Path) -> Result<u64> {
 }
 
 #[cfg(unix)]
-fn platform_file_id(_path: &Path, metadata: &fs::Metadata) -> Result<u64> {
+pub(crate) fn platform_file_id(_path: &Path, metadata: &fs::Metadata) -> Result<u64> {
     use std::os::unix::fs::MetadataExt;
     let ino = metadata.ino();
     let dev = metadata.dev();
@@ -416,12 +416,12 @@ fn platform_file_id(_path: &Path, metadata: &fs::Metadata) -> Result<u64> {
 }
 
 #[cfg(windows)]
-fn platform_file_id(path: &Path, _metadata: &fs::Metadata) -> Result<u64> {
+pub(crate) fn platform_file_id(path: &Path, _metadata: &fs::Metadata) -> Result<u64> {
     windows_file_identity(path).map_err(ProductError::Io)
 }
 
 #[cfg(not(any(unix, windows)))]
-fn platform_file_id(path: &Path, _metadata: &fs::Metadata) -> Result<u64> {
+pub(crate) fn platform_file_id(path: &Path, _metadata: &fs::Metadata) -> Result<u64> {
     Ok(disambiguated_file_id(0x5052_5632, path, &HashSet::new()))
 }
 

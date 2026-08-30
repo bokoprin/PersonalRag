@@ -1,5 +1,6 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 
+pub mod app;
 pub mod extraction;
 pub mod gui;
 pub mod incremental;
