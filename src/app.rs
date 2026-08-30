@@ -715,10 +715,9 @@ fn decode_path(encoding: u8, payload: &[u8]) -> Result<PathBuf> {
     match encoding {
         1 => decode_windows_path(payload),
         2 => decode_unix_path(payload),
-        3 => Ok(PathBuf::from(
-            std::str::from_utf8(payload)
-                .map_err(|_| AppError::InvalidState("invalid UTF-8 queue path".to_string()))?,
-        )),
+        3 => Ok(PathBuf::from(std::str::from_utf8(payload).map_err(
+            |_| AppError::InvalidState("invalid UTF-8 queue path".to_string()),
+        )?)),
         _ => Err(AppError::InvalidState(
             "unknown queue path encoding".to_string(),
         )),
@@ -968,11 +967,9 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
     let value = bytes
         .get(offset..offset.saturating_add(4))
         .ok_or_else(|| AppError::InvalidState("truncated u32".to_string()))?;
-    Ok(u32::from_le_bytes(
-        value
-            .try_into()
-            .map_err(|_| AppError::InvalidState("invalid u32".to_string()))?,
-    ))
+    Ok(u32::from_le_bytes(value.try_into().map_err(|_| {
+        AppError::InvalidState("invalid u32".to_string())
+    })?))
 }
 
 #[cfg(windows)]
