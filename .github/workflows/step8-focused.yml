@@ -1,0 +1,38 @@
+name: Step8 Focused
+
+on:
+  push:
+    branches:
+      - step8-zero-config-continuous-indexing-20260830
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.97.1
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: App focused
+        run: cargo test --offline --locked app::
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust
+        shell: powershell
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
+          rustup override set 1.97.1
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --offline --locked --all-targets -- -D warnings
+      - name: App focused
+        run: cargo test --offline --locked app::
