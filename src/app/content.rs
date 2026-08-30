@@ -11,7 +11,7 @@ use crate::persistent::{
 use crate::{SearchLimits, incremental::ContentQueryKind};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const CONTENT_SET_MAGIC_VERSION: u32 = 1;
