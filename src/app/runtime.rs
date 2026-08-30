@@ -179,7 +179,8 @@ impl AppRuntimeHandle {
 
 impl Drop for AppRuntimeHandle {
     fn drop(&mut self) {
-        self.join();
+        self.request_stop();
+        let _ = self.join.take();
     }
 }
 
