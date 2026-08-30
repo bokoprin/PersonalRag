@@ -10,9 +10,12 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(any(windows, test))]
+use std::time::Instant;
 
 const WATCH_POLL_INTERVAL: Duration = Duration::from_millis(250);
+#[cfg(windows)]
 const FALLBACK_RECONCILE_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
