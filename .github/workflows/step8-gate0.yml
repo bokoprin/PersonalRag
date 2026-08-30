@@ -1,9 +1,7 @@
 name: Step8 Gate0
 
 on:
-  push:
-    branches:
-      - step8-zero-config-continuous-indexing-20260830
+  workflow_dispatch:
 
 jobs:
   linux:
