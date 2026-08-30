@@ -3,6 +3,7 @@
 pub mod app;
 pub mod extraction;
 pub mod gui;
+pub mod gui_app;
 pub mod incremental;
 mod pattern;
 pub mod product;
