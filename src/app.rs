@@ -1159,7 +1159,7 @@ mod tests {
         let volume = fake_volume(&root, "exclude");
         let mut never_stop = || false;
         let report =
-            build_or_resume_metadata(&paths, &volume, &[app_root.clone()], 2, &mut never_stop)
+            build_or_resume_metadata(&paths, &volume, std::slice::from_ref(&app_root), 2, &mut never_stop)
                 .unwrap();
         assert!(report.complete);
 
@@ -1190,7 +1190,7 @@ mod tests {
         let volume_a = fake_volume(&root_a, "a");
         let volume_b = fake_volume(&root_b, "b");
         let mut never_stop = || false;
-        build_or_resume_metadata(&paths, &volume_a, &[app_root.clone()], 1, &mut never_stop)
+        build_or_resume_metadata(&paths, &volume_a, std::slice::from_ref(&app_root), 1, &mut never_stop)
             .unwrap();
         build_or_resume_metadata(&paths, &volume_b, &[app_root], 1, &mut never_stop).unwrap();
 
