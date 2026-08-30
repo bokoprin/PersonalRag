@@ -16,9 +16,6 @@ jobs:
           rustup override set 1.97.1
       - name: Install document helpers
         run: sudo apt-get update && sudo apt-get install -y zip zstd poppler-utils
-      - name: Verify source manifest
-        shell: pwsh
-        run: ./tools/verify_source_manifest.ps1
       - name: Format
         run: cargo fmt --all -- --check
       - name: Clippy

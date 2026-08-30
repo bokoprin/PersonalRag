@@ -241,7 +241,8 @@ impl FederatedMetadataIndex {
         let max_results = max_results.max(1);
         let mut out = Vec::new();
         for (volume, _, metadata) in &self.volumes {
-            let path_query = full_path.and_then(|query| path_query_for_volume(query, &volume.mount));
+            let path_query =
+                full_path.and_then(|query| path_query_for_volume(query, &volume.mount));
             if full_path.is_some() && path_query.is_none() {
                 continue;
             }
@@ -432,7 +433,9 @@ where
                     continue;
                 }
             };
-            let mut entries = read_dir.filter_map(std::result::Result::ok).collect::<Vec<_>>();
+            let mut entries = read_dir
+                .filter_map(std::result::Result::ok)
+                .collect::<Vec<_>>();
             entries.sort_by_key(|entry| entry.file_name());
             for entry in entries {
                 let path = entry.path();
@@ -516,7 +519,10 @@ where
     all_records.sort_by(|left, right| left.path.cmp(&right.path));
     let metadata = MetadataIndex::build(all_records)?;
 
-    let mut metadata_generation = current_manifest.metadata_generation.saturating_add(1).max(1);
+    let mut metadata_generation = current_manifest
+        .metadata_generation
+        .saturating_add(1)
+        .max(1);
     let metadata_file = loop {
         let name = format!("metadata-{metadata_generation:020}.prmet");
         let path = metadata_dir.join(&name);
@@ -971,7 +977,7 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
 
 #[cfg(windows)]
 pub fn discover_fixed_volumes() -> Result<Vec<DiscoveredVolume>> {
-    use std::ffi::{OsString, c_void};
+    use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
     use std::ptr::null_mut;
 
@@ -1019,7 +1025,7 @@ pub fn discover_fixed_volumes() -> Result<Vec<DiscoveredVolume>> {
             break;
         }
         let end = start + relative_end;
-        let mut root_wide = buffer[start..=end].to_vec();
+        let root_wide = buffer[start..=end].to_vec();
         if unsafe { GetDriveTypeW(root_wide.as_ptr()) } == DRIVE_FIXED {
             let mount = PathBuf::from(OsString::from_wide(&buffer[start..end]));
             let mut serial = 0_u32;
@@ -1156,7 +1162,7 @@ mod tests {
 
         let federated = FederatedMetadataIndex::load(&paths, &[volume]).unwrap();
         assert_eq!(
-            federated.search(Some("must-not-index"), None, false, 100).len(),
+            federated\n                .search(Some("must-not-index"), None, false, 100)\n                .len(),
             0
         );
         assert_eq!(federated.search(Some("visible"), None, false, 100).len(), 1);
