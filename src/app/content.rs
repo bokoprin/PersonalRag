@@ -292,6 +292,14 @@ fn newest_valid_shards(volume: &LoadedContentVolume) -> HashMap<u64, u64> {
     newest
 }
 
+pub fn content_progress(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+) -> Result<Option<ContentBuildReport>> {
+    let volume_store = app_paths.volume_store(&volume.key);
+    Ok(load_content_set(&volume_store)?.map(|state| report_from_state(&state)))
+}
+
 pub fn build_or_resume_content<F>(
     app_paths: &AppPaths,
     volume: &DiscoveredVolume,
