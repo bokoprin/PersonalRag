@@ -16,6 +16,7 @@ const QUEUE_MAGIC: &[u8; 8] = b"PRV2MQ01";
 pub enum AppError {
     Io(io::Error),
     Metadata(crate::metadata::MetadataError),
+    Persistent(crate::persistent::PersistentError),
     Product(crate::product::ProductError),
     InvalidState(String),
     Unsupported(String),
@@ -26,6 +27,7 @@ impl fmt::Display for AppError {
         match self {
             Self::Io(error) => write!(f, "I/O error: {error}"),
             Self::Metadata(error) => write!(f, "metadata error: {error}"),
+            Self::Persistent(error) => write!(f, "persistent error: {error}"),
             Self::Product(error) => write!(f, "product error: {error}"),
             Self::InvalidState(message) => f.write_str(message),
             Self::Unsupported(message) => f.write_str(message),
@@ -44,6 +46,12 @@ impl From<io::Error> for AppError {
 impl From<crate::metadata::MetadataError> for AppError {
     fn from(value: crate::metadata::MetadataError) -> Self {
         Self::Metadata(value)
+    }
+}
+
+impl From<crate::persistent::PersistentError> for AppError {
+    fn from(value: crate::persistent::PersistentError) -> Self {
+        Self::Persistent(value)
     }
 }
 
@@ -339,6 +347,31 @@ impl AppCoordinator {
         }
         Ok(reports)
     }
+}
+
+pub fn begin_metadata_refresh(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+) -> Result<VolumeManifest> {
+    app_paths.ensure()?;
+    let volume_store = app_paths.volume_store(&volume.key);
+    let current =
+        load_volume_manifest(&volume_store)?.unwrap_or_else(|| VolumeManifest::initial(volume));
+    if current.phase == VolumePhase::MetadataBuilding {
+        return Ok(current);
+    }
+    let manifest = VolumeManifest {
+        generation: current.generation.saturating_add(1).max(1),
+        key: volume.key.clone(),
+        mount: volume.mount.clone(),
+        phase: VolumePhase::MetadataBuilding,
+        metadata_generation: current.metadata_generation,
+        metadata_file: current.metadata_file.clone(),
+        metadata_records: current.metadata_records,
+        inaccessible_directories: current.inaccessible_directories,
+    };
+    write_volume_manifest(&volume_store, &manifest)?;
+    Ok(manifest)
 }
 
 pub fn build_or_resume_metadata<F>(
