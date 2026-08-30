@@ -400,7 +400,7 @@ mod windows_ui {
     }
 
     enum SearchBackend {
-        Legacy(GuiSearchSession),
+        Legacy(Box<GuiSearchSession>),
         App(Box<AppGuiSearchSession>),
     }
 
@@ -473,7 +473,7 @@ mod windows_ui {
                     .map_err(|error| error.to_string())?;
                 let status = session.status();
                 Box::new(LaunchContext {
-                    backend: Some(SearchBackend::Legacy(session)),
+                    backend: Some(SearchBackend::Legacy(Box::new(session))),
                     status: Some(status),
                     runtime: None,
                     runtime_reader: None,
