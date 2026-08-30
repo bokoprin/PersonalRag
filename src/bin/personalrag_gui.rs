@@ -481,8 +481,10 @@ mod windows_ui {
                 })
             }
             GuiLaunchMode::ZeroConfig => {
-                let runtime = AppRuntimeHandle::start_default(args.extractor.clone())
-                    .map_err(|error| format!("failed to start background index coordinator: {error}"))?;
+                let runtime =
+                    AppRuntimeHandle::start_default(args.extractor.clone()).map_err(|error| {
+                        format!("failed to start background index coordinator: {error}")
+                    })?;
                 let runtime_reader = runtime.reader();
                 let paths = runtime.paths().clone();
                 let volumes = runtime.volumes().to_vec();
@@ -603,14 +605,7 @@ mod windows_ui {
                 let runtime_reader = launch.runtime_reader.take();
                 let zero_config = launch.zero_config;
                 match unsafe {
-                    initialize_window(
-                        hwnd,
-                        backend,
-                        status,
-                        runtime,
-                        runtime_reader,
-                        zero_config,
-                    )
+                    initialize_window(hwnd, backend, status, runtime, runtime_reader, zero_config)
                 } {
                     Ok(state) => {
                         let state = Box::into_raw(Box::new(state));

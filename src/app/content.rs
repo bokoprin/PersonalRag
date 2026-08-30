@@ -1,6 +1,9 @@
+use super::state_io::{
+    atomic_write_new, numbered_files, parse_key_values, parse_u64, read_u32, read_u64,
+};
 use super::{
-    AppError, AppPaths, DiscoveredVolume, Result, VolumeManifest, VolumePhase, load_volume_manifest,
-    numbered_files, parse_key_values, parse_u64, write_volume_manifest,
+    AppError, AppPaths, DiscoveredVolume, Result, VolumeManifest, VolumePhase,
+    load_volume_manifest, write_volume_manifest,
 };
 use crate::extraction::ExtractorConfig;
 use crate::metadata::{MetadataIndex, MetadataRecord};
@@ -10,8 +13,7 @@ use crate::persistent::{
 };
 use crate::{SearchLimits, incremental::ContentQueryKind};
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 const CONTENT_SET_MAGIC_VERSION: u32 = 1;
@@ -61,6 +63,12 @@ struct ContentShardEntry {
     stable_file_id: u64,
     source_size: u64,
     modified_ns: u128,
+}
+
+#[derive(Debug)]
+struct LoadedShardMap {
+    metadata_generation: u64,
+    entries: Vec<ContentShardEntry>,
 }
 
 #[derive(Debug)]
@@ -114,34 +122,11 @@ impl FederatedContentIndex {
                 .enumerate()
                 .map(|(index, record)| (record.file_id, index))
                 .collect::<HashMap<_, _>>();
-            let Some(content_set) = load_content_set(&store)? else {
+            let Some((_content_set, mut shards)) =
+                load_valid_content_set_with_shards(&store, volume, extractor)?
+            else {
                 continue;
             };
-            let content_dir = store.join("content");
-            let mut shards = Vec::new();
-            for generation in &content_set.shards {
-                let map = match load_shard_map(&content_dir, *generation) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                };
-                let index = match load_generation_with_verification(
-                    &volume.mount,
-                    &content_dir,
-                    *generation,
-                    extractor,
-                ) {
-                    Ok(value) => value,
-                    Err(_) => continue,
-                };
-                if index.file_count() != map.len() {
-                    continue;
-                }
-                shards.push(LoadedShard {
-                    generation: *generation,
-                    index,
-                    entries: map,
-                });
-            }
             shards.sort_by_key(|shard| std::cmp::Reverse(shard.generation));
             loaded_volumes.push(LoadedContentVolume {
                 volume: volume.clone(),
@@ -166,8 +151,7 @@ impl FederatedContentIndex {
         }
 
         let mut out = Vec::new();
-        let mut seen_locations =
-            HashSet::<(super::VolumeKey, u64, u32, u32)>::new();
+        let mut seen_locations = HashSet::<(super::VolumeKey, u64, u32, u32)>::new();
         let mut seen_files = HashSet::<(super::VolumeKey, u64)>::new();
         let mut snippets_per_file = HashMap::<(super::VolumeKey, u64), usize>::new();
 
@@ -191,7 +175,8 @@ impl FederatedContentIndex {
                         excluded.insert(internal as u32);
                         continue;
                     }
-                    if shard.index.file_relative_path(internal as u32) != Some(record.path.as_path())
+                    if shard.index.file_relative_path(internal as u32)
+                        != Some(record.path.as_path())
                     {
                         overrides.insert(internal as u32, record.path.clone());
                     }
@@ -202,28 +187,25 @@ impl FederatedContentIndex {
                     path_overrides: &overrides,
                 };
                 let outcome = match query {
-                    ContentQueryKind::Literal(value) => shard.index.search_with_limits_and_overlay(
-                        value,
-                        case_sensitive,
-                        limits,
-                        &overlay,
-                    )?,
-                    ContentQueryKind::Regex(value) => shard
+                    ContentQueryKind::Literal(value) => shard
                         .index
-                        .search_regex_with_limits_and_overlay(
+                        .search_with_limits_and_overlay(value, case_sensitive, limits, &overlay)?,
+                    ContentQueryKind::Regex(value) => {
+                        shard.index.search_regex_with_limits_and_overlay(
                             value,
                             case_sensitive,
                             limits,
                             &overlay,
-                        )?,
-                    ContentQueryKind::Wildcard(value) => shard
-                        .index
-                        .search_wildcard_with_limits_and_overlay(
+                        )?
+                    }
+                    ContentQueryKind::Wildcard(value) => {
+                        shard.index.search_wildcard_with_limits_and_overlay(
                             value,
                             case_sensitive,
                             limits,
                             &overlay,
-                        )?,
+                        )?
+                    }
                 };
 
                 for hit in outcome.hits {
@@ -310,8 +292,11 @@ pub fn build_or_resume_content<F>(
 where
     F: FnMut() -> bool,
 {
+    let mut validate_state = true;
     loop {
-        let report = build_content_step(app_paths, volume, extractor, options)?;
+        let report =
+            build_content_step_impl(app_paths, volume, extractor, options, validate_state)?;
+        validate_state = false;
         if report.complete || should_stop() {
             return Ok(report);
         }
@@ -324,6 +309,25 @@ pub fn build_content_step(
     extractor: &ExtractorConfig,
     options: ContentBuildOptions,
 ) -> Result<ContentBuildReport> {
+    build_content_step_impl(app_paths, volume, extractor, options, true)
+}
+
+pub(super) fn build_content_step_trusted(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    options: ContentBuildOptions,
+) -> Result<ContentBuildReport> {
+    build_content_step_impl(app_paths, volume, extractor, options, false)
+}
+
+fn build_content_step_impl(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    options: ContentBuildOptions,
+    validate_state: bool,
+) -> Result<ContentBuildReport> {
     app_paths.ensure()?;
     let volume_store = app_paths.volume_store(&volume.key);
     let metadata_manifest = load_volume_manifest(&volume_store)?
@@ -332,8 +336,7 @@ pub fn build_content_step(
         .metadata_file
         .as_deref()
         .ok_or_else(|| AppError::InvalidState("content build requires metadata snapshot".into()))?;
-    let metadata =
-        MetadataIndex::load_snapshot(volume_store.join("metadata").join(metadata_file))?;
+    let metadata = MetadataIndex::load_snapshot(volume_store.join("metadata").join(metadata_file))?;
     let searchable = metadata
         .records()
         .iter()
@@ -341,7 +344,11 @@ pub fn build_content_step(
         .collect::<Vec<_>>();
     let total_files = searchable.len();
 
-    let latest = load_content_set(&volume_store)?;
+    let latest = if validate_state {
+        load_valid_content_set(&volume_store, volume, extractor)?
+    } else {
+        load_content_set(&volume_store)?
+    };
     if let Some(state) = latest.as_ref()
         && state.metadata_generation == metadata_manifest.metadata_generation
         && state.complete
@@ -567,44 +574,152 @@ fn load_content_set(volume_store: &Path) -> Result<Option<ContentSetState>> {
         let Ok(text) = fs::read_to_string(path) else {
             continue;
         };
-        let values = parse_key_values(&text);
-        if parse_u64(&values, "version") != Some(CONTENT_SET_MAGIC_VERSION as u64) {
-            continue;
+        if let Some(state) = parse_content_set_state(generation, &text) {
+            return Ok(Some(state));
         }
-        let Some(metadata_generation) = parse_u64(&values, "metadata_generation") else {
-            continue;
-        };
-        let Some(cursor) = parse_u64(&values, "cursor") else {
-            continue;
-        };
-        let Some(total_files) = parse_u64(&values, "total_files") else {
-            continue;
-        };
-        let Some(skipped_files) = parse_u64(&values, "skipped_files") else {
-            continue;
-        };
-        let complete = matches!(values.get("complete").map(String::as_str), Some("1"));
-        let shards = values
-            .get("shards")
-            .map(|value| {
-                value
-                    .split(',')
-                    .filter(|value| !value.is_empty())
-                    .filter_map(|value| value.parse::<u64>().ok())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        return Ok(Some(ContentSetState {
-            generation,
-            metadata_generation,
-            cursor: cursor as usize,
-            total_files: total_files as usize,
-            skipped_files: skipped_files as usize,
-            complete,
-            shards,
-        }));
     }
     Ok(None)
+}
+
+fn load_valid_content_set(
+    volume_store: &Path,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+) -> Result<Option<ContentSetState>> {
+    Ok(
+        load_valid_content_set_with_shards(volume_store, volume, extractor)?
+            .map(|(state, _)| state),
+    )
+}
+
+fn load_valid_content_set_with_shards(
+    volume_store: &Path,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+) -> Result<Option<(ContentSetState, Vec<LoadedShard>)>> {
+    let mut states = numbered_files(volume_store, "content-set-", ".state")?;
+    states.sort_unstable_by_key(|(generation, _)| std::cmp::Reverse(*generation));
+    for (generation, path) in states {
+        let Ok(text) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Some(state) = parse_content_set_state(generation, &text) else {
+            continue;
+        };
+        if let Ok(shards) = load_validated_shards(volume_store, volume, extractor, &state) {
+            return Ok(Some((state, shards)));
+        }
+    }
+    Ok(None)
+}
+
+fn parse_content_set_state(generation: u64, text: &str) -> Option<ContentSetState> {
+    let values = parse_key_values(text);
+    if generation == 0 || parse_u64(&values, "version") != Some(CONTENT_SET_MAGIC_VERSION as u64) {
+        return None;
+    }
+    let metadata_generation = parse_u64(&values, "metadata_generation")?;
+    if metadata_generation == 0 {
+        return None;
+    }
+    let cursor = usize::try_from(parse_u64(&values, "cursor")?).ok()?;
+    let total_files = usize::try_from(parse_u64(&values, "total_files")?).ok()?;
+    let skipped_files = usize::try_from(parse_u64(&values, "skipped_files")?).ok()?;
+    let complete = match values.get("complete").map(String::as_str) {
+        Some("0") => false,
+        Some("1") => true,
+        _ => return None,
+    };
+    let shards = values
+        .get("shards")
+        .map(|value| {
+            value
+                .split(',')
+                .filter(|value| !value.is_empty())
+                .map(str::parse::<u64>)
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .ok()
+        })
+        .unwrap_or_else(|| Some(Vec::new()))?;
+    if shards.contains(&0) {
+        return None;
+    }
+    Some(ContentSetState {
+        generation,
+        metadata_generation,
+        cursor,
+        total_files,
+        skipped_files,
+        complete,
+        shards,
+    })
+}
+
+fn load_validated_shards(
+    volume_store: &Path,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+    state: &ContentSetState,
+) -> Result<Vec<LoadedShard>> {
+    if state.cursor > state.total_files {
+        return Err(AppError::InvalidState(
+            "content set cursor exceeds total files".into(),
+        ));
+    }
+    if state.complete && state.cursor != state.total_files {
+        return Err(AppError::InvalidState(
+            "complete content set cursor does not match total files".into(),
+        ));
+    }
+    let mut generations = HashSet::with_capacity(state.shards.len());
+    let content_dir = volume_store.join("content");
+    let mut shards = Vec::with_capacity(state.shards.len());
+    for generation in &state.shards {
+        if !generations.insert(*generation) {
+            return Err(AppError::InvalidState(
+                "content set contains duplicate shard generation".into(),
+            ));
+        }
+        let map = load_shard_map(&content_dir, *generation)?;
+        if map.metadata_generation == 0 || map.metadata_generation > state.metadata_generation {
+            return Err(AppError::InvalidState(
+                "content shard map metadata generation is not compatible with content set".into(),
+            ));
+        }
+        let mut stable_ids = HashSet::with_capacity(map.entries.len());
+        if map
+            .entries
+            .iter()
+            .any(|entry| !stable_ids.insert(entry.stable_file_id))
+        {
+            return Err(AppError::InvalidState(
+                "content shard map contains duplicate stable file id".into(),
+            ));
+        }
+        let index =
+            load_generation_with_verification(&volume.mount, &content_dir, *generation, extractor)?;
+        if index.file_count() != map.entries.len() {
+            return Err(AppError::InvalidState(
+                "content shard index/map file count mismatch".into(),
+            ));
+        }
+        shards.push(LoadedShard {
+            generation: *generation,
+            index,
+            entries: map.entries,
+        });
+    }
+    Ok(shards)
+}
+
+pub fn validated_content_progress(
+    app_paths: &AppPaths,
+    volume: &DiscoveredVolume,
+    extractor: &ExtractorConfig,
+) -> Result<Option<ContentBuildReport>> {
+    let volume_store = app_paths.volume_store(&volume.key);
+    Ok(load_valid_content_set(&volume_store, volume, extractor)?
+        .map(|state| report_from_state(&state)))
 }
 
 fn write_shard_map(
@@ -634,20 +749,21 @@ fn write_shard_map(
     )
 }
 
-fn load_shard_map(content_dir: &Path, generation: u64) -> Result<Vec<ContentShardEntry>> {
+fn load_shard_map(content_dir: &Path, generation: u64) -> Result<LoadedShardMap> {
     let bytes = fs::read(content_dir.join(format!("content-map-{generation:020}.bin")))?;
     if bytes.len() < CONTENT_MAP_HEADER_BYTES || &bytes[0..8] != CONTENT_MAP_MAGIC {
         return Err(AppError::InvalidState("content shard map magic".into()));
     }
-    if read_u32(&bytes, 8)? != CONTENT_MAP_VERSION {
+    if read_u32(&bytes, 8, "content map version")? != CONTENT_MAP_VERSION {
         return Err(AppError::InvalidState("content shard map version".into()));
     }
-    if read_u64(&bytes, 16)? != generation {
+    if read_u64(&bytes, 16, "content map generation")? != generation {
         return Err(AppError::InvalidState(
             "content shard map generation mismatch".into(),
         ));
     }
-    let count = read_u64(&bytes, 32)? as usize;
+    let metadata_generation = read_u64(&bytes, 24, "content map metadata generation")?;
+    let count = read_u64(&bytes, 32, "content map entry count")? as usize;
     let expected = CONTENT_MAP_HEADER_BYTES
         .checked_add(
             count
@@ -659,7 +775,7 @@ fn load_shard_map(content_dir: &Path, generation: u64) -> Result<Vec<ContentShar
         return Err(AppError::InvalidState("content shard map length".into()));
     }
     let payload = &bytes[CONTENT_MAP_HEADER_BYTES..];
-    if crate::persistent::crc64_ecma(payload) != read_u64(&bytes, 40)? {
+    if crate::persistent::crc64_ecma(payload) != read_u64(&bytes, 40, "content map checksum")? {
         return Err(AppError::InvalidState("content shard map checksum".into()));
     }
     let mut entries = Vec::with_capacity(count);
@@ -674,61 +790,10 @@ fn load_shard_map(content_dir: &Path, generation: u64) -> Result<Vec<ContentShar
             modified_ns: u128::from(modified_low) | (u128::from(modified_high) << 64),
         });
     }
-    Ok(entries)
-}
-
-fn atomic_write_new(path: &Path, bytes: &[u8]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    if path.exists() {
-        return Ok(());
-    }
-    let temp = path.with_extension("tmp");
-    if temp.exists() {
-        fs::remove_file(&temp)?;
-    }
-    {
-        let mut file = File::create(&temp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-    }
-    fs::rename(&temp, path)?;
-    sync_directory(path.parent().unwrap_or_else(|| Path::new(".")))?;
-    Ok(())
-}
-
-#[cfg(unix)]
-fn sync_directory(path: &Path) -> Result<()> {
-    File::open(path)?.sync_all()?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn sync_directory(_path: &Path) -> Result<()> {
-    Ok(())
-}
-
-fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
-    let value = bytes
-        .get(offset..offset.saturating_add(4))
-        .ok_or_else(|| AppError::InvalidState("truncated content u32".into()))?;
-    Ok(u32::from_le_bytes(
-        value
-            .try_into()
-            .map_err(|_| AppError::InvalidState("invalid content u32".into()))?,
-    ))
-}
-
-fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
-    let value = bytes
-        .get(offset..offset.saturating_add(8))
-        .ok_or_else(|| AppError::InvalidState("truncated content u64".into()))?;
-    Ok(u64::from_le_bytes(
-        value
-            .try_into()
-            .map_err(|_| AppError::InvalidState("invalid content u64".into()))?,
-    ))
+    Ok(LoadedShardMap {
+        metadata_generation,
+        entries,
+    })
 }
 
 #[cfg(test)]
@@ -878,6 +943,95 @@ mod tests {
                 )
                 .unwrap()
                 .is_empty()
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn corrupt_newest_content_set_falls_back_and_resumes_from_previous_valid_state() {
+        let base = temp_dir("fallback");
+        let root = base.join("root");
+        let app_root = base.join("app");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("a.txt"), "needle-a").unwrap();
+        fs::write(root.join("b.txt"), "needle-b").unwrap();
+
+        let paths = AppPaths::for_root(&app_root);
+        paths.ensure().unwrap();
+        let volume = volume(&root);
+        build_metadata(&paths, &volume);
+        let extractor = ExtractorConfig::discover();
+        let options = ContentBuildOptions {
+            max_files_per_shard: 1,
+            max_source_bytes_per_shard: u64::MAX,
+        };
+
+        let first = build_content_step(&paths, &volume, &extractor, options).unwrap();
+        assert!(!first.complete);
+        assert_eq!(first.indexed_cursor, 1);
+        let second = build_content_step(&paths, &volume, &extractor, options).unwrap();
+        assert!(second.complete);
+        assert_eq!(second.indexed_cursor, 2);
+
+        let store = paths.volume_store(&volume.key);
+        let latest = load_content_set(&store).unwrap().unwrap();
+        let corrupt_generation = *latest.shards.last().unwrap();
+        fs::write(
+            store
+                .join("content")
+                .join(format!("content-map-{corrupt_generation:020}.bin")),
+            b"corrupt",
+        )
+        .unwrap();
+
+        let fallback = validated_content_progress(&paths, &volume, &extractor)
+            .unwrap()
+            .unwrap();
+        assert!(!fallback.complete);
+        assert_eq!(fallback.indexed_cursor, 1);
+        assert_eq!(fallback.shard_count, 1);
+
+        let partial =
+            FederatedContentIndex::load(&paths, std::slice::from_ref(&volume), &extractor).unwrap();
+        assert_eq!(
+            partial
+                .search(
+                    ContentQueryKind::Literal("needle-a"),
+                    false,
+                    SearchLimits::default(),
+                )
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            partial
+                .search(
+                    ContentQueryKind::Literal("needle-b"),
+                    false,
+                    SearchLimits::default(),
+                )
+                .unwrap()
+                .is_empty()
+        );
+
+        let mut never_stop = || false;
+        let repaired =
+            build_or_resume_content(&paths, &volume, &extractor, options, &mut never_stop).unwrap();
+        assert!(repaired.complete);
+        assert_eq!(repaired.indexed_cursor, 2);
+        let complete =
+            FederatedContentIndex::load(&paths, std::slice::from_ref(&volume), &extractor).unwrap();
+        assert_eq!(
+            complete
+                .search(
+                    ContentQueryKind::Literal("needle-b"),
+                    false,
+                    SearchLimits::default(),
+                )
+                .unwrap()
+                .len(),
+            1
         );
         fs::remove_dir_all(base).unwrap();
     }

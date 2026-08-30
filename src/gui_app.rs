@@ -1,3 +1,4 @@
+use crate::SearchLimits;
 use crate::app::{
     AppContentHit, AppMetadataHit, AppPaths, DiscoveredVolume, FederatedContentIndex,
     FederatedMetadataIndex, RuntimeReader, RuntimeSnapshot, VolumeKey,
@@ -10,7 +11,6 @@ use crate::gui::{
 };
 use crate::incremental::ContentQueryKind;
 use crate::persistent::crc64_ecma;
-use crate::SearchLimits;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -209,11 +209,7 @@ impl AppGuiSearchSession {
             .get(hit.line_number.saturating_sub(1) as usize)
             .map(String::as_str)
             .unwrap_or("");
-        let preview = context_preview(
-            text,
-            hit.byte_offset_in_line as usize,
-            GUI_PREVIEW_CHARS,
-        );
+        let preview = context_preview(text, hit.byte_offset_in_line as usize, GUI_PREVIEW_CHARS);
         let location = if is_extractable_document(&hit.record.path) {
             format!(
                 "Unit {} · byte {}",
@@ -294,9 +290,7 @@ fn load_logical_units(path: &Path, extractor: &ExtractorConfig) -> Result<Vec<St
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::{
-        AppRuntimeHandle, DiscoveredVolume, VolumeKey,
-    };
+    use crate::app::{AppRuntimeHandle, DiscoveredVolume, VolumeKey};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -350,7 +344,10 @@ mod tests {
                 assert!(response.rows[0].absolute_path.ends_with("alpha-target.txt"));
                 break;
             }
-            assert!(Instant::now() < deadline, "metadata did not become searchable");
+            assert!(
+                Instant::now() < deadline,
+                "metadata did not become searchable"
+            );
             std::thread::sleep(Duration::from_millis(20));
         }
 
