@@ -1162,7 +1162,9 @@ mod tests {
 
         let federated = FederatedMetadataIndex::load(&paths, &[volume]).unwrap();
         assert_eq!(
-            federated\n                .search(Some("must-not-index"), None, false, 100)\n                .len(),
+            federated
+                .search(Some("must-not-index"), None, false, 100)
+                .len(),
             0
         );
         assert_eq!(federated.search(Some("visible"), None, false, 100).len(), 1);
