@@ -73,6 +73,24 @@ impl RuntimeSnapshot {
     }
 }
 
+#[derive(Clone)]
+pub struct RuntimeReader {
+    snapshot: Arc<RwLock<RuntimeSnapshot>>,
+}
+
+impl RuntimeReader {
+    pub fn snapshot(&self) -> RuntimeSnapshot {
+        self.snapshot
+            .read()
+            .map(|value| value.clone())
+            .unwrap_or_else(|poisoned| poisoned.into_inner().clone())
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.snapshot().revision
+    }
+}
+
 pub struct AppRuntimeHandle {
     paths: AppPaths,
     volumes: Vec<DiscoveredVolume>,
@@ -139,6 +157,12 @@ impl AppRuntimeHandle {
 
     pub fn revision(&self) -> u64 {
         self.snapshot().revision
+    }
+
+    pub fn reader(&self) -> RuntimeReader {
+        RuntimeReader {
+            snapshot: Arc::clone(&self.snapshot),
+        }
     }
 
     pub fn request_stop(&self) {
