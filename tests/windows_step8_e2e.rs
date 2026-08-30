@@ -7,7 +7,7 @@ use personalrag_v2::app::{
 use personalrag_v2::extraction::ExtractorConfig;
 use personalrag_v2::{SearchLimits, incremental::ContentQueryKind};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 

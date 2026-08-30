@@ -9,7 +9,9 @@ mod volume;
 
 pub use content::*;
 pub use content_dirty::{DirtyContentStatus, dirty_content_status};
-pub use incremental_runtime::{IncrementalCheckpointStatus, IncrementalMetadataStatus};
+pub use incremental_runtime::{
+    IncrementalCheckpointStatus, IncrementalMetadataStatus, incremental_checkpoint_status,
+};
 pub use metadata_build::*;
 pub use runtime::*;
 pub use startup::*;
