@@ -88,7 +88,7 @@ impl AppPaths {
             let base = std::env::var_os("LOCALAPPDATA")
                 .map(PathBuf::from)
                 .unwrap_or_else(std::env::temp_dir);
-            return Ok(Self::for_root(base.join("PersonalRag")));
+            Ok(Self::for_root(base.join("PersonalRag")))
         }
         #[cfg(not(windows))]
         {
@@ -331,7 +331,7 @@ impl AppCoordinator {
             let report = build_or_resume_metadata(
                 &self.paths,
                 volume,
-                &[self.paths.root.clone()],
+                std::slice::from_ref(&self.paths.root),
                 METADATA_CHECKPOINT_RECORDS,
                 &mut should_stop,
             )?;
@@ -1122,7 +1122,7 @@ mod tests {
         let calls = AtomicUsize::new(0);
         let mut stop = || calls.fetch_add(1, Ordering::SeqCst) >= 1;
         let first =
-            build_or_resume_metadata(&paths, &volume, &[app_root.clone()], 2, &mut stop).unwrap();
+            build_or_resume_metadata(&paths, &volume, std::slice::from_ref(&app_root), 2, &mut stop).unwrap();
         assert!(!first.complete);
         assert!(first.committed_segments > 0);
 
