@@ -71,9 +71,15 @@ fn usage() -> String {
 fn main() {
     match parse_args() {
         Ok(args) => {
+            let mode = match &args.mode {
+                GuiLaunchMode::ZeroConfig => "zero-config".to_string(),
+                GuiLaunchMode::Legacy { root, store } => {
+                    format!("legacy root={} store={}", root.display(), store.display())
+                }
+            };
             eprintln!(
-                "PersonalRag V2 GUI is Windows-only. Parsed mode={:?} pdftotext={} unzip={} zstd={}",
-                args.mode,
+                "PersonalRag V2 GUI is Windows-only. Parsed mode={} pdftotext={} unzip={} zstd={}",
+                mode,
                 args.extractor.pdftotext.display(),
                 args.extractor.unzip.display(),
                 args.extractor.zstd.display()
@@ -395,7 +401,7 @@ mod windows_ui {
 
     enum SearchBackend {
         Legacy(GuiSearchSession),
-        App(AppGuiSearchSession),
+        App(Box<AppGuiSearchSession>),
     }
 
     impl SearchBackend {
@@ -489,7 +495,7 @@ mod windows_ui {
                 .map_err(|error| error.to_string())?;
                 let status = session.status();
                 Box::new(LaunchContext {
-                    backend: Some(SearchBackend::App(session)),
+                    backend: Some(SearchBackend::App(Box::new(session))),
                     status: Some(status),
                     runtime: Some(runtime),
                     runtime_reader: Some(runtime_reader),
