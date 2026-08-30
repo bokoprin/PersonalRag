@@ -137,7 +137,7 @@ pub struct GuiIndexStatus {
 pub struct GuiError(String);
 
 impl GuiError {
-    fn new(value: impl Into<String>) -> Self {
+    pub(crate) fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
 }
