@@ -4,9 +4,14 @@ use personalrag_v2::extraction::ExtractorConfig;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
+enum GuiLaunchMode {
+    ZeroConfig,
+    Legacy { root: PathBuf, store: PathBuf },
+}
+
+#[derive(Clone, Debug)]
 struct GuiArgs {
-    root: PathBuf,
-    store: PathBuf,
+    mode: GuiLaunchMode,
     extractor: ExtractorConfig,
 }
 
@@ -37,19 +42,27 @@ fn parse_args() -> Result<GuiArgs, String> {
             other => return Err(format!("unknown argument: {other}\n\n{}", usage())),
         }
     }
-    Ok(GuiArgs {
-        root: root.ok_or_else(usage)?,
-        store: store.ok_or_else(usage)?,
-        extractor,
-    })
+    let mode = match (root, store) {
+        (None, None) => GuiLaunchMode::ZeroConfig,
+        (Some(root), Some(store)) => GuiLaunchMode::Legacy { root, store },
+        _ => {
+            return Err(
+                "--root and --store must be supplied together; omit both for zero-config mode"
+                    .to_string(),
+            );
+        }
+    };
+    Ok(GuiArgs { mode, extractor })
 }
 
 fn usage() -> String {
     concat!(
         "PersonalRag V2 GUI\n",
-        "Usage: personalrag-v2-gui --root <indexed-root> --store <index-store> ",
-        "[--pdftotext <path>] [--unzip <path>] [--zstd <path>]\n",
-        "PERSONALRAG_ROOT and PERSONALRAG_STORE may be used instead of --root/--store."
+        "Usage: personalrag-v2-gui [--pdftotext <path>] [--unzip <path>] [--zstd <path>]\n",
+        "       personalrag-v2-gui --root <indexed-root> --store <index-store> [helper overrides]\n",
+        "With no root/store, PersonalRag discovers all fixed local drives, stores indexes under ",
+        "%LOCALAPPDATA%\\PersonalRag, and indexes continuously in the background.\n",
+        "PERSONALRAG_ROOT and PERSONALRAG_STORE remain available for legacy/developer mode."
     )
     .to_string()
 }
@@ -59,9 +72,8 @@ fn main() {
     match parse_args() {
         Ok(args) => {
             eprintln!(
-                "PersonalRag V2 GUI is Windows-only. Parsed root={} store={} pdftotext={} unzip={} zstd={}",
-                args.root.display(),
-                args.store.display(),
+                "PersonalRag V2 GUI is Windows-only. Parsed mode={:?} pdftotext={} unzip={} zstd={}",
+                args.mode,
                 args.extractor.pdftotext.display(),
                 args.extractor.unzip.display(),
                 args.extractor.zstd.display()
@@ -81,11 +93,13 @@ fn main() {
 
 #[cfg(windows)]
 mod windows_ui {
-    use super::GuiArgs;
+    use super::{GuiArgs, GuiLaunchMode};
+    use personalrag_v2::app::{AppRuntimeHandle, RuntimeReader, RuntimeSnapshot};
     use personalrag_v2::gui::{
         GuiContentMode, GuiFileScope, GuiIndexStatus, GuiResultRow, GuiSearchRequest,
         GuiSearchResponse, GuiSearchSession, format_file_size, format_modified_ns_utc,
     };
+    use personalrag_v2::gui_app::AppGuiSearchSession;
     use std::ffi::c_void;
     use std::mem;
     use std::path::Path;
@@ -192,7 +206,9 @@ mod windows_ui {
     const ID_RELOAD: usize = 1011;
     const ID_MORE: usize = 1014;
     const SEARCH_TIMER: usize = 1;
+    const RUNTIME_TIMER: usize = 2;
     const SEARCH_DEBOUNCE_MS: Uint = 140;
+    const RUNTIME_POLL_MS: Uint = 750;
 
     #[repr(C)]
     struct Point {
@@ -377,9 +393,33 @@ mod windows_ui {
         ) -> *mut c_void;
     }
 
+    enum SearchBackend {
+        Legacy(GuiSearchSession),
+        App(AppGuiSearchSession),
+    }
+
+    impl SearchBackend {
+        fn search(&mut self, request: &GuiSearchRequest) -> Result<GuiSearchResponse, String> {
+            match self {
+                Self::Legacy(session) => session.search(request).map_err(|error| error.to_string()),
+                Self::App(session) => session.search(request).map_err(|error| error.to_string()),
+            }
+        }
+
+        fn reload(&mut self) -> Result<GuiIndexStatus, String> {
+            match self {
+                Self::Legacy(session) => session.reload().map_err(|error| error.to_string()),
+                Self::App(session) => session.reload().map_err(|error| error.to_string()),
+            }
+        }
+    }
+
     struct LaunchContext {
-        session: Option<GuiSearchSession>,
+        backend: Option<SearchBackend>,
         status: Option<GuiIndexStatus>,
+        runtime: Option<AppRuntimeHandle>,
+        runtime_reader: Option<RuntimeReader>,
+        zero_config: bool,
     }
 
     enum WorkerCommand {
@@ -414,16 +454,49 @@ mod windows_ui {
         max_files: usize,
         rows: Vec<GuiResultRow>,
         index_status: GuiIndexStatus,
+        runtime: Option<AppRuntimeHandle>,
+        runtime_reader: Option<RuntimeReader>,
+        last_runtime_revision: u64,
+        zero_config: bool,
     }
 
     pub fn run(args: GuiArgs) -> Result<(), String> {
-        let session = GuiSearchSession::load(&args.root, &args.store, args.extractor)
-            .map_err(|error| error.to_string())?;
-        let status = session.status();
-        let launch = Box::new(LaunchContext {
-            session: Some(session),
-            status: Some(status),
-        });
+        let launch = match args.mode {
+            GuiLaunchMode::Legacy { root, store } => {
+                let session = GuiSearchSession::load(&root, &store, args.extractor)
+                    .map_err(|error| error.to_string())?;
+                let status = session.status();
+                Box::new(LaunchContext {
+                    backend: Some(SearchBackend::Legacy(session)),
+                    status: Some(status),
+                    runtime: None,
+                    runtime_reader: None,
+                    zero_config: false,
+                })
+            }
+            GuiLaunchMode::ZeroConfig => {
+                let runtime = AppRuntimeHandle::start_default(args.extractor.clone())
+                    .map_err(|error| format!("failed to start background index coordinator: {error}"))?;
+                let runtime_reader = runtime.reader();
+                let paths = runtime.paths().clone();
+                let volumes = runtime.volumes().to_vec();
+                let session = AppGuiSearchSession::load(
+                    paths,
+                    volumes,
+                    args.extractor,
+                    runtime_reader.clone(),
+                )
+                .map_err(|error| error.to_string())?;
+                let status = session.status();
+                Box::new(LaunchContext {
+                    backend: Some(SearchBackend::App(session)),
+                    status: Some(status),
+                    runtime: Some(runtime),
+                    runtime_reader: Some(runtime_reader),
+                    zero_config: true,
+                })
+            }
+        };
 
         unsafe {
             let common = InitCommonControlsEx {
@@ -438,7 +511,7 @@ mod windows_ui {
                 return Err(last_error("GetModuleHandleW"));
             }
             let class_name = wide("PersonalRagV2GuiWindow");
-            let title = wide("PersonalRag V2 — Local Universal Grep");
+            let title = wide("PersonalRag");
             let class = WndClassExW {
                 cb_size: mem::size_of::<WndClassExW>() as Uint,
                 style: 0,
@@ -512,15 +585,27 @@ mod windows_ui {
             WM_CREATE => {
                 let create = unsafe { &*(l_param as *const CreateStructW) };
                 let launch = unsafe { &mut *create.create_params.cast::<LaunchContext>() };
-                let Some(session) = launch.session.take() else {
-                    show_error("PersonalRag V2", "GUI launch session was already consumed");
+                let Some(backend) = launch.backend.take() else {
+                    show_error("PersonalRag V2", "GUI launch backend was already consumed");
                     return -1;
                 };
                 let Some(status) = launch.status.take() else {
                     show_error("PersonalRag V2", "GUI launch status was already consumed");
                     return -1;
                 };
-                match unsafe { initialize_window(hwnd, session, status) } {
+                let runtime = launch.runtime.take();
+                let runtime_reader = launch.runtime_reader.take();
+                let zero_config = launch.zero_config;
+                match unsafe {
+                    initialize_window(
+                        hwnd,
+                        backend,
+                        status,
+                        runtime,
+                        runtime_reader,
+                        zero_config,
+                    )
+                } {
                     Ok(state) => {
                         let state = Box::into_raw(Box::new(state));
                         unsafe {
@@ -587,6 +672,20 @@ mod windows_ui {
                 }
                 0
             }
+            WM_TIMER if w_param == RUNTIME_TIMER => {
+                if let Some(state) = unsafe { state_mut(hwnd) }
+                    && let Some(reader) = state.runtime_reader.as_ref()
+                {
+                    let revision = reader.revision();
+                    if revision > state.last_runtime_revision {
+                        state.last_runtime_revision = revision;
+                        unsafe { submit_reload(state) };
+                    } else {
+                        unsafe { update_idle_status(state) };
+                    }
+                }
+                0
+            }
             WM_NOTIFY => {
                 if let Some(state) = unsafe { state_mut(hwnd) } {
                     let header = unsafe { &*(l_param as *const NmHdr) };
@@ -629,7 +728,13 @@ mod windows_ui {
                     match result {
                         Ok(status) => {
                             state.index_status = status;
-                            unsafe { submit_search(hwnd, state) };
+                            if let Some(reader) = state.runtime_reader.as_ref() {
+                                state.last_runtime_revision = reader.revision();
+                            }
+                            unsafe {
+                                update_idle_status(state);
+                                submit_search(hwnd, state);
+                            };
                         }
                         Err(error) => unsafe {
                             set_text(state.status, &format!("Reload failed: {error}"))
@@ -641,6 +746,12 @@ mod windows_ui {
             WM_DESTROY => {
                 if let Some(state) = unsafe { state_mut(hwnd) } {
                     let _ = state.worker.send(WorkerCommand::Quit);
+                    if let Some(runtime) = state.runtime.as_ref() {
+                        runtime.request_stop();
+                    }
+                    unsafe {
+                        KillTimer(hwnd, RUNTIME_TIMER);
+                    }
                 }
                 unsafe { PostQuitMessage(0) };
                 0
@@ -661,8 +772,11 @@ mod windows_ui {
 
     unsafe fn initialize_window(
         hwnd: Hwnd,
-        session: GuiSearchSession,
+        backend: SearchBackend,
         index_status: GuiIndexStatus,
+        runtime: Option<AppRuntimeHandle>,
+        runtime_reader: Option<RuntimeReader>,
+        zero_config: bool,
     ) -> Result<AppState, String> {
         let font = unsafe { GetStockObject(DEFAULT_GUI_FONT) as Hfont };
         let instance = unsafe { GetModuleHandleW(null()) };
@@ -862,7 +976,7 @@ mod windows_ui {
 
         let (sender, receiver) = mpsc::channel::<WorkerCommand>();
         let worker_hwnd = hwnd as usize;
-        thread::spawn(move || worker_loop(worker_hwnd as Hwnd, session, receiver));
+        thread::spawn(move || worker_loop(worker_hwnd as Hwnd, backend, receiver));
 
         let state = AppState {
             file_label,
@@ -885,16 +999,25 @@ mod windows_ui {
             max_files: personalrag_v2::gui::GUI_FIRST_BATCH_FILES,
             rows: Vec::new(),
             index_status,
+            last_runtime_revision: runtime_reader.as_ref().map_or(0, RuntimeReader::revision),
+            runtime,
+            runtime_reader,
+            zero_config,
         };
+        if state.zero_config {
+            unsafe {
+                SetTimer(hwnd, RUNTIME_TIMER, RUNTIME_POLL_MS, null_mut());
+            }
+        }
         unsafe { update_idle_status(&state) };
         Ok(state)
     }
 
-    fn worker_loop(hwnd: Hwnd, mut session: GuiSearchSession, receiver: Receiver<WorkerCommand>) {
+    fn worker_loop(hwnd: Hwnd, mut backend: SearchBackend, receiver: Receiver<WorkerCommand>) {
         while let Ok(command) = receiver.recv() {
             match command {
                 WorkerCommand::Search(request_id, request) => {
-                    let result = session.search(&request).map_err(|error| error.to_string());
+                    let result = backend.search(&request);
                     post_worker_response(
                         hwnd,
                         WM_APP_SEARCH_DONE,
@@ -902,7 +1025,7 @@ mod windows_ui {
                     );
                 }
                 WorkerCommand::Reload(request_id) => {
-                    let result = session.reload().map_err(|error| error.to_string());
+                    let result = backend.reload();
                     post_worker_response(
                         hwnd,
                         WM_APP_RELOAD_DONE,
@@ -1226,16 +1349,79 @@ mod windows_ui {
     }
 
     unsafe fn update_idle_status(state: &AppState) {
-        unsafe {
-            set_text(
-                state.status,
-                &format!(
-                    "Ready · bundle {} · metadata {} · delta {} · root {}",
-                    state.index_status.bundle_generation,
-                    state.index_status.metadata_records,
-                    state.index_status.delta_changes,
-                    state.index_status.root.display()
-                ),
+        let text = if let Some(reader) = state.runtime_reader.as_ref() {
+            runtime_status_text(&reader.snapshot())
+        } else {
+            format!(
+                "Ready · bundle {} · metadata {} · delta {} · root {}",
+                state.index_status.bundle_generation,
+                state.index_status.metadata_records,
+                state.index_status.delta_changes,
+                state.index_status.root.display()
+            )
+        };
+        unsafe { set_text(state.status, &text) };
+    }
+
+    fn runtime_status_text(snapshot: &RuntimeSnapshot) -> String {
+        let metadata_records = snapshot
+            .volumes
+            .iter()
+            .map(|value| value.metadata_records)
+            .sum::<usize>();
+        let content_indexed = snapshot
+            .volumes
+            .iter()
+            .map(|value| value.content_indexed_files)
+            .sum::<usize>();
+        let content_total = snapshot
+            .volumes
+            .iter()
+            .map(|value| value.content_total_files)
+            .sum::<usize>();
+        let errors = snapshot
+            .volumes
+            .iter()
+            .filter(|value| value.last_error.is_some())
+            .count();
+        if snapshot.metadata_ready_volumes < snapshot.total_volumes {
+            format!(
+                "Files: {}/{} drives ready · {} items · Content: waiting · background indexing{}",
+                snapshot.metadata_ready_volumes,
+                snapshot.total_volumes,
+                metadata_records,
+                if errors == 0 {
+                    String::new()
+                } else {
+                    format!(" · {errors} degraded")
+                }
+            )
+        } else if snapshot.content_ready_volumes < snapshot.total_volumes {
+            format!(
+                "Files: Ready · {} items · Content: {}/{} files · {}/{} drives ready{}",
+                metadata_records,
+                content_indexed,
+                content_total,
+                snapshot.content_ready_volumes,
+                snapshot.total_volumes,
+                if errors == 0 {
+                    String::new()
+                } else {
+                    format!(" · {errors} degraded")
+                }
+            )
+        } else {
+            format!(
+                "Ready · {} files · Content {}/{} · watching {} drives{}",
+                metadata_records,
+                content_indexed,
+                content_total,
+                snapshot.total_volumes,
+                if errors == 0 {
+                    String::new()
+                } else {
+                    format!(" · {errors} degraded")
+                }
             )
         }
     }
