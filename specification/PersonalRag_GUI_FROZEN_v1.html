@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PersonalRag GUI Mock</title>
+<style>
+  :root{
+    --bg:#f3f3f3;
+    --panel:#ffffff;
+    --border:#d4d4d4;
+    --border-dark:#b8b8b8;
+    --text:#1f1f1f;
+    --muted:#6b6b6b;
+    --selection:#cfe8ff;
+    --selection-border:#7ab6ea;
+    --input:#ffffff;
+    --hover:#f4f8fb;
+    --status:#f7f7f7;
+    --accent:#0f6cbd;
+    --warn:#a15c00;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:"Segoe UI","Yu Gothic UI",Meiryo,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    font-size:13px;
+    overflow:hidden;
+  }
+  .app{
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    background:var(--panel);
+  }
+  .titlebar{
+    height:34px;
+    display:flex;
+    align-items:center;
+    padding:0 10px;
+    border-bottom:1px solid var(--border);
+    background:#fafafa;
+    font-size:12px;
+    user-select:none;
+  }
+  .brand{font-weight:600}
+  .titlebar .spacer{flex:1}
+  .window-actions span{
+    display:inline-block;
+    width:34px;
+    text-align:center;
+    color:#555;
+  }
+
+  .search-area{
+    padding:8px 10px 7px;
+    border-bottom:1px solid var(--border);
+    background:#fbfbfb;
+  }
+  .search-row{
+    display:grid;
+    grid-template-columns:90px minmax(260px,1fr) auto auto;
+    align-items:center;
+    gap:7px;
+    min-height:30px;
+  }
+  .search-row + .search-row{margin-top:5px}
+  .label{
+    color:#333;
+    white-space:nowrap;
+  }
+  input[type="text"], select{
+    height:27px;
+    border:1px solid var(--border-dark);
+    background:var(--input);
+    color:var(--text);
+    font:inherit;
+    padding:3px 7px;
+    outline:none;
+  }
+  input[type="text"]:focus, select:focus{
+    border-color:var(--accent);
+    box-shadow:0 0 0 1px rgba(15,108,189,.18);
+  }
+  .file-input{
+    font-size:14px;
+  }
+  .inline{
+    display:flex;
+    gap:6px;
+    align-items:center;
+    white-space:nowrap;
+  }
+  .check{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    color:#333;
+    user-select:none;
+  }
+  .check input{margin:0}
+  select{min-width:104px}
+  .clear-btn{
+    height:27px;
+    min-width:32px;
+    border:1px solid var(--border-dark);
+    background:#f8f8f8;
+    cursor:pointer;
+    border-radius:2px;
+  }
+  .clear-btn:hover{background:#ececec}
+
+  .toolbar{
+    height:34px;
+    padding:0 10px;
+    display:flex;
+    align-items:center;
+    border-bottom:1px solid var(--border);
+    background:#fff;
+    gap:10px;
+  }
+  .summary{color:#333}
+  .summary strong{font-weight:600}
+  .toolbar .spacer{flex:1}
+  .more-btn{
+    height:24px;
+    padding:0 11px;
+    border:1px solid var(--border-dark);
+    background:#fafafa;
+    cursor:pointer;
+    border-radius:2px;
+    font:inherit;
+  }
+  .more-btn:hover{background:#ececec}
+  .more-btn:disabled{opacity:.45;cursor:default}
+
+  .main{
+    min-height:0;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+  }
+  .table-wrap{
+    min-height:0;
+    flex:1;
+    overflow:auto;
+    background:#fff;
+    outline:none;
+  }
+  .table-wrap:focus{
+    box-shadow:inset 0 0 0 1px rgba(15,108,189,.45);
+  }
+  table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+    table-layout:fixed;
+  }
+  thead{
+    position:sticky;
+    top:0;
+    z-index:2;
+  }
+  th{
+    height:27px;
+    text-align:left;
+    font-weight:400;
+    padding:4px 7px;
+    background:#f5f5f5;
+    border-right:1px solid var(--border);
+    border-bottom:1px solid var(--border-dark);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  td{
+    height:25px;
+    padding:3px 7px;
+    border-bottom:1px solid #f0f0f0;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  tbody tr{cursor:default}
+  tbody tr:hover{background:var(--hover)}
+  tbody tr.selected{
+    background:var(--selection);
+    outline:1px solid var(--selection-border);
+    outline-offset:-1px;
+  }
+  .name-col{width:230px}
+  .path-col{width:auto}
+  .size-col{width:92px;text-align:right}
+  .mod-col{width:150px}
+  .hits-col{width:70px;text-align:right}
+  .name-cell{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    min-width:0;
+  }
+  .file-icon{
+    width:14px;height:16px;
+    border:1px solid #9aa7b1;
+    background:linear-gradient(#fff,#eef3f7);
+    border-radius:1px;
+    flex:0 0 auto;
+  }
+
+  .preview{
+    flex:0 0 190px;
+    border-top:1px solid var(--border-dark);
+    background:#fbfbfb;
+    display:none;
+    min-height:120px;
+  }
+  .preview.visible{display:flex;flex-direction:column}
+  .preview-head{
+    height:34px;
+    display:flex;
+    align-items:center;
+    padding:0 10px;
+    border-bottom:1px solid var(--border);
+    background:#f7f7f7;
+    gap:8px;
+  }
+  .preview-title{
+    font-weight:600;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .preview-count{color:var(--muted)}
+  .preview-head .spacer{flex:1}
+  .nav-btn{
+    height:23px;
+    border:1px solid var(--border-dark);
+    background:#fff;
+    cursor:pointer;
+    font:inherit;
+    padding:0 8px;
+    border-radius:2px;
+  }
+  .nav-btn:hover{background:#ececec}
+  .preview-body{
+    overflow:auto;
+    padding:6px 10px 8px;
+    font-family:Consolas,"Yu Gothic UI",monospace;
+    line-height:1.45;
+    outline:none;
+  }
+  .preview-body:focus{
+    box-shadow:inset 0 0 0 1px rgba(15,108,189,.45);
+    background:#fff;
+  }
+  .hit{
+    padding:4px 6px;
+    border-left:3px solid transparent;
+    margin-bottom:3px;
+  }
+  .hit.active{
+    background:#eef6fd;
+    border-left-color:var(--accent);
+  }
+  .preview-body:focus .hit.active{
+    background:#dcebfa;
+    box-shadow:inset 0 0 0 1px rgba(15,108,189,.20);
+  }
+  .hit-loc{
+    color:#555;
+    font-family:"Segoe UI","Yu Gothic UI",sans-serif;
+    font-size:12px;
+    margin-bottom:1px;
+  }
+  mark{
+    background:#fff1a8;
+    color:inherit;
+    padding:0;
+  }
+  .empty-preview{
+    color:var(--muted);
+    font-family:"Segoe UI","Yu Gothic UI",sans-serif;
+    padding:12px 4px;
+  }
+
+  .statusbar{
+    height:25px;
+    display:flex;
+    align-items:center;
+    padding:0 10px;
+    border-top:1px solid var(--border);
+    background:var(--status);
+    color:#505050;
+    font-size:12px;
+    gap:12px;
+  }
+  .statusbar .spacer{flex:1}
+  .dot{
+    width:7px;height:7px;border-radius:50%;
+    display:inline-block;background:#3a9b4f;margin-right:5px;
+  }
+  .content-progress{color:#555}
+  .hint{
+    color:#777;
+    border-left:1px solid var(--border);
+    padding-left:10px;
+  }
+  .no-results{
+    padding:22px 12px;
+    color:var(--muted);
+  }
+  .mock-badge{
+    color:#666;
+    font-size:11px;
+    border:1px solid #d0d0d0;
+    background:#fff;
+    padding:1px 5px;
+    border-radius:9px;
+  }
+
+  @media(max-width:800px){
+    .search-row{
+      grid-template-columns:75px minmax(180px,1fr);
+    }
+    .search-row > .inline{grid-column:2}
+    .name-col{width:180px}
+    .mod-col{width:130px}
+    .preview{flex-basis:175px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <span class="brand">PersonalRag</span>
+    <span style="margin-left:8px" class="mock-badge">GUI mock</span>
+    <span class="spacer"></span>
+    <div class="window-actions" aria-hidden="true">
+      <span>—</span><span>□</span><span>×</span>
+    </div>
+  </div>
+
+  <section class="search-area">
+    <div class="search-row">
+      <label class="label" for="fileQuery">ファイル名 / パス</label>
+      <input id="fileQuery" class="file-input" type="text" autocomplete="off" placeholder="例: *.rs  main  src\app" />
+      <div class="inline">
+        <label class="label" for="scope">対象</label>
+        <select id="scope">
+          <option value="filename">ファイル名</option>
+          <option value="fullpath">フルパス</option>
+        </select>
+      </div>
+      <label class="check"><input id="caseSensitive" type="checkbox"> 大文字/小文字を区別</label>
+    </div>
+
+    <div class="search-row">
+      <label class="label" for="contentQuery">内容</label>
+      <input id="contentQuery" type="text" autocomplete="off" placeholder="空欄なら Everything 風のファイル検索だけ" />
+      <div class="inline">
+        <select id="contentMode" title="内容検索方式">
+          <option value="literal">Literal</option>
+          <option value="regex">Regex</option>
+          <option value="wildcard">Wildcard</option>
+        </select>
+        <button id="clearContent" class="clear-btn" title="内容検索をクリア">×</button>
+      </div>
+      <span></span>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div id="summary" class="summary">入力すると即時検索します</div>
+    <span class="spacer"></span>
+    <button id="moreBtn" class="more-btn">さらに表示</button>
+  </div>
+
+  <main class="main">
+    <div id="tableWrap" class="table-wrap" tabindex="0" aria-label="検索結果">
+      <table>
+        <thead>
+          <tr>
+            <th class="name-col">Name</th>
+            <th class="path-col">Path</th>
+            <th class="size-col">Size</th>
+            <th class="mod-col">Modified</th>
+            <th id="hitsHeader" class="hits-col" style="display:none">Hits</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <div id="noResults" class="no-results" style="display:none">一致するファイルはありません。</div>
+    </div>
+
+    <section id="preview" class="preview">
+      <div class="preview-head">
+        <span id="previewTitle" class="preview-title">—</span>
+        <span id="previewCount" class="preview-count" title="一致欄をクリック後、↑/↓で同じファイル内の一致を移動"></span>
+        <span class="spacer"></span>
+        <button id="prevHit" class="nav-btn">前の一致</button>
+        <button id="nextHit" class="nav-btn">次の一致</button>
+      </div>
+      <div id="previewBody" class="preview-body" tabindex="0" aria-label="ファイル内の一致箇所"></div>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span><span class="dot"></span>Ready</span>
+    <span>1,245,381 files</span>
+    <span id="contentStatus" class="content-progress">Content 1,103,228 / 1,245,381</span>
+    <span>3 drives watching</span>
+    <span class="spacer"></span>
+    <span class="hint">Ctrl+F: ファイル検索 / Ctrl+Shift+F: 内容検索 / 一覧↑↓: ファイル移動 / 一致欄↑↓: ヒット移動</span>
+  </footer>
+</div>
+
+<script>
+const files = [
+  {
+    name:"main.rs", path:"C:\\work\\PersonalRag\\src", size:"24 KB", modified:"2026/09/05 12:30",
+    content:[
+      ["Line 42", "fn initialize_runtime() { // TODO: remove temporary fallback before v1 }"],
+      ["Line 87", "// TODO: optimize this path after GUI freeze"],
+      ["Line 153", "return RuntimeState::Ready; // TODO: add detailed telemetry"],
+      ["Line 188", "unsafe { start_native_watch(); }"],
+      ["Line 240", "PersonalRag starts zero-config background indexing."]
+    ]
+  },
+  {
+    name:"gui_app.rs", path:"C:\\work\\PersonalRag\\src", size:"19 KB", modified:"2026/09/05 11:42",
+    content:[
+      ["Line 19", "pub struct AppGuiSearchSession {"],
+      ["Line 82", "pub fn search(&mut self, request: &GuiSearchRequest) -> Result<GuiSearchResponse, GuiError> {"],
+      ["Line 104", "// TODO: align whitespace handling with legacy session"],
+      ["Line 151", "let preview = context_preview(text, hit.byte_offset_in_line as usize, GUI_PREVIEW_CHARS);"]
+    ]
+  },
+  {
+    name:"personalrag_gui.rs", path:"C:\\work\\PersonalRag\\src\\bin", size:"41 KB", modified:"2026/09/05 10:18",
+    content:[
+      ["Line 8", "enum GuiLaunchMode { ZeroConfig, Legacy { root: PathBuf, store: PathBuf } }"],
+      ["Line 143", "const SEARCH_DEBOUNCE_MS: Uint = 140;"],
+      ["Line 145", "const RUNTIME_POLL_MS: Uint = 750;"],
+      ["Line 312", "// TODO: replace developer-facing status with product status"],
+      ["Line 410", "SetWindowTextW(state.status, text.as_ptr());"]
+    ]
+  },
+  {
+    name:"README.md", path:"C:\\work\\PersonalRag", size:"8 KB", modified:"2026/09/04 18:20",
+    content:[
+      ["Line 12", "PersonalRag is a local deterministic desktop search application."],
+      ["Line 45", "Filename and path search remain available independently of content search."],
+      ["Line 70", "TODO: document final GUI keyboard shortcuts."]
+    ]
+  },
+  {
+    name:"HANDOFF.md", path:"C:\\work\\handoff", size:"17 KB", modified:"2026/09/05 08:05",
+    content:[
+      ["Line 3", "Current phase: GUI-first completion before Astra."],
+      ["Line 21", "Do not infer prior chat state; actual source and tests are authoritative."],
+      ["Line 61", "TODO: freeze GUI behavior before implementation continuation."]
+    ]
+  },
+  {
+    name:"STATE.json", path:"C:\\work\\handoff", size:"4 KB", modified:"2026/09/05 08:04",
+    content:[
+      ["Unit 1", "\"phase\": \"GUI-first completion before Astra\""],
+      ["Unit 2", "\"llm_search\": \"deferred\""]
+    ]
+  },
+  {
+    name:"search_semantics.rs", path:"C:\\work\\PersonalRag\\tests", size:"31 KB", modified:"2026/09/03 19:44",
+    content:[
+      ["Line 18", "Unicode 15.1 NFC/full-fold semantics are frozen."],
+      ["Line 88", "regex and wildcard preserve hard logical-unit boundaries."],
+      ["Line 144", "TODO: add one more whitespace regression vector."]
+    ]
+  },
+  {
+    name:"incremental_index.rs", path:"C:\\work\\PersonalRag\\tests", size:"67 KB", modified:"2026/09/02 16:13",
+    content:[
+      ["Line 105", "delta overlay create rename delete and replacement are exact"],
+      ["Line 266", "dirty content cache is reused and invalidated on modify"],
+      ["Line 401", "TODO: extend restart scenario on native NTFS."]
+    ]
+  },
+  {
+    name:"V2_GUI.md", path:"C:\\work\\PersonalRag\\docs", size:"6 KB", modified:"2026/08/29 22:10",
+    content:[
+      ["Line 7", "Step 6 provides the Everything-style desktop search boundary."],
+      ["Line 31", "Content is an independent content query field."],
+      ["Line 72", "Search is not executed on the UI thread."]
+    ]
+  },
+  {
+    name:"V2_ZERO_CONFIG_CONTINUOUS_INDEXING.md", path:"C:\\work\\PersonalRag\\docs", size:"13 KB", modified:"2026/08/30 21:16",
+    content:[
+      ["Line 4", "Step 8 implementation complete; final target-Windows confirmation pending."],
+      ["Line 93", "Ready requires an empty dirty queue."],
+      ["Line 132", "TODO: final real-machine confirmation."]
+    ]
+  },
+  {
+    name:"runtime.log", path:"D:\\PersonalRagData\\logs", size:"2.8 MB", modified:"2026/09/05 14:02",
+    content:[
+      ["Line 3842", "content catch-up complete; dirty=0"],
+      ["Line 3920", "metadata ready; watching 3 drives"],
+      ["Line 3977", "search TODO returned 21 files"]
+    ]
+  },
+  {
+    name:"design_notes.txt", path:"D:\Documents\PersonalRag", size:"12 KB", modified:"2026/09/01 09:15",
+    content:[
+      ["Line 4", "GUI should feel like Everything during ordinary filename search."],
+      ["Line 7", "The filename field remains the primary path into the application."],
+      ["Line 10", "This keeps the normal search flow lightweight and familiar."],
+      ["Line 12", "Content search adds Hits and a lower match pane."],
+      ["Line 15", "The lower pane shows each matching location within the selected file."],
+      ["Line 18", "The selected hit should move with the Up and Down arrow keys."],
+      ["Line 21", "This behavior should not move to another file while the match pane has focus."],
+      ["Line 25", "TODO: decide whether Hits column stays visible when content is empty."],
+      ["Line 29", "The content pane can contain dozens of hits for a short query such as th."],
+      ["Line 32", "Each hit is treated as another location within the same file."],
+      ["Line 36", "The active hit receives a blue selection background."],
+      ["Line 40", "The next hit should scroll into view when it is outside the visible region."],
+      ["Line 44", "The previous hit should behave the same way in the other direction."],
+      ["Line 48", "This makes it practical to inspect the whole file without touching the mouse."],
+      ["Line 52", "The first hit becomes active when the user selects the file."],
+      ["Line 56", "The search result row itself remains selected while the hit position changes."],
+      ["Line 60", "There should be no accidental jump to the next file from this pane."],
+      ["Line 64", "The Home key jumps to the first hit within this file."],
+      ["Line 68", "The End key jumps to the last hit within this file."],
+      ["Line 72", "This mock intentionally contains many th matches for keyboard testing."],
+      ["Line 76", "Another synthetic line keeps the hit list long enough to require scrolling."],
+      ["Line 80", "The match navigator should remain responsive even with many matches."],
+      ["Line 84", "Everything-like filename behavior stays separate from this content navigator."],
+      ["Line 88", "The content query and filename query are combined with AND semantics."],
+      ["Line 92", "The UI should clearly show which hit is active at all times."],
+      ["Line 96", "This is the final synthetic th line in the mock data set."]
+    ]
+  },
+  {
+    name:"specification.docx", path:"D:\\Documents\\PersonalRag", size:"1.3 MB", modified:"2026/08/31 15:22",
+    content:[
+      ["Unit 5", "PersonalRag content search remains deterministic."],
+      ["Unit 18", "TODO: improve user-facing document location labels."],
+      ["Unit 27", "Filename search and content search combine with AND semantics."]
+    ]
+  },
+  {
+    name:"manual.pdf", path:"D:\\Documents\\Manuals", size:"7.8 MB", modified:"2026/08/28 10:09",
+    content:[
+      ["Unit 18", "TODO items are shown as content matches."],
+      ["Unit 31", "PersonalRag searches indexed document text."],
+      ["Unit 50", "A logical unit is a hard search boundary."]
+    ]
+  },
+  {
+    name:"sales.xlsx", path:"D:\\Documents\\Reports", size:"892 KB", modified:"2026/09/01 17:44",
+    content:[
+      ["Unit 27", "PersonalRag"],
+      ["Unit 33", "TODO"],
+      ["Unit 42", "content search prototype"]
+    ]
+  },
+  {
+    name:"app.rs", path:"C:\\work\\PersonalRag\\src", size:"4 KB", modified:"2026/09/05 10:02",
+    content:[
+      ["Line 1", "mod content; mod incremental_runtime; mod runtime;"],
+      ["Line 13", "pub use runtime::*;"],
+      ["Line 20", "// TODO: manifest mismatch investigation"]
+    ]
+  },
+  {
+    name:"persistent.rs", path:"C:\\work\\PersonalRag\\src", size:"58 KB", modified:"2026/08/30 13:40",
+    content:[
+      ["Line 45", "const CONTENT_MAGIC: &[u8; 8] = b\"PRV2IDX1\";"],
+      ["Line 93", "TODO is not part of persistent semantics."],
+      ["Line 402", "crc64_ecma validates persistent payloads."]
+    ]
+  },
+  {
+    name:"metadata.rs", path:"C:\\work\\PersonalRag\\src", size:"49 KB", modified:"2026/08/30 13:32",
+    content:[
+      ["Line 61", "const METADATA_MAGIC: &[u8; 8] = b\"PRV2MET1\";"],
+      ["Line 210", "filename and path searches use the frozen Unicode normalizer."],
+      ["Line 444", "TODO: none"]
+    ]
+  },
+  {
+    name:"notes-TODO.txt", path:"E:\\Scratch", size:"2 KB", modified:"2026/09/05 13:55",
+    content:[
+      ["Line 1", "TODO: test PersonalRag GUI mock."],
+      ["Line 2", "TODO: compare with Everything interaction."],
+      ["Line 3", "TODO: freeze content preview behavior."]
+    ]
+  },
+  {
+    name:"photo-index-plan.md", path:"E:\\Scratch\\Plans", size:"6 KB", modified:"2026/08/27 09:00",
+    content:[
+      ["Line 8", "filename-first indexing remains the primary interaction."],
+      ["Line 14", "content search is optional."]
+    ]
+  }
+];
+
+let displayLimit = 8;
+let selected = null;
+let activeHit = 0;
+let visibleResults = [];
+
+const $ = id => document.getElementById(id);
+const fileQuery = $("fileQuery");
+const contentQuery = $("contentQuery");
+const scope = $("scope");
+const caseSensitive = $("caseSensitive");
+const contentMode = $("contentMode");
+const resultsBody = $("resultsBody");
+const noResults = $("noResults");
+const preview = $("preview");
+const previewBody = $("previewBody");
+const previewTitle = $("previewTitle");
+const previewCount = $("previewCount");
+const hitsHeader = $("hitsHeader");
+const summary = $("summary");
+const moreBtn = $("moreBtn");
+
+function wildcardToRegex(pattern){
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".");
+  return "^" + escaped + "$";
+}
+
+function everythingMatch(text, query, cs){
+  query = query.trim();
+  if (!query) return true;
+  const flags = cs ? "" : "i";
+  const tokens = query.split(/\s+/).filter(Boolean);
+  return tokens.every(tok => {
+    if (tok.includes("*") || tok.includes("?")){
+      try { return new RegExp(wildcardToRegex(tok), flags).test(text); }
+      catch { return false; }
+    }
+    return cs ? text.includes(tok) : text.toLowerCase().includes(tok.toLowerCase());
+  });
+}
+
+function contentHits(file, query, mode, cs){
+  if (!query) return [];
+  const flags = cs ? "g" : "gi";
+  let test;
+  try{
+    if (mode === "regex"){
+      const r = new RegExp(query, flags);
+      test = s => { r.lastIndex = 0; return r.test(s); };
+    }else if(mode === "wildcard"){
+      const r = new RegExp(query.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, "."), flags);
+      test = s => { r.lastIndex = 0; return r.test(s); };
+    }else{
+      test = s => cs ? s.includes(query) : s.toLowerCase().includes(query.toLowerCase());
+    }
+  }catch(e){
+    return {error:e.message, hits:[]};
+  }
+  return {hits:file.content.filter(([,text]) => test(text))};
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function highlight(text, query, mode, cs){
+  if(!query) return escapeHtml(text);
+  try{
+    let source;
+    if(mode==="regex") source=query;
+    else if(mode==="wildcard") source=query.replace(/[.+^${}()|[\]\\]/g,"\\$&").replace(/\*/g,".*?").replace(/\?/g,".");
+    else source=query.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    const re = new RegExp("(" + source + ")", cs ? "g" : "gi");
+    return escapeHtml(text).replace(re, "<mark>$1</mark>");
+  }catch{
+    return escapeHtml(text);
+  }
+}
+
+function runSearch(){
+  const fq = fileQuery.value;
+  const cq = contentQuery.value;
+  const cs = caseSensitive.checked;
+  const mode = contentMode.value;
+  const contentActive = cq.length > 0;
+
+  hitsHeader.style.display = contentActive ? "" : "none";
+  preview.classList.toggle("visible", contentActive);
+
+  let syntaxError = null;
+  const matches = [];
+  for(const f of files){
+    const text = scope.value==="filename" ? f.name : f.path + "\\" + f.name;
+    if(!everythingMatch(text, fq, cs)) continue;
+    let hits = [];
+    if(contentActive){
+      const result = contentHits(f, cq, mode, cs);
+      if(result.error){ syntaxError = result.error; break; }
+      hits = result.hits;
+      if(!hits.length) continue;
+    }
+    matches.push({...f, hits});
+  }
+
+  if(syntaxError){
+    resultsBody.innerHTML = "";
+    noResults.style.display = "block";
+    noResults.textContent = "内容検索式エラー: " + syntaxError;
+    summary.textContent = "検索式を確認してください";
+    moreBtn.disabled = true;
+    previewBody.innerHTML = '<div class="empty-preview">検索式が正しくありません。</div>';
+    return;
+  }
+
+  noResults.textContent = "一致するファイルはありません。";
+  const visible = matches.slice(0, displayLimit);
+  visibleResults = visible;
+  resultsBody.innerHTML = "";
+
+  visible.forEach((f, idx)=>{
+    const tr = document.createElement("tr");
+    tr.dataset.index = idx;
+    if(selected && selected.name===f.name && selected.path===f.path) tr.classList.add("selected");
+    tr.innerHTML = `
+      <td><div class="name-cell"><span class="file-icon"></span><span>${escapeHtml(f.name)}</span></div></td>
+      <td title="${escapeHtml(f.path)}">${escapeHtml(f.path)}</td>
+      <td class="size-col">${escapeHtml(f.size)}</td>
+      <td>${escapeHtml(f.modified)}</td>
+      ${contentActive ? `<td class="hits-col">${f.hits.length}</td>` : ""}
+    `;
+    tr.addEventListener("click", ()=>{
+      selected = f; activeHit=0;
+      $("tableWrap").focus();
+      document.querySelectorAll("tbody tr").forEach(x=>x.classList.remove("selected"));
+      tr.classList.add("selected");
+      updatePreview();
+    });
+    tr.addEventListener("dblclick", ()=>{
+      alert("モック: Open\\n" + f.path + "\\" + f.name);
+    });
+    resultsBody.appendChild(tr);
+  });
+
+  noResults.style.display = visible.length ? "none" : "block";
+  moreBtn.disabled = matches.length <= displayLimit;
+
+  const fakeMs = Math.max(1.8, Math.min(18.0, 2.3 + matches.length * 0.37 + (contentActive ? 3.1 : 0)));
+  if(!fq && !cq){
+    summary.textContent = "入力すると即時検索します";
+  }else{
+    summary.innerHTML = `<strong>${visible.length}</strong>件表示 · ${fakeMs.toFixed(1)} ms` +
+      (matches.length > visible.length ? ` · さらに候補あり` : "");
+  }
+
+  if(contentActive){
+    if(!visible.length){
+      selected=null;
+      previewTitle.textContent="—";
+      previewCount.textContent="";
+      previewBody.innerHTML='<div class="empty-preview">表示する一致内容はありません。</div>';
+    }else{
+      const stillVisible = visible.find(f => selected && f.name===selected.name && f.path===selected.path);
+      if(!stillVisible){
+        selected=visible[0]; activeHit=0;
+      }else selected=stillVisible;
+      document.querySelectorAll("tbody tr").forEach((tr,i)=>{
+        if(selected && visible[i].name===selected.name && visible[i].path===selected.path) tr.classList.add("selected");
+      });
+      updatePreview();
+    }
+  }else{
+    selected=null;
+  }
+}
+
+function updatePreview(){
+  if(!selected || !contentQuery.value){
+    previewBody.innerHTML="";
+    return;
+  }
+  const hits = selected.hits || [];
+  if(activeHit >= hits.length) activeHit=0;
+  previewTitle.textContent = selected.name;
+  previewCount.textContent = `${hits.length} matches`;
+  previewBody.innerHTML = hits.map(([loc,text],i)=>`
+    <div class="hit ${i===activeHit?'active':''}" data-hit="${i}">
+      <div class="hit-loc">${escapeHtml(loc)}</div>
+      <div>${highlight(text, contentQuery.value, contentMode.value, caseSensitive.checked)}</div>
+    </div>
+  `).join("");
+
+  previewBody.querySelectorAll(".hit").forEach(hitEl=>{
+    hitEl.addEventListener("click", e=>{
+      e.stopPropagation();
+      activeHit = Number(hitEl.dataset.hit || 0);
+      updatePreview();
+      previewBody.focus();
+    });
+  });
+
+  const active = previewBody.querySelector(".hit.active");
+  if(active) active.scrollIntoView({block:"nearest"});
+}
+
+function selectedVisibleIndex(){
+  if(!selected) return -1;
+  return visibleResults.findIndex(f => f.name===selected.name && f.path===selected.path);
+}
+
+function selectVisibleResult(index, scroll=true){
+  if(!visibleResults.length) return;
+  index = Math.max(0, Math.min(index, visibleResults.length - 1));
+  selected = visibleResults[index];
+  activeHit = 0;
+
+  const rows = [...resultsBody.querySelectorAll("tr")];
+  rows.forEach((tr, i) => tr.classList.toggle("selected", i === index));
+
+  if(scroll && rows[index]){
+    rows[index].scrollIntoView({block:"nearest"});
+  }
+  updatePreview();
+}
+
+function moveResultSelection(delta){
+  if(!visibleResults.length) return false;
+
+  let index = selectedVisibleIndex();
+  if(index < 0){
+    index = delta >= 0 ? 0 : visibleResults.length - 1;
+  }else{
+    index = Math.max(0, Math.min(index + delta, visibleResults.length - 1));
+  }
+
+  selectVisibleResult(index);
+  return true;
+}
+
+function changeHit(delta){
+  if(!selected || !selected.hits || !selected.hits.length) return;
+  activeHit = (activeHit + delta + selected.hits.length) % selected.hits.length;
+  updatePreview();
+}
+
+[fileQuery, contentQuery].forEach(el => el.addEventListener("input", ()=>{displayLimit=8;runSearch();}));
+[scope, caseSensitive, contentMode].forEach(el => el.addEventListener("change", ()=>{displayLimit=8;runSearch();}));
+
+$("clearContent").addEventListener("click", ()=>{
+  contentQuery.value="";
+  contentQuery.focus();
+  displayLimit=8;
+  runSearch();
+});
+moreBtn.addEventListener("click", ()=>{
+  displayLimit += 8;
+  runSearch();
+});
+$("prevHit").addEventListener("click", ()=>changeHit(-1));
+$("nextHit").addEventListener("click", ()=>changeHit(1));
+
+previewBody.addEventListener("keydown", e=>{
+  if(e.key==="ArrowDown" || e.key==="ArrowUp"){
+    e.preventDefault();
+    e.stopPropagation();
+    changeHit(e.key==="ArrowDown" ? 1 : -1);
+    previewBody.focus();
+    return;
+  }
+  if(e.key==="Home"){
+    e.preventDefault();
+    e.stopPropagation();
+    if(selected && selected.hits && selected.hits.length){
+      activeHit = 0;
+      updatePreview();
+      previewBody.focus();
+    }
+    return;
+  }
+  if(e.key==="End"){
+    e.preventDefault();
+    e.stopPropagation();
+    if(selected && selected.hits && selected.hits.length){
+      activeHit = selected.hits.length - 1;
+      updatePreview();
+      previewBody.focus();
+    }
+  }
+});
+
+document.addEventListener("keydown", e=>{
+  if(e.ctrlKey && e.shiftKey && e.key.toLowerCase()==="f"){
+    e.preventDefault(); contentQuery.focus(); contentQuery.select(); return;
+  }
+  if(e.ctrlKey && e.key.toLowerCase()==="f"){
+    e.preventDefault(); fileQuery.focus(); fileQuery.select(); return;
+  }
+
+  const active = document.activeElement;
+  const editing =
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLSelectElement ||
+    active instanceof HTMLButtonElement;
+
+  if(e.key==="Escape" && active instanceof HTMLInputElement){
+    active.value="";
+    displayLimit=8;
+    runSearch();
+    return;
+  }
+
+  // 検索結果にフォーカスがある状態では ↑/↓ で前後のファイルへ移動。
+  // 内容検索中はプレビューも選択ファイルへ連動する。
+  if(!editing && (e.key==="ArrowDown" || e.key==="ArrowUp")){
+    if(moveResultSelection(e.key==="ArrowDown" ? 1 : -1)){
+      e.preventDefault();
+      $("tableWrap").focus();
+      return;
+    }
+  }
+
+  if(e.key==="Enter" && selected && !editing){
+    e.preventDefault();
+    alert("モック: Open\n" + selected.path + "\\" + selected.name);
+  }
+});
+
+runSearch();
+fileQuery.focus();
+</script>
+</body>
+</html>
