@@ -58,14 +58,8 @@ public static class RunnerApp
 
     private static RouteReport RunRoute(string route, string corpusPath, QuerySetDocument querySet, OracleFile oracle, int rounds, string outputPath, bool official)
     {
-        CorpusData corpus = CorpusIO.Read(corpusPath);
-        Process process = Process.GetCurrentProcess(); FileRecord[] updateSources = SelectUpdateSources(corpus.Records); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-        Stopwatch buildWatch = Stopwatch.StartNew(); long buildPrivate; double persistSeconds; string storePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"route-{route.ToUpperInvariant()}.store");
-        {
-            IFilenameSearchEngine built = CreateEngine(route); built.Build(corpus.Records); buildWatch.Stop(); process.Refresh(); buildPrivate = process.PrivateMemorySize64;
-            Stopwatch saveWatch = Stopwatch.StartNew(); built.Save(storePath); saveWatch.Stop(); persistSeconds = saveWatch.Elapsed.TotalSeconds;
-        }
-        corpus = null!;
+        Process process = Process.GetCurrentProcess(); string storePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"route-{route.ToUpperInvariant()}.store");
+        BuildSummary build = BuildAndPersist(route, corpusPath, storePath, process);
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         long persistentBytes = new FileInfo(storePath).Length;
         IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); process.Refresh(); long readyPrivate = process.PrivateMemorySize64;
@@ -88,9 +82,17 @@ public static class RunnerApp
             }
         }
         finally { if (noGcRegion) { try { GC.EndNoGCRegion(); } catch (InvalidOperationException) { } } }
-        UpdateSummary update = MeasureUpdates(loaded, updateSources); List<double> all = measurements.Values.SelectMany(x => x).ToList(); var queryMetrics = measurements.Select(pair => { QuerySpec query = querySet.Queries.First(q => q.Id == pair.Key); return new QueryMetric(query.Id, query.Class, Percentile(pair.Value, .50), Percentile(pair.Value, .95), Percentile(pair.Value, .99), pair.Value.Count == 0 ? 0 : pair.Value.Max(), counts[pair.Key]); }).ToArray(); var classMetrics = queryMetrics.GroupBy(q => q.Class, StringComparer.Ordinal).Select(group => new ClassMetric(group.Key, Percentile(group.Select(q => q.P95Ms).ToList(), .95))).ToArray(); double worstClass = classMetrics.Length == 0 ? 0 : classMetrics.Max(c => c.P95Ms); SearchSummary search = new(Percentile(all, .50), Percentile(all, .95), Percentile(all, .99), all.Count == 0 ? 0 : all.Max(), worstClass, queryMetrics, classMetrics);
-        HardGate hard = new(!correctness, buildWatch.Elapsed.TotalSeconds > 60, loadWatch.Elapsed.TotalSeconds > 1.5, persistentBytes > 1L * 1024 * 1024 * 1024, readyPrivate > 1L * 1024 * 1024 * 1024, search.P50Ms > 20, search.P95Ms > 50, search.P99Ms > 100, search.WorstClassP95Ms > 50, update.P95Ms > 10);
-        return new RouteReport(route.ToUpperInvariant(), GetGitCommit(), new Correctness(fp, fn, correctness), buildWatch.Elapsed.TotalSeconds, loadWatch.Elapsed.TotalSeconds, persistentBytes, readyPrivate, buildPrivate, persistSeconds, search, update.P95Ms, hard.Pass ? "PASS" : "FAIL", new { official, rounds = totalRounds, warmup_rounds = Math.Min(2, totalRounds - 1), timed_rounds = Math.Max(0, totalRounds - 2), store_path = storePath, environment = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "unknown" });
+        UpdateSummary update = MeasureUpdates(loaded, build.UpdateSources); List<double> all = measurements.Values.SelectMany(x => x).ToList(); var queryMetrics = measurements.Select(pair => { QuerySpec query = querySet.Queries.First(q => q.Id == pair.Key); return new QueryMetric(query.Id, query.Class, Percentile(pair.Value, .50), Percentile(pair.Value, .95), Percentile(pair.Value, .99), pair.Value.Count == 0 ? 0 : pair.Value.Max(), counts[pair.Key]); }).ToArray(); var classMetrics = queryMetrics.GroupBy(q => q.Class, StringComparer.Ordinal).Select(group => new ClassMetric(group.Key, Percentile(group.Select(q => q.P95Ms).ToList(), .95))).ToArray(); double worstClass = classMetrics.Length == 0 ? 0 : classMetrics.Max(c => c.P95Ms); SearchSummary search = new(Percentile(all, .50), Percentile(all, .95), Percentile(all, .99), all.Count == 0 ? 0 : all.Max(), worstClass, queryMetrics, classMetrics);
+        HardGate hard = new(!correctness, build.BuildSeconds > 60, loadWatch.Elapsed.TotalSeconds > 1.5, persistentBytes > 1L * 1024 * 1024 * 1024, readyPrivate > 1L * 1024 * 1024 * 1024, search.P50Ms > 20, search.P95Ms > 50, search.P99Ms > 100, search.WorstClassP95Ms > 50, update.P95Ms > 10);
+        return new RouteReport(route.ToUpperInvariant(), GetGitCommit(), new Correctness(fp, fn, correctness), build.BuildSeconds, loadWatch.Elapsed.TotalSeconds, persistentBytes, readyPrivate, build.BuildPrivateBytes, build.PersistSeconds, search, update.P95Ms, hard.Pass ? "PASS" : "FAIL", new { official, rounds = totalRounds, warmup_rounds = Math.Min(2, totalRounds - 1), timed_rounds = Math.Max(0, totalRounds - 2), store_path = storePath, environment = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "unknown" });
+    }
+
+    private static BuildSummary BuildAndPersist(string route, string corpusPath, string storePath, Process process)
+    {
+        CorpusData corpus = CorpusIO.Read(corpusPath); FileRecord[] updateSources = SelectUpdateSources(corpus.Records);
+        Stopwatch buildWatch = Stopwatch.StartNew(); IFilenameSearchEngine built = CreateEngine(route); built.Build(corpus.Records); buildWatch.Stop(); process.Refresh(); long buildPrivate = process.PrivateMemorySize64;
+        Stopwatch saveWatch = Stopwatch.StartNew(); built.Save(storePath); saveWatch.Stop();
+        return new BuildSummary(buildWatch.Elapsed.TotalSeconds, buildPrivate, saveWatch.Elapsed.TotalSeconds, updateSources);
     }
 
     private static UpdateSummary MeasureUpdates(IFilenameSearchEngine engine, IReadOnlyList<FileRecord> records)
@@ -104,6 +106,8 @@ public static class RunnerApp
         for (int i = 0; i < selected.Length; i++) selected[i] = records[random.NextInt(records.Count)];
         return selected;
     }
+
+    private sealed record BuildSummary(double BuildSeconds, long BuildPrivateBytes, double PersistSeconds, FileRecord[] UpdateSources);
 
     private static QuerySpec[] Shuffle(IReadOnlyList<QuerySpec> source, ulong seed) { QuerySpec[] result = source.ToArray(); var random = new RunnerRandom(seed); for (int i = result.Length - 1; i > 0; i--) { int j = random.NextInt(i + 1); (result[i], result[j]) = (result[j], result[i]); } return result; }
     private static IFilenameSearchEngine CreateEngine(string route) => route.ToUpperInvariant() switch { "A" => new RouteAEngine(), "B" => new RouteBEngine(), "C" => new RouteCEngine(), _ => throw new ArgumentException($"Unknown route: {route}") };
