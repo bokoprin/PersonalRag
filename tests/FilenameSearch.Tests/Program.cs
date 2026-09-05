@@ -73,6 +73,24 @@ try
         Check(second.Search(new SearchRequest("stopped-move")).Records.Count == 0, "restart removes stale path");
     }
 
+    string stoppedModified = Path.Combine(root, "stopped-modified.txt");
+    File.WriteAllText(stoppedModified, "before");
+    await using (var beforeModification = FileSystemCatalog.Open(root, store))
+    {
+        await beforeModification.Ready;
+        await beforeModification.WaitForIdleAsync(TimeSpan.FromSeconds(10));
+    }
+    File.WriteAllText(stoppedModified, "after-restart-with-a-different-size");
+    ulong modifiedSize = (ulong)new FileInfo(stoppedModified).Length;
+    await using (var afterModification = FileSystemCatalog.Open(root, store))
+    {
+        await afterModification.Ready;
+        await Until(() => afterModification.Search(new SearchRequest("stopped-modified")).Records
+            .SingleOrDefault()?.SizeBytes == modifiedSize, "restart detects modified metadata");
+        Check(afterModification.Search(new SearchRequest("stopped-modified")).Records.Single().SizeBytes == modifiedSize,
+            "restart refreshes changed file metadata");
+    }
+
     // A corrupt visible store must fail safe by rebuilding from the filesystem.
     File.WriteAllBytes(store, [0, 1, 2, 3, 4]);
     await using (var recovered = FileSystemCatalog.Open(root, store))

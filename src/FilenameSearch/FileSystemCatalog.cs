@@ -188,11 +188,11 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 try
                 {
                     SetStatus("変更を反映中");
-                    if (pending.Any(change => change.CatchUp) && !rebuild) CatchUpCore();
-                    else if (rebuild) RebuildCore();
-                    else ProcessEvents(pending);
+                    bool changed = pending.Any(change => change.CatchUp) && !rebuild
+                        ? CatchUpCore()
+                        : rebuild ? RebuildCore() : ProcessEvents(pending);
                     SetStatus("Ready");
-                    PersistSoon();
+                    if (changed) PersistSoon();
                 }
                 catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
                 {
@@ -205,7 +205,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
     }
 
-    private void ProcessEvents(IReadOnlyList<FileSystemEvent> pending)
+    private bool ProcessEvents(IReadOnlyList<FileSystemEvent> pending)
     {
         engineGate.EnterReadLock();
         try
@@ -213,34 +213,36 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         // Deduplicate by path while preserving a rename pair. FileSystemWatcher can raise
         // several Change events for one write.
         var unique = new Dictionary<string, FileSystemEvent>(StringComparer.OrdinalIgnoreCase);
+        bool changed = false;
         foreach (FileSystemEvent change in pending)
         {
-            if (change.OldPath is not null) ProcessRename(change.OldPath, change.Path);
+            if (change.OldPath is not null) changed |= ProcessRename(change.OldPath, change.Path);
             else unique[NormalizePath(change.Path)] = change;
         }
-        foreach (FileSystemEvent change in unique.Values) ProcessPath(change.Path, change.Kind);
+        foreach (FileSystemEvent change in unique.Values) changed |= ProcessPath(change.Path, change.Kind);
+        return changed;
         }
         finally { engineGate.ExitReadLock(); }
     }
 
-    private void ProcessRename(string oldPath, string newPath)
+    private bool ProcessRename(string oldPath, string newPath)
     {
         oldPath = NormalizePath(oldPath);
         newPath = NormalizePath(newPath);
-        if (IsExcluded(oldPath) && IsExcluded(newPath)) return;
+        if (IsExcluded(oldPath) && IsExcluded(newPath)) return false;
         lock (gate)
         {
             if (!byPath.TryGetValue(oldPath, out FilenameRecord? oldRecord))
             {
                 Interlocked.Exchange(ref forceReconcile, 1);
-                return;
+                return false;
             }
             byPath.Remove(oldPath);
             engine.Remove(oldRecord.FileId);
             if (Directory.Exists(newPath))
             {
                 Interlocked.Exchange(ref forceReconcile, 1);
-                return;
+                return true;
             }
             if (File.Exists(newPath))
             {
@@ -248,18 +250,19 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 byPath[newPath] = replacement;
                 engine.Upsert(replacement);
             }
+            return true;
         }
     }
 
-    private void ProcessPath(string path, FileSystemEventKind kind)
+    private bool ProcessPath(string path, FileSystemEventKind kind)
     {
         path = NormalizePath(path);
-        if (IsExcluded(path)) return;
+        if (IsExcluded(path)) return false;
         if (Directory.Exists(path))
         {
-            if (kind == FileSystemEventKind.Changed) return;
+            if (kind == FileSystemEventKind.Changed) return false;
             Interlocked.Exchange(ref forceReconcile, 1);
-            return;
+            return false;
         }
         lock (gate)
         {
@@ -267,18 +270,22 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             {
                 int id = byPath.TryGetValue(path, out FilenameRecord? current) ? current.FileId : AllocateId();
                 FilenameRecord next = ReadRecord(path, id);
+                if (current is not null && Equivalent(current, next)) return false;
                 byPath[path] = next;
                 engine.Upsert(next);
+                return true;
             }
             else if (byPath.Remove(path, out FilenameRecord? removed))
             {
                 engine.Remove(removed.FileId);
                 if (removed.IsDirectory) Interlocked.Exchange(ref forceReconcile, 1);
+                return true;
             }
+            return false;
         }
     }
 
-    private void RebuildCore()
+    private bool RebuildCore()
     {
         FileSystemEntry[] discovered = Discover();
         Dictionary<string, FilenameRecord> next;
@@ -342,9 +349,10 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         }
         finally { engineGate.ExitWriteLock(); }
         previous.Dispose();
+        return true;
     }
 
-    private void CatchUpCore()
+    private bool CatchUpCore()
     {
         FileSystemEntry[] discovered = Discover();
         lock (gate)
@@ -369,8 +377,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                     // A restart normally has an unchanged tree. Reuse the persisted metadata
                     // after one cheap timestamp check; the previous full FileInfo.Refresh per
                     // entry made a 100k-file catch-up exceed the five-second product gate.
-                    if (old.IsDirectory || old.FullPath.Equals(entry.Path, StringComparison.Ordinal) ||
-                        File.GetLastWriteTimeUtc(entry.Path) == old.ModifiedUtc)
+                    if (old.IsDirectory || File.GetLastWriteTimeUtc(entry.Path) == old.ModifiedUtc)
                         metadata = old;
                     else metadata = ReadRecord(entry.Path, id);
                 }
@@ -418,7 +425,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 }
                 finally { engineGate.ExitWriteLock(); }
                 previous.Dispose();
-                return;
+                return true;
             }
 
             engineGate.EnterReadLock();
@@ -433,6 +440,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             finally { engineGate.ExitReadLock(); }
             byPath.Clear();
             foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
+            return changedCount > 0;
         }
     }
 

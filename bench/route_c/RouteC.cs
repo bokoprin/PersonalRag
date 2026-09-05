@@ -149,7 +149,6 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
                 _ = pathsFolded[i];
             }
             foreach (Posting posting in nameIndex.Values) _ = posting.Data;
-            foreach (Posting posting in pathIndex.Values) _ = posting.Data;
         }
     }
 
