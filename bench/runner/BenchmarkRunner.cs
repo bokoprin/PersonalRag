@@ -65,24 +65,19 @@ public static class RunnerApp
         long persistentBytes = new FileInfo(storePath).Length;
         IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); long readyPrivate = MeasureFreshLoadMemory(route, storePath);
         var oracleById = oracle.Results.ToDictionary(r => r.Id, StringComparer.Ordinal); var measurements = querySet.Queries.ToDictionary(q => q.Id, _ => new List<double>(), StringComparer.Ordinal); var counts = querySet.Queries.ToDictionary(q => q.Id, _ => 0, StringComparer.Ordinal); int fp = 0, fn = 0; bool correctness = true; string previous = "";
-        int totalRounds = Math.Max(3, rounds);
-        bool noGcRegion = false;
-        try { noGcRegion = GC.TryStartNoGCRegion(1024L * 1024 * 1024); } catch (InvalidOperationException) { }
-        try
+        int totalRounds = Math.Max(3, rounds); int queriesSinceCollection = 0;
+        for (int round = 0; round < totalRounds; round++)
         {
-            for (int round = 0; round < totalRounds; round++)
+            QuerySpec[] order = Shuffle(querySet.Queries, 0x46524E5F53485546UL + (ulong)round);
+            if (previous.Length > 0 && order.Length > 1 && order[0].Id == previous) (order[0], order[1]) = (order[1], order[0]);
+            foreach (QuerySpec query in order)
             {
-                QuerySpec[] order = Shuffle(querySet.Queries, 0x46524E5F53485546UL + (ulong)round);
-                if (previous.Length > 0 && order.Length > 1 && order[0].Id == previous) (order[0], order[1]) = (order[1], order[0]);
-                foreach (QuerySpec query in order)
-                {
-                    Stopwatch watch = Stopwatch.StartNew(); SearchResult result = loaded.Search(new FilenameQuery(query.Query, query.Scope, query.CaseSensitive, query.Limit)); watch.Stop(); previous = query.Id;
-                    if (round >= 2) measurements[query.Id].Add(watch.Elapsed.TotalMilliseconds); counts[query.Id] = result.Records.Count;
-                    OracleResult truth = oracleById[query.Id]; int[] actualIds = result.Records.Select(r => r.FileId).OrderBy(id => id).ToArray(); bool match = actualIds.Length == truth.ExpectedCount && HashIds(actualIds).Equals(truth.ExpectedIdsSha256, StringComparison.OrdinalIgnoreCase); if (!match) { correctness = false; fp++; fn++; }
-                }
+                OracleResult truth = oracleById[query.Id]; TimedQuery timed = ExecuteTimedQuery(loaded, query, truth); previous = query.Id;
+                if (round >= 2) measurements[query.Id].Add(timed.ElapsedMs); counts[query.Id] = timed.ResultCount;
+                if (!timed.Match) { correctness = false; fp++; fn++; }
+                if (++queriesSinceCollection >= 4) { queriesSinceCollection = 0; GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
             }
         }
-        finally { if (noGcRegion) { try { GC.EndNoGCRegion(); } catch (InvalidOperationException) { } } }
         UpdateSummary update = MeasureUpdates(loaded, build.UpdateSources); List<double> all = measurements.Values.SelectMany(x => x).ToList(); var queryMetrics = measurements.Select(pair => { QuerySpec query = querySet.Queries.First(q => q.Id == pair.Key); return new QueryMetric(query.Id, query.Class, Percentile(pair.Value, .50), Percentile(pair.Value, .95), Percentile(pair.Value, .99), pair.Value.Count == 0 ? 0 : pair.Value.Max(), counts[pair.Key]); }).ToArray(); var classMetrics = queryMetrics.GroupBy(q => q.Class, StringComparer.Ordinal).Select(group => new ClassMetric(group.Key, Percentile(group.Select(q => q.P95Ms).ToList(), .95))).ToArray(); double worstClass = classMetrics.Length == 0 ? 0 : classMetrics.Max(c => c.P95Ms); SearchSummary search = new(Percentile(all, .50), Percentile(all, .95), Percentile(all, .99), all.Count == 0 ? 0 : all.Max(), worstClass, queryMetrics, classMetrics);
         HardGate hard = new(!correctness, build.BuildSeconds > 60, loadWatch.Elapsed.TotalSeconds > 1.5, persistentBytes > 1L * 1024 * 1024 * 1024, readyPrivate > 1L * 1024 * 1024 * 1024, search.P50Ms > 20, search.P95Ms > 50, search.P99Ms > 100, search.WorstClassP95Ms > 50, update.P95Ms > 10);
         return new RouteReport(route.ToUpperInvariant(), GetGitCommit(), new Correctness(fp, fn, correctness), build.BuildSeconds, loadWatch.Elapsed.TotalSeconds, persistentBytes, readyPrivate, build.BuildPrivateBytes, build.PersistSeconds, search, update.P95Ms, hard.Pass ? "PASS" : "FAIL", new { official, rounds = totalRounds, warmup_rounds = Math.Min(2, totalRounds - 1), timed_rounds = Math.Max(0, totalRounds - 2), store_path = storePath, environment = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "unknown" });
@@ -101,6 +96,13 @@ public static class RunnerApp
         var times = new List<double>(10_000); var random = new RunnerRandom(0x5550444154455F31UL); for (int i = 0; i < 10_000; i++) { FileRecord source = records[random.NextInt(records.Count)]; FileRecord changed = source with { Name = source.Name + "_u" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), FullPath = source.FullPath + "_u" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) }; Stopwatch watch = Stopwatch.StartNew(); engine.Upsert(changed); watch.Stop(); times.Add(watch.Elapsed.TotalMilliseconds); } return new UpdateSummary(Percentile(times, .95), times.Max(), times.Count);
     }
 
+    private static TimedQuery ExecuteTimedQuery(IFilenameSearchEngine engine, QuerySpec query, OracleResult truth)
+    {
+        Stopwatch watch = Stopwatch.StartNew(); SearchResult result = engine.Search(new FilenameQuery(query.Query, query.Scope, query.CaseSensitive, query.Limit)); watch.Stop();
+        int[] actualIds = result.Records.Select(r => r.FileId).OrderBy(id => id).ToArray(); bool match = actualIds.Length == truth.ExpectedCount && HashIds(actualIds).Equals(truth.ExpectedIdsSha256, StringComparison.OrdinalIgnoreCase);
+        return new TimedQuery(watch.Elapsed.TotalMilliseconds, result.Records.Count, match);
+    }
+
     private static FileRecord[] SelectUpdateSources(IReadOnlyList<FileRecord> records)
     {
         var selected = new FileRecord[10_000]; var random = new RunnerRandom(0x5550444154455F31UL);
@@ -109,6 +111,7 @@ public static class RunnerApp
     }
 
     private sealed record BuildSummary(double BuildSeconds, long BuildPrivateBytes, double PersistSeconds, FileRecord[] UpdateSources);
+    private readonly record struct TimedQuery(double ElapsedMs, int ResultCount, bool Match);
 
     private static QuerySpec[] Shuffle(IReadOnlyList<QuerySpec> source, ulong seed) { QuerySpec[] result = source.ToArray(); var random = new RunnerRandom(seed); for (int i = result.Length - 1; i > 0; i--) { int j = random.NextInt(i + 1); (result[i], result[j]) = (result[j], result[i]); } return result; }
     private static IFilenameSearchEngine CreateEngine(string route) => route.ToUpperInvariant() switch { "A" => new RouteAEngine(), "B" => new RouteBEngine(), "C" => new RouteCEngine(), _ => throw new ArgumentException($"Unknown route: {route}") };
