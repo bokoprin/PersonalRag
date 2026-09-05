@@ -92,12 +92,12 @@ public sealed class RouteBEngine : IFilenameSearchEngine
 
     private int[]? CandidateIndexes(string[] tokens, FilenameScope scope, bool caseSensitive, out bool usedScan)
     {
-        if (caseSensitive) { usedScan = true; return null; }
         Dictionary<string, Posting> index = scope == FilenameScope.Filename ? namePostings : pathPostings;
         int[]? intersection = null; bool indexed = false;
         foreach (string token in tokens)
         {
-            string[] trigrams = (token.IndexOfAny(['*', '?']) >= 0 ? ExtractPatternTrigrams(token) : ExtractTrigrams(token)).Distinct(StringComparer.Ordinal).ToArray();
+            string indexToken = caseSensitive ? FilenameSemantics.Normalize(token, false) : token;
+            string[] trigrams = (indexToken.IndexOfAny(['*', '?']) >= 0 ? ExtractPatternTrigrams(indexToken) : ExtractTrigrams(indexToken)).Distinct(StringComparer.Ordinal).ToArray();
             if (trigrams.Length == 0) continue;
             indexed = true;
             var postings = new List<Posting>(trigrams.Length);
@@ -172,6 +172,18 @@ public sealed class RouteBEngine : IFilenameSearchEngine
 
     private static bool Glob(ReadOnlySpan<char> text, ReadOnlySpan<char> pattern)
     {
+        if (pattern.IndexOf('?') < 0)
+        {
+            int firstStar = pattern.IndexOf('*');
+            if (firstStar >= 0 && pattern[(firstStar + 1)..].IndexOf('*') < 0)
+            {
+                ReadOnlySpan<char> prefix = pattern[..firstStar], suffix = pattern[(firstStar + 1)..];
+                if (prefix.Length == 0 && suffix.Length == 0) return true;
+                if (prefix.Length == 0) return text.Contains(suffix, StringComparison.Ordinal);
+                if (suffix.Length == 0) return text.StartsWith(prefix, StringComparison.Ordinal);
+                return text.Length >= prefix.Length + suffix.Length && text.StartsWith(prefix, StringComparison.Ordinal) && text.EndsWith(suffix, StringComparison.Ordinal);
+            }
+        }
         int ti = 0, pi = 0, star = -1, starText = -1;
         while (ti < text.Length)
         {
