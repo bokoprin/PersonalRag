@@ -14,13 +14,15 @@ if (args.Length < 2) throw new ArgumentException("usage: FilenameSearch.E2E <roo
 string root = Path.GetFullPath(args[0]);
 string reportPath = Path.GetFullPath(args[1]);
 int count = args.Length >= 3 ? int.Parse(args[2]) : 100_000;
+bool keepRoot = args.Skip(3).Any(argument => argument.Equals("--keep", StringComparison.OrdinalIgnoreCase));
 if (count < 100_000) throw new ArgumentOutOfRangeException(nameof(args), "E2E requires at least 100,000 entries");
 string? parent = Path.GetDirectoryName(root);
 if (parent is null || !Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase))
     throw new InvalidOperationException("E2E root must be under the system temporary directory");
 Directory.CreateDirectory(parent);
-string store = Path.Combine(parent, "store", "index.routec");
 Directory.CreateDirectory(root);
+// Keep the store below the dedicated root so cleanup can never touch a shared temp folder.
+string store = Path.Combine(root, ".personalrag-store", "index.routec");
 var report = new Dictionary<string, object?> { ["version"] = 1, ["root"] = root, ["count_requested"] = count, ["started_utc"] = DateTime.UtcNow };
 var stopwatch = Stopwatch.StartNew();
 int checks = 0;
@@ -110,7 +112,7 @@ finally
     report["finished_utc"] = DateTime.UtcNow;
     Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
     File.WriteAllText(reportPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
-    try { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    try { if (!keepRoot && Directory.Exists(root)) Directory.Delete(root, true); }
     catch (IOException) { }
 }
 

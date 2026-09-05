@@ -51,13 +51,24 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         // Allow the product's atomic replace writer to publish a new snapshot while a
         // reader still has the previous lazy table open. The old handle remains valid
         // until the next Load/Dispose and never exposes a partially written store.
-        FileStream stream = new(store, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); bool keepOpen = false;
+        FileStream stream = new(store, new FileStreamOptions
+        {
+            Mode = FileMode.Open,
+            Access = FileAccess.Read,
+            Share = FileShare.ReadWrite | FileShare.Delete,
+            BufferSize = 64 * 1024,
+            Options = FileOptions.SequentialScan
+        });
+        bool keepOpen = false;
         try
         {
             using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
             if (reader.ReadString() != Magic || reader.ReadInt32() != 1) throw new InvalidDataException("Route C store header mismatch");
             int count = reader.ReadInt32(); if (count < 0 || count > 10_000_000) throw new InvalidDataException("Route C store count invalid"); int rare = reader.ReadInt32(), medium = reader.ReadInt32();
-            var next = new FileRecord[count]; for (int i = 0; i < count; i++) next[i] = Canonicalize(ReadRecord(reader));
+            // Build/Save canonicalize every record before it reaches the store. Avoiding a
+            // second FormC pass here keeps fresh-process startup bounded on the million-file
+            // corpus while preserving the on-disk canonical invariant.
+            var next = new FileRecord[count]; for (int i = 0; i < count; i++) next[i] = ReadRecord(reader);
             StringTable nf = ReadStringTable(reader, stream, count), pf = ReadStringTable(reader, stream, count); Dictionary<string, Posting> ni = ReadIndex(reader, stream), pi = ReadIndex(reader, stream);
             if (stream.Position != stream.Length) throw new InvalidDataException("Route C store has trailing bytes"); ValidateIds(next);
             lock (gate) { CloseLazyStore(); records = next; namesFolded = nf; pathsFolded = pf; nameIndex = ni; pathIndex = pi; rareThreshold = rare; mediumThreshold = medium; ids = next.Select(r => r.FileId).ToHashSet(); changes = []; lazyStore = stream; keepOpen = true; }
@@ -72,10 +83,59 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         lock (gate)
         {
             requiresSort = changes.Count > 0;
-            if (changes.Count > 0) { usedScan = true; candidates = 0; for (int i = 0; i < records.Length; i++) if (TryCurrent(i, out Prepared current)) { candidates++; if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } foreach ((int id, Prepared? change) in changes) if (!ids.Contains(id) && change is not null) { candidates++; if (Matches(change.Value, request.Scope, request.CaseSensitive, tokens)) results.Add(change.Value.Record); } }
-            else { int[]? candidateIndexes = CandidateIndexes(tokens, request.Scope, request.CaseSensitive, out usedScan); candidates = candidateIndexes?.Length ?? records.Length; if (candidateIndexes is null) { for (int index = 0; index < records.Length; index++) { Prepared current = new(records[index], namesFolded[index], pathsFolded[index]); if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } } else foreach (int index in candidateIndexes) { Prepared current = new(records[index], namesFolded[index], pathsFolded[index]); if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } }
+            if (tokens.Length == 0 && changes.Count == 0)
+            {
+                usedScan = true;
+                candidates = records.Length;
+                int count = request.Limit > 0 ? Math.Min(request.Limit, records.Length) : records.Length;
+                for (int i = 0; i < count; i++) results.Add(records[i]);
+            }
+            else if (changes.Count > 0) { usedScan = true; candidates = 0; for (int i = 0; i < records.Length; i++) if (TryCurrent(i, out Prepared current)) { candidates++; if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } foreach ((int id, Prepared? change) in changes) if (!ids.Contains(id) && change is not null) { candidates++; if (Matches(change.Value, request.Scope, request.CaseSensitive, tokens)) results.Add(change.Value.Record); } }
+            else
+            {
+                int[]? candidateIndexes = CandidateIndexes(tokens, request.Scope, request.CaseSensitive, out usedScan);
+                candidates = candidateIndexes?.Length ?? records.Length;
+                if (candidateIndexes is null)
+                {
+                    if (records.Length >= ParallelSearchThreshold) AddMatchesParallel(results, records.Length, static (index, state) => index, request.Scope, request.CaseSensitive, tokens);
+                    else for (int index = 0; index < records.Length; index++)
+                    {
+                        Prepared current = new(records[index], namesFolded[index], pathsFolded[index]);
+                        if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record);
+                    }
+                }
+                else if (candidateIndexes.Length >= ParallelSearchThreshold)
+                {
+                    AddMatchesParallel(results, candidateIndexes.Length, (index, _) => candidateIndexes[index], request.Scope, request.CaseSensitive, tokens);
+                }
+                else foreach (int index in candidateIndexes)
+                {
+                    Prepared current = new(records[index], namesFolded[index], pathsFolded[index]);
+                    if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record);
+                }
+            }
         }
         if (requiresSort) results.Sort((a, b) => a.FileId.CompareTo(b.FileId)); if (request.Limit > 0 && results.Count > request.Limit) results.RemoveRange(request.Limit, results.Count - request.Limit); stopwatch.Stop(); return new SearchResult(results, stopwatch.Elapsed.TotalMilliseconds, candidates, usedScan);
+    }
+
+    private const int ParallelSearchThreshold = 8_192;
+
+    private void AddMatchesParallel(List<FileRecord> results, int count, Func<int, object?, int> resolveIndex,
+        FilenameScope scope, bool caseSensitive, string[] tokens)
+    {
+        var matched = new FileRecord[count];
+        var selected = new bool[count];
+        Parallel.For(0, count, i =>
+        {
+            int index = resolveIndex(i, null);
+            Prepared current = new(records[index], namesFolded[index], pathsFolded[index]);
+            if (Matches(current, scope, caseSensitive, tokens))
+            {
+                matched[i] = current.Record;
+                selected[i] = true;
+            }
+        });
+        for (int i = 0; i < count; i++) if (selected[i]) results.Add(matched[i]);
     }
 
     /// <summary>Releases the file handle used by lazy persisted tables.</summary>
@@ -165,7 +225,17 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
 
     private static int[] Intersect(int[] left, int[] right) { int[] result = new int[Math.Min(left.Length, right.Length)]; int i = 0, j = 0, count = 0; while (i < left.Length && j < right.Length) { if (left[i] == right[j]) { result[count++] = left[i]; i++; j++; } else if (left[i] < right[j]) i++; else j++; } return result[..count]; }
     private bool TryCurrent(int index, out Prepared prepared) { int id = records[index].FileId; if (changes.TryGetValue(id, out Prepared? change)) { if (change.HasValue) { prepared = change.Value; return true; } prepared = default; return false; } prepared = new(records[index], namesFolded[index], pathsFolded[index]); return true; }
-    private FileRecord[] SnapshotRecords() { var result = new List<FileRecord>(records.Length + changes.Count); for (int i = 0; i < records.Length; i++) if (TryCurrent(i, out Prepared current)) result.Add(current.Record); foreach ((int id, Prepared? change) in changes) if (!ids.Contains(id) && change is not null) result.Add(change.Value.Record); result.Sort((a, b) => a.FileId.CompareTo(b.FileId)); return result.ToArray(); }
+    private FileRecord[] SnapshotRecords()
+    {
+        // A fresh load has no overlay. Returning the canonical metadata directly avoids
+        // decoding every lazy folded string merely to enumerate records at startup/save.
+        if (changes.Count == 0) return records.ToArray();
+        var result = new List<FileRecord>(records.Length + changes.Count);
+        for (int i = 0; i < records.Length; i++) if (TryCurrent(i, out Prepared current)) result.Add(current.Record);
+        foreach ((int id, Prepared? change) in changes) if (!ids.Contains(id) && change is not null) result.Add(change.Value.Record);
+        result.Sort((a, b) => a.FileId.CompareTo(b.FileId));
+        return result.ToArray();
+    }
     private static Prepared Prepare(FileRecord record) { FileRecord canonical = Canonicalize(record); return new(canonical, FilenameSemantics.Normalize(canonical.Name, false), FilenameSemantics.Normalize(canonical.FullPath, false)); }
     private static FileRecord Canonicalize(FileRecord record) => record with { Name = record.Name.Normalize(NormalizationForm.FormC), FullPath = record.FullPath.Normalize(NormalizationForm.FormC) };
     private static (int rare, int medium) Thresholds(int count) { int rare = Math.Max(32, count / 1_000); int medium = Math.Max(rare * 4, count / 32); return (rare, medium); }
@@ -209,13 +279,61 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
     {
         int count = reader.ReadInt32(); if (count != expected) throw new InvalidDataException("Route C string count mismatch");
         var offsets = new long[count]; var lengths = new int[count];
-        for (int i = 0; i < count; i++) { int byteCount = Read7BitByteCount(stream); offsets[i] = stream.Position; lengths[i] = byteCount; stream.Seek(byteCount, SeekOrigin.Current); }
+        // Scan the length-prefixed table through one sequential buffer. Calling Seek for
+        // every string defeats the NVMe sequential-read path and dominates fresh startup.
+        using var scanner = new SequentialScanner(stream);
+        for (int i = 0; i < count; i++) { int byteCount = Read7BitByteCount(scanner); offsets[i] = scanner.Position; lengths[i] = byteCount; scanner.Skip(byteCount); }
         return new StringTable(stream, offsets, lengths);
     }
-    private static int Read7BitByteCount(Stream stream)
+    private static int Read7BitByteCount(SequentialScanner scanner)
     {
         int value = 0, shift = 0;
-        while (true) { int next = stream.ReadByte(); if (next < 0) throw new EndOfStreamException(); value |= (next & 0x7F) << shift; if ((next & 0x80) == 0) return value; shift += 7; if (shift > 28) throw new InvalidDataException("Route C string length is invalid"); }
+        while (true) { int next = scanner.ReadByte(); if (next < 0) throw new EndOfStreamException(); value |= (next & 0x7F) << shift; if ((next & 0x80) == 0) return value; shift += 7; if (shift > 28) throw new InvalidDataException("Route C string length is invalid"); }
+    }
+
+    private sealed class SequentialScanner : IDisposable
+    {
+        private readonly FileStream stream;
+        private readonly byte[] buffer = ArrayPool<byte>.Shared.Rent(1 << 20);
+        private int offset;
+        private int count;
+        public SequentialScanner(FileStream stream) { this.stream = stream; Position = stream.Position; }
+        public long Position { get; private set; }
+        public int ReadByte()
+        {
+            if (offset >= count)
+            {
+                count = stream.Read(buffer, 0, buffer.Length);
+                offset = 0;
+                if (count == 0) return -1;
+            }
+            Position++;
+            return buffer[offset++];
+        }
+        public void Skip(int bytes)
+        {
+            if (bytes < 0) throw new InvalidDataException("Route C string length is invalid");
+            while (bytes > 0)
+            {
+                int available = count - offset;
+                if (available == 0)
+                {
+                    count = stream.Read(buffer, 0, buffer.Length);
+                    offset = 0;
+                    if (count == 0) throw new EndOfStreamException();
+                    continue;
+                }
+                int take = Math.Min(bytes, available);
+                offset += take;
+                Position += take;
+                bytes -= take;
+            }
+        }
+        public void Dispose()
+        {
+            stream.Position = Position;
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
     private static void WriteIndex(BinaryWriter writer, IReadOnlyDictionary<string, Posting> index) { writer.Write(index.Count); foreach ((string key, Posting posting) in index.OrderBy(p => p.Key, StringComparer.Ordinal)) { writer.Write(key); writer.Write(posting.Count); writer.Write(posting.Data.Length); writer.Write(posting.Data); } }
     private static Dictionary<string, Posting> ReadIndex(BinaryReader reader, FileStream stream) { int count = reader.ReadInt32(); if (count < 0 || count > 10_000_000) throw new InvalidDataException("Route C index count invalid"); var result = new Dictionary<string, Posting>(count, StringComparer.Ordinal); for (int i = 0; i < count; i++) { string key = reader.ReadString(); int n = reader.ReadInt32(), byteCount = reader.ReadInt32(); if (n < 0 || byteCount < 0 || byteCount > 1_000_000_000) throw new InvalidDataException("Route C posting is invalid"); long offset = stream.Position; stream.Seek(byteCount, SeekOrigin.Current); result.Add(key, new Posting(n, stream, offset, byteCount)); } return result; }

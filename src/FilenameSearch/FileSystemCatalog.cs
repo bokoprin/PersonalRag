@@ -17,7 +17,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
     private readonly string root;
     private readonly string store;
     private readonly string storeDirectory;
-    private readonly FilenameSearchEngine engine;
+    private FilenameSearchEngine engine;
     private readonly Dictionary<string, FilenameRecord> byPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Channel<FileSystemEvent> events = Channel.CreateUnbounded<FileSystemEvent>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
@@ -121,7 +121,8 @@ public sealed class FileSystemCatalog : IAsyncDisposable
     public FilenameSearchResult Search(SearchRequest request)
     {
         ThrowIfDisposed();
-        return engine.Search(request);
+        FilenameSearchEngine current = Volatile.Read(ref engine);
+        return current.Search(request);
     }
 
     /// <summary>Performs a complete safe catch-up and persists the resulting snapshot.</summary>
@@ -267,6 +268,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
     private void RebuildCore()
     {
         FileSystemEntry[] discovered = Discover();
+        Dictionary<string, FilenameRecord> next;
         lock (gate)
         {
             var prior = new Dictionary<string, FilenameRecord>(byPath, StringComparer.OrdinalIgnoreCase);
@@ -299,7 +301,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 idsByPath[entry.Path] = id;
                 preliminary.Add((entry.Path, entry.IsDirectory, id, metadata));
             }
-            var next = new Dictionary<string, FilenameRecord>(StringComparer.OrdinalIgnoreCase);
+            next = new Dictionary<string, FilenameRecord>(StringComparer.OrdinalIgnoreCase);
             foreach ((string path, bool isDirectory, int id, FilenameRecord metadata) in preliminary)
             {
                 FilenameRecord record = metadata with { FileId = id };
@@ -307,10 +309,21 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 int? parentId = parentPath is not null && idsByPath.TryGetValue(NormalizePath(parentPath), out int parent) ? parent : null;
                 next[path] = record with { ParentId = parentId, Flags = isDirectory ? (byte)2 : (byte)1 };
             }
-            engine.Build(next.Values.OrderBy(record => record.FileId).ToArray());
+        }
+
+        // Build the replacement off the live engine. Existing-index searches remain usable
+        // while a startup catch-up scans and indexes a large tree.
+        var rebuilt = new FilenameSearchEngine();
+        rebuilt.Build(next.Values.OrderBy(record => record.FileId).ToArray());
+        FilenameSearchEngine previous;
+        lock (gate)
+        {
+            previous = engine;
+            engine = rebuilt;
             byPath.Clear();
             foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
         }
+        previous.Dispose();
     }
 
     private void LoadExistingRecords()
