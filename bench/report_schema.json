@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Filename Bake-off Route Report",
+  "type": "object",
+  "required": ["route", "commit", "correctness", "build_seconds", "load_seconds", "persistent_bytes", "ready_private_bytes", "search", "update_p95_ms", "hard_gate"],
+  "properties": {
+    "route": { "type": "string", "enum": ["A", "B", "C"] },
+    "commit": { "type": "string" },
+    "correctness": { "type": "object", "required": ["false_positive", "false_negative"], "properties": { "false_positive": { "type": "integer", "minimum": 0 }, "false_negative": { "type": "integer", "minimum": 0 } } },
+    "build_seconds": { "type": "number", "minimum": 0 },
+    "load_seconds": { "type": "number", "minimum": 0 },
+    "persistent_bytes": { "type": "integer", "minimum": 0 },
+    "ready_private_bytes": { "type": "integer", "minimum": 0 },
+    "search": { "type": "object", "required": ["p50_ms", "p95_ms", "p99_ms", "worst_class_p95_ms"], "properties": { "p50_ms": { "type": "number", "minimum": 0 }, "p95_ms": { "type": "number", "minimum": 0 }, "p99_ms": { "type": "number", "minimum": 0 }, "worst_class_p95_ms": { "type": "number", "minimum": 0 } } },
+    "update_p95_ms": { "type": "number", "minimum": 0 },
+    "hard_gate": { "type": "string", "enum": ["PASS", "FAIL", "DISQUALIFIED"] }
+  }
+}

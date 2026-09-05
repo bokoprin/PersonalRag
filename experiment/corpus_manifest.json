@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "record_count": 0,
+  "logical_bytes": 0,
+  "seed": "pending",
+  "generator_sha256": "pending",
+  "records_sha256": "pending",
+  "query_set_sha256": "pending",
+  "created_utc": "pending",
+  "kind": "placeholder-before-calibration-generation"
+}

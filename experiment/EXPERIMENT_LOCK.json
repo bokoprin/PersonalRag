@@ -1,0 +1,11 @@
+{
+  "locked": false,
+  "spec_sha256": "pending",
+  "generator_sha256": "pending",
+  "oracle_sha256": "pending",
+  "runner_sha256": "pending",
+  "corpus_manifest_sha256": "pending",
+  "queries_sha256": "pending",
+  "calibration_seed": "0x505241475F43414C",
+  "official_seed": "0x505241475F314D31"
+}
