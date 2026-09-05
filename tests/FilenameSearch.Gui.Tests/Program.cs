@@ -89,18 +89,34 @@ internal static class Program
                     window = new MainWindow(root, store) { Left = -10000, Top = -10000, ShowInTaskbar = false };
                     window.Show();
                     var results = (ListView)window.FindName("Results");
+                    var query = (TextBox)window.FindName("FileQuery");
                     var summary = (TextBlock)window.FindName("Summary");
                     await Until(() => results.Items.Count > 0 && summary.Text.Contains("件表示", StringComparison.Ordinal), "formal first batch", TimeSpan.FromSeconds(120));
                     processWatch.Stop();
+                    var firstBatchSamples = new List<double>(20);
+                    foreach (string value in new[] { "fixture_", "report", "設計", "source", "2026" }.SelectMany(value => Enumerable.Repeat(value, 4)))
+                    {
+                        summary.Text = "";
+                        var sample = Stopwatch.StartNew();
+                        query.Text = value;
+                        await Until(() => summary.Text.Contains("件表示", StringComparison.Ordinal), "formal first batch sample", TimeSpan.FromSeconds(10));
+                        sample.Stop();
+                        firstBatchSamples.Add(sample.Elapsed.TotalMilliseconds);
+                    }
                     using var process = Process.GetCurrentProcess();
                     process.Refresh();
                     long privateBytes = process.PrivateMemorySize64;
+                    double firstBatchP95 = Percentile(firstBatchSamples, .95);
+                    double firstBatchMax = firstBatchSamples.Max();
                     var output = new
                     {
-                        pass = processWatch.Elapsed.TotalMilliseconds <= 2000 && privateBytes <= 1_500_000_000,
+                        pass = processWatch.Elapsed.TotalMilliseconds <= 2000 && privateBytes <= 1_500_000_000 && firstBatchP95 <= 100 && firstBatchMax <= 200,
                         filename_ready_ms = processWatch.Elapsed.TotalMilliseconds,
                         private_bytes = privateBytes,
                         first_batch_rows = results.Items.Count,
+                        first_batch_samples_ms = firstBatchSamples,
+                        first_batch_p95_ms = firstBatchP95,
+                        first_batch_max_ms = firstBatchMax,
                         root,
                         store,
                         utc = DateTime.UtcNow
@@ -135,5 +151,13 @@ internal static class Program
             timeoutSource.Token.ThrowIfCancellationRequested();
             await Task.Delay(20, timeoutSource.Token);
         }
+    }
+
+    private static double Percentile(IReadOnlyList<double> values, double percentile)
+    {
+        if (values.Count == 0) return 0;
+        double[] sorted = values.OrderBy(value => value).ToArray();
+        int index = Math.Clamp((int)Math.Ceiling(sorted.Length * percentile) - 1, 0, sorted.Length - 1);
+        return sorted[index];
     }
 }

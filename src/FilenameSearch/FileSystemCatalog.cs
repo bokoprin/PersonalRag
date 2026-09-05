@@ -4,7 +4,9 @@ using System.Threading.Channels;
 namespace PersonalRag.FilenameSearch;
 
 /// <summary>Filesystem event kind kept outside the search engine.</summary>
-internal sealed record FileSystemEvent(string Path, string? OldPath = null, bool Reconcile = false);
+internal enum FileSystemEventKind { Created, Changed, Deleted, Renamed }
+
+internal sealed record FileSystemEvent(string Path, string? OldPath = null, FileSystemEventKind Kind = FileSystemEventKind.Changed, bool Reconcile = false, bool CatchUp = false);
 
 /// <summary>
 /// Collects local files and directories and keeps the selected filename engine current.
@@ -14,6 +16,7 @@ internal sealed record FileSystemEvent(string Path, string? OldPath = null, bool
 public sealed class FileSystemCatalog : IAsyncDisposable
 {
     private readonly object gate = new();
+    private readonly ReaderWriterLockSlim engineGate = new(LockRecursionPolicy.NoRecursion);
     private readonly string root;
     private readonly string store;
     private readonly string storeDirectory;
@@ -48,10 +51,10 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size,
             Filter = "*"
         };
-        watcher.Created += (_, args) => Queue(new FileSystemEvent(args.FullPath, Reconcile: Directory.Exists(args.FullPath)));
-        watcher.Changed += (_, args) => Queue(new FileSystemEvent(args.FullPath));
-        watcher.Deleted += (_, args) => Queue(new FileSystemEvent(args.FullPath));
-        watcher.Renamed += (_, args) => Queue(new FileSystemEvent(args.FullPath, args.OldFullPath, Directory.Exists(args.FullPath)));
+        watcher.Created += (_, args) => Queue(new FileSystemEvent(args.FullPath, Kind: FileSystemEventKind.Created, Reconcile: Directory.Exists(args.FullPath)));
+        watcher.Changed += (_, args) => Queue(new FileSystemEvent(args.FullPath, Kind: FileSystemEventKind.Changed));
+        watcher.Deleted += (_, args) => Queue(new FileSystemEvent(args.FullPath, Kind: FileSystemEventKind.Deleted));
+        watcher.Renamed += (_, args) => Queue(new FileSystemEvent(args.FullPath, args.OldFullPath, FileSystemEventKind.Renamed, Directory.Exists(args.FullPath)));
         watcher.Error += (_, _) =>
         {
             Interlocked.Exchange(ref forceReconcile, 1);
@@ -121,8 +124,9 @@ public sealed class FileSystemCatalog : IAsyncDisposable
     public FilenameSearchResult Search(SearchRequest request)
     {
         ThrowIfDisposed();
-        FilenameSearchEngine current = Volatile.Read(ref engine);
-        return current.Search(request);
+        engineGate.EnterReadLock();
+        try { return engine.Search(request); }
+        finally { engineGate.ExitReadLock(); }
     }
 
     /// <summary>Performs a complete safe catch-up and persists the resulting snapshot.</summary>
@@ -155,7 +159,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             watcher.Dispose();
             throw;
         }
-        Queue(new FileSystemEvent(root, Reconcile: true));
+        Queue(new FileSystemEvent(root, CatchUp: true));
     }
 
     private void Queue(FileSystemEvent change)
@@ -183,7 +187,8 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 try
                 {
                     SetStatus("変更を反映中");
-                    if (rebuild) RebuildCore();
+                    if (pending.Any(change => change.CatchUp) && !rebuild) CatchUpCore();
+                    else if (rebuild) RebuildCore();
                     else ProcessEvents(pending);
                     SetStatus("Ready");
                     PersistSoon();
@@ -201,6 +206,9 @@ public sealed class FileSystemCatalog : IAsyncDisposable
 
     private void ProcessEvents(IReadOnlyList<FileSystemEvent> pending)
     {
+        engineGate.EnterReadLock();
+        try
+        {
         // Deduplicate by path while preserving a rename pair. FileSystemWatcher can raise
         // several Change events for one write.
         var unique = new Dictionary<string, FileSystemEvent>(StringComparer.OrdinalIgnoreCase);
@@ -209,7 +217,9 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             if (change.OldPath is not null) ProcessRename(change.OldPath, change.Path);
             else unique[NormalizePath(change.Path)] = change;
         }
-        foreach (FileSystemEvent change in unique.Values) ProcessPath(change.Path);
+        foreach (FileSystemEvent change in unique.Values) ProcessPath(change.Path, change.Kind);
+        }
+        finally { engineGate.ExitReadLock(); }
     }
 
     private void ProcessRename(string oldPath, string newPath)
@@ -240,12 +250,13 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         }
     }
 
-    private void ProcessPath(string path)
+    private void ProcessPath(string path, FileSystemEventKind kind)
     {
         path = NormalizePath(path);
         if (IsExcluded(path)) return;
         if (Directory.Exists(path))
         {
+            if (kind == FileSystemEventKind.Changed) return;
             Interlocked.Exchange(ref forceReconcile, 1);
             return;
         }
@@ -261,6 +272,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             else if (byPath.Remove(path, out FilenameRecord? removed))
             {
                 engine.Remove(removed.FileId);
+                if (removed.IsDirectory) Interlocked.Exchange(ref forceReconcile, 1);
             }
         }
     }
@@ -316,15 +328,93 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         var rebuilt = new FilenameSearchEngine();
         rebuilt.Build(next.Values.OrderBy(record => record.FileId).ToArray());
         FilenameSearchEngine previous;
+        engineGate.EnterWriteLock();
+        try
+        {
+            lock (gate)
+            {
+                previous = engine;
+                engine = rebuilt;
+                byPath.Clear();
+                foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
+            }
+        }
+        finally { engineGate.ExitWriteLock(); }
+        previous.Dispose();
+    }
+
+    private void CatchUpCore()
+    {
+        FileSystemEntry[] discovered = Discover();
         lock (gate)
         {
-            previous = engine;
-            engine = rebuilt;
+            var prior = new Dictionary<string, FilenameRecord>(byPath, StringComparer.OrdinalIgnoreCase);
+            var discoveredPaths = discovered.Select(entry => entry.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var reserved = prior.Values.Select(record => record.FileId).ToHashSet();
+            var assigned = new HashSet<int>();
+            var movedCandidates = prior.Values
+                .Where(record => !discoveredPaths.Contains(record.FullPath))
+                .GroupBy(Signature)
+                .ToDictionary(group => group.Key, group => new Queue<FilenameRecord>(group), EqualityComparer<FileSignature>.Default);
+            var idsByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var preliminary = new List<(string Path, bool Directory, int Id, FilenameRecord Metadata)>();
+            foreach (FileSystemEntry entry in discovered)
+            {
+                FilenameRecord metadata;
+                int id;
+                if (prior.TryGetValue(entry.Path, out FilenameRecord? old))
+                {
+                    id = old.FileId;
+                    // A restart normally has an unchanged tree. Reuse the persisted metadata
+                    // after one cheap timestamp check; the previous full FileInfo.Refresh per
+                    // entry made a 100k-file catch-up exceed the five-second product gate.
+                    if (old.IsDirectory || old.FullPath.Equals(entry.Path, StringComparison.Ordinal) ||
+                        File.GetLastWriteTimeUtc(entry.Path) == old.ModifiedUtc)
+                        metadata = old;
+                    else metadata = ReadRecord(entry.Path, id);
+                }
+                else
+                {
+                    metadata = ReadRecord(entry.Path, 0);
+                    if (movedCandidates.TryGetValue(Signature(metadata), out Queue<FilenameRecord>? candidates))
+                    {
+                        while (candidates.Count > 0 && assigned.Contains(candidates.Peek().FileId)) candidates.Dequeue();
+                        id = candidates.Count > 0 ? candidates.Dequeue().FileId : AllocateId(reserved);
+                    }
+                    else id = AllocateId(reserved);
+                }
+                assigned.Add(id);
+                reserved.Add(id);
+                idsByPath[entry.Path] = id;
+                preliminary.Add((entry.Path, entry.IsDirectory, id, metadata));
+            }
+            var next = new Dictionary<string, FilenameRecord>(StringComparer.OrdinalIgnoreCase);
+            foreach ((string path, bool isDirectory, int id, FilenameRecord metadata) in preliminary)
+            {
+                string? parentPath = Path.GetDirectoryName(path);
+                int? parentId = parentPath is not null && idsByPath.TryGetValue(NormalizePath(parentPath), out int parent) ? parent : null;
+                next[path] = metadata with { FileId = id, ParentId = parentId, Flags = isDirectory ? (byte)2 : (byte)1 };
+            }
+
+            engineGate.EnterReadLock();
+            try
+            {
+                var nextIds = next.Values.Select(record => record.FileId).ToHashSet();
+                foreach (FilenameRecord old in prior.Values)
+                    if (!nextIds.Contains(old.FileId)) engine.Remove(old.FileId);
+                foreach ((string path, FilenameRecord current) in next)
+                    if (!prior.TryGetValue(path, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
+            }
+            finally { engineGate.ExitReadLock(); }
             byPath.Clear();
             foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
         }
-        previous.Dispose();
     }
+
+    private static bool Equivalent(FilenameRecord left, FilenameRecord right) =>
+        left.FileId == right.FileId && left.ParentId == right.ParentId &&
+        left.Name == right.Name && left.FullPath == right.FullPath &&
+        left.SizeBytes == right.SizeBytes && left.ModifiedUtc == right.ModifiedUtc && left.Flags == right.Flags;
 
     private void LoadExistingRecords()
     {
@@ -487,10 +577,19 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         try { await worker.ConfigureAwait(false); } catch (OperationCanceledException) { }
         try { await persister.ConfigureAwait(false); } catch (OperationCanceledException) { }
         // Persist the last in-memory snapshot even when shutdown races a debounce timer.
-        try { engine.SaveAtomic(store); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        { SetStatus("終了時保存エラー: " + ex.Message); }
-        engine.Dispose();
+        engineGate.EnterWriteLock();
+        try
+        {
+            try { engine.SaveAtomic(store); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            { SetStatus("終了時保存エラー: " + ex.Message); }
+            engine.Dispose();
+        }
+        finally
+        {
+            engineGate.ExitWriteLock();
+            engineGate.Dispose();
+        }
         stop.Dispose();
     }
 
