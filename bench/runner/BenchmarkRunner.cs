@@ -32,6 +32,7 @@ public static class RunnerApp
             "create-lock" => CreateLock(args),
             "verify-lock" => VerifyLockCommand(args),
             "measure-load" => MeasureLoad(args),
+            "search-benchmark" => SearchBenchmarkCommand(args),
             _ => throw new ArgumentException($"Unknown runner command: {args[0]}")
         };
         return Task.FromResult(code);
@@ -54,33 +55,17 @@ public static class RunnerApp
         if (requireLock && !LockFile.Verify(args[8], args[9], args[7])) throw new InvalidDataException("EXPERIMENT_LOCK verification failed; benchmark refused");
         QuerySetDocument querySet = Read<QuerySetDocument>(queryPath); OracleFile oracle = Read<OracleFile>(oraclePath);
         string corpusHash = Sha256File(corpusPath), queryHash = Sha256File(queryPath); if (!oracle.CorpusSha256.Equals(corpusHash, StringComparison.OrdinalIgnoreCase) || !oracle.QuerySetSha256.Equals(queryHash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Oracle does not match corpus/query hashes");
-        RouteReport report = RunRoute(route, corpusPath, querySet, oracle, rounds, outputPath, requireLock); Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!); File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions)); Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions)); return report.HardGate == "PASS" ? 0 : 1;
+        RouteReport report = RunRoute(route, corpusPath, queryPath, oraclePath, rounds, outputPath, requireLock); Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!); File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions)); Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions)); return report.HardGate == "PASS" ? 0 : 1;
     }
 
-    private static RouteReport RunRoute(string route, string corpusPath, QuerySetDocument querySet, OracleFile oracle, int rounds, string outputPath, bool official)
+    private static RouteReport RunRoute(string route, string corpusPath, string queryPath, string oraclePath, int rounds, string outputPath, bool official)
     {
         Process process = Process.GetCurrentProcess(); string storePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"route-{route.ToUpperInvariant()}.store");
         BuildSummary build = BuildAndPersist(route, corpusPath, storePath, process);
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         long persistentBytes = new FileInfo(storePath).Length;
-        IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); long readyPrivate = MeasureFreshLoadMemory(route, storePath);
-        var oracleById = oracle.Results.ToDictionary(r => r.Id, StringComparer.Ordinal); var measurements = querySet.Queries.ToDictionary(q => q.Id, _ => new List<double>(), StringComparer.Ordinal); var counts = querySet.Queries.ToDictionary(q => q.Id, _ => 0, StringComparer.Ordinal); int fp = 0, fn = 0; bool correctness = true; string previous = "";
-        int totalRounds = Math.Max(3, rounds); int queriesSinceCollection = 0;
-        for (int round = 0; round < totalRounds; round++)
-        {
-            QuerySpec[] order = Shuffle(querySet.Queries, 0x46524E5F53485546UL + (ulong)round);
-            if (previous.Length > 0 && order.Length > 1 && order[0].Id == previous) (order[0], order[1]) = (order[1], order[0]);
-            foreach (QuerySpec query in order)
-            {
-                OracleResult truth = oracleById[query.Id]; TimedQuery timed = ExecuteTimedQuery(loaded, query, truth); previous = query.Id;
-                if (round >= 2) measurements[query.Id].Add(timed.ElapsedMs); counts[query.Id] = timed.ResultCount;
-                if (!timed.Match) { correctness = false; fp++; fn++; }
-                if (++queriesSinceCollection >= 4) { queriesSinceCollection = 0; GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
-            }
-        }
-        UpdateSummary update = MeasureUpdates(loaded, build.UpdateSources); List<double> all = measurements.Values.SelectMany(x => x).ToList(); var queryMetrics = measurements.Select(pair => { QuerySpec query = querySet.Queries.First(q => q.Id == pair.Key); return new QueryMetric(query.Id, query.Class, Percentile(pair.Value, .50), Percentile(pair.Value, .95), Percentile(pair.Value, .99), pair.Value.Count == 0 ? 0 : pair.Value.Max(), counts[pair.Key]); }).ToArray(); var classMetrics = queryMetrics.GroupBy(q => q.Class, StringComparer.Ordinal).Select(group => new ClassMetric(group.Key, Percentile(group.Select(q => q.P95Ms).ToList(), .95))).ToArray(); double worstClass = classMetrics.Length == 0 ? 0 : classMetrics.Max(c => c.P95Ms); SearchSummary search = new(Percentile(all, .50), Percentile(all, .95), Percentile(all, .99), all.Count == 0 ? 0 : all.Max(), worstClass, queryMetrics, classMetrics);
-        HardGate hard = new(!correctness, build.BuildSeconds > 60, loadWatch.Elapsed.TotalSeconds > 1.5, persistentBytes > 1L * 1024 * 1024 * 1024, readyPrivate > 1L * 1024 * 1024 * 1024, search.P50Ms > 20, search.P95Ms > 50, search.P99Ms > 100, search.WorstClassP95Ms > 50, update.P95Ms > 10);
-        return new RouteReport(route.ToUpperInvariant(), GetGitCommit(), new Correctness(fp, fn, correctness), build.BuildSeconds, loadWatch.Elapsed.TotalSeconds, persistentBytes, readyPrivate, build.BuildPrivateBytes, build.PersistSeconds, search, update.P95Ms, hard.Pass ? "PASS" : "FAIL", new { official, rounds = totalRounds, warmup_rounds = Math.Min(2, totalRounds - 1), timed_rounds = Math.Max(0, totalRounds - 2), store_path = storePath, environment = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "unknown" });
+        SearchPayload payload = RunSearchBenchmark(route, storePath, corpusPath, queryPath, oraclePath, rounds);
+        HardGate hard = new(!payload.Correctness.HashAndCountMatch, build.BuildSeconds > 60, payload.LoadSeconds > 1.5, persistentBytes > 1L * 1024 * 1024 * 1024, payload.ReadyPrivateBytes > 1L * 1024 * 1024 * 1024, payload.Search.P50Ms > 20, payload.Search.P95Ms > 50, payload.Search.P99Ms > 100, payload.Search.WorstClassP95Ms > 50, payload.UpdateP95Ms > 10);
+        return new RouteReport(route.ToUpperInvariant(), GetGitCommit(), payload.Correctness, build.BuildSeconds, payload.LoadSeconds, persistentBytes, payload.ReadyPrivateBytes, build.BuildPrivateBytes, build.PersistSeconds, payload.Search, payload.UpdateP95Ms, hard.Pass ? "PASS" : "FAIL", new { official, rounds = payload.Rounds, warmup_rounds = Math.Min(2, payload.Rounds - 1), timed_rounds = Math.Max(0, payload.Rounds - 2), store_path = storePath, environment = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "unknown" });
     }
 
     private static BuildSummary BuildAndPersist(string route, string corpusPath, string storePath, Process process)
@@ -88,7 +73,37 @@ public static class RunnerApp
         CorpusData corpus = CorpusIO.Read(corpusPath); FileRecord[] updateSources = SelectUpdateSources(corpus.Records);
         Stopwatch buildWatch = Stopwatch.StartNew(); IFilenameSearchEngine built = CreateEngine(route); built.Build(corpus.Records); buildWatch.Stop(); process.Refresh(); long buildPrivate = process.PrivateMemorySize64;
         Stopwatch saveWatch = Stopwatch.StartNew(); built.Save(storePath); saveWatch.Stop();
-        return new BuildSummary(buildWatch.Elapsed.TotalSeconds, buildPrivate, saveWatch.Elapsed.TotalSeconds, updateSources);
+        return new BuildSummary(buildWatch.Elapsed.TotalSeconds, buildPrivate, saveWatch.Elapsed.TotalSeconds);
+    }
+
+    private static SearchPayload RunSearchBenchmark(string route, string storePath, string corpusPath, string queryPath, string oraclePath, int rounds)
+    {
+        string assemblyPath = typeof(RunnerApp).Assembly.Location;
+        var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        start.ArgumentList.Add(assemblyPath); start.ArgumentList.Add("search-benchmark"); start.ArgumentList.Add(route); start.ArgumentList.Add(storePath); start.ArgumentList.Add(corpusPath); start.ArgumentList.Add(queryPath); start.ArgumentList.Add(oraclePath); start.ArgumentList.Add(rounds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        using Process child = Process.Start(start) ?? throw new InvalidOperationException("Could not start search benchmark process");
+        string output = child.StandardOutput.ReadToEnd(); string error = child.StandardError.ReadToEnd(); child.WaitForExit();
+        if (child.ExitCode != 0) throw new InvalidOperationException($"Search benchmark failed: {error}");
+        return JsonSerializer.Deserialize<SearchPayload>(output, JsonOptions) ?? throw new InvalidDataException("Search benchmark output is empty");
+    }
+
+    private static int SearchBenchmarkCommand(string[] args)
+    {
+        if (args.Length < 7) throw new ArgumentException("search-benchmark ROUTE STORE CORPUS_RECORDS QUERY_SET ORACLE_JSON ROUNDS");
+        string route = args[1], storePath = args[2], corpusPath = args[3], queryPath = args[4], oraclePath = args[5]; int rounds = int.Parse(args[6], System.Globalization.CultureInfo.InvariantCulture);
+        QuerySetDocument querySet = Read<QuerySetDocument>(queryPath); OracleFile oracle = Read<OracleFile>(oraclePath); IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); Process process = Process.GetCurrentProcess(); process.Refresh(); long readyPrivate = process.PrivateMemorySize64;
+        var oracleById = oracle.Results.ToDictionary(r => r.Id, StringComparer.Ordinal); var measurements = querySet.Queries.ToDictionary(q => q.Id, _ => new List<double>(), StringComparer.Ordinal); var counts = querySet.Queries.ToDictionary(q => q.Id, _ => 0, StringComparer.Ordinal); int fp = 0, fn = 0; bool correctness = true; string previous = ""; int totalRounds = Math.Max(3, rounds); int queriesSinceCollection = 0;
+        for (int round = 0; round < totalRounds; round++)
+        {
+            QuerySpec[] order = Shuffle(querySet.Queries, 0x46524E5F53485546UL + (ulong)round); if (previous.Length > 0 && order.Length > 1 && order[0].Id == previous) (order[0], order[1]) = (order[1], order[0]);
+            foreach (QuerySpec query in order)
+            {
+                OracleResult truth = oracleById[query.Id]; TimedQuery timed = ExecuteTimedQuery(loaded, query, truth); previous = query.Id; if (round >= 2) measurements[query.Id].Add(timed.ElapsedMs); counts[query.Id] = timed.ResultCount; if (!timed.Match) { correctness = false; fp++; fn++; }
+                if (++queriesSinceCollection >= 4) { queriesSinceCollection = 0; GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); }
+            }
+        }
+        CorpusData corpus = CorpusIO.Read(corpusPath); UpdateSummary update = MeasureUpdates(loaded, SelectUpdateSources(corpus.Records)); List<double> all = measurements.Values.SelectMany(x => x).ToList(); var queryMetrics = measurements.Select(pair => { QuerySpec query = querySet.Queries.First(q => q.Id == pair.Key); return new QueryMetric(query.Id, query.Class, Percentile(pair.Value, .50), Percentile(pair.Value, .95), Percentile(pair.Value, .99), pair.Value.Count == 0 ? 0 : pair.Value.Max(), counts[pair.Key]); }).ToArray(); var classMetrics = queryMetrics.GroupBy(q => q.Class, StringComparer.Ordinal).Select(group => new ClassMetric(group.Key, Percentile(group.Select(q => q.P95Ms).ToList(), .95))).ToArray(); double worstClass = classMetrics.Length == 0 ? 0 : classMetrics.Max(c => c.P95Ms); SearchSummary search = new(Percentile(all, .50), Percentile(all, .95), Percentile(all, .99), all.Count == 0 ? 0 : all.Max(), worstClass, queryMetrics, classMetrics);
+        Console.WriteLine(JsonSerializer.Serialize(new SearchPayload(new Correctness(fp, fn, correctness), loadWatch.Elapsed.TotalSeconds, readyPrivate, search, update.P95Ms, totalRounds), JsonOptions)); return 0;
     }
 
     private static UpdateSummary MeasureUpdates(IFilenameSearchEngine engine, IReadOnlyList<FileRecord> records)
@@ -110,7 +125,8 @@ public static class RunnerApp
         return selected;
     }
 
-    private sealed record BuildSummary(double BuildSeconds, long BuildPrivateBytes, double PersistSeconds, FileRecord[] UpdateSources);
+    private sealed record BuildSummary(double BuildSeconds, long BuildPrivateBytes, double PersistSeconds);
+    private sealed record SearchPayload(Correctness Correctness, double LoadSeconds, long ReadyPrivateBytes, SearchSummary Search, double UpdateP95Ms, int Rounds);
     private readonly record struct TimedQuery(double ElapsedMs, int ResultCount, bool Match);
 
     private static QuerySpec[] Shuffle(IReadOnlyList<QuerySpec> source, ulong seed) { QuerySpec[] result = source.ToArray(); var random = new RunnerRandom(seed); for (int i = result.Length - 1; i > 0; i--) { int j = random.NextInt(i + 1); (result[i], result[j]) = (result[j], result[i]); } return result; }
