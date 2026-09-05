@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "record_count": 0,
-  "logical_bytes": 0,
-  "seed": "pending",
-  "generator_sha256": "pending",
-  "records_sha256": "pending",
-  "query_set_sha256": "pending",
-  "created_utc": "pending",
-  "kind": "placeholder-before-calibration-generation"
+  "record_count": 1000000,
+  "logical_bytes": 107374182400,
+  "seed": "0x505241475F314D31",
+  "generator_sha256": "771a291702f60b4e9e744b2991386ffa91cdad4d1e63a275dc31515087274d3e",
+  "records_sha256": "4d14896b236bffdf5a0f07b248e42720944c056a67121fceaa93a965400fa9e0",
+  "query_set_sha256": "c49032724de077c27334d70d984d8daea39bcaaa323b79162edbd1f0beb208dc",
+  "created_utc": "2026-09-05T12:32:28.5148966Z",
+  "kind": "official"
 }

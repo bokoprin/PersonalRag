@@ -1,5 +1,1166 @@
 {
   "version": 1,
-  "corpus_sha256": "pending",
-  "queries": []
+  "corpus_sha256": "4d14896b236bffdf5a0f07b248e42720944c056a67121fceaa93a965400fa9e0",
+  "queries": [
+    {
+      "id": "literal-1-000",
+      "class": "literal-1",
+      "query": "a",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-001",
+      "class": "literal-1",
+      "query": "e",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-002",
+      "class": "literal-1",
+      "query": "r",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-003",
+      "class": "literal-1",
+      "query": "t",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-004",
+      "class": "literal-1",
+      "query": "1",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-005",
+      "class": "literal-1",
+      "query": "2",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-006",
+      "class": "literal-1",
+      "query": "_",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-007",
+      "class": "literal-1",
+      "query": "-",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-008",
+      "class": "literal-1",
+      "query": "\u8A2D",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-009",
+      "class": "literal-1",
+      "query": "\u691C",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-1-010",
+      "class": "literal-1",
+      "query": "\u30C7",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-000",
+      "class": "literal-2",
+      "query": "th",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-001",
+      "class": "literal-2",
+      "query": "in",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-002",
+      "class": "literal-2",
+      "query": "re",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-003",
+      "class": "literal-2",
+      "query": "20",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-004",
+      "class": "literal-2",
+      "query": "ra",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-005",
+      "class": "literal-2",
+      "query": "on",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-006",
+      "class": "literal-2",
+      "query": "\u8A2D\u8A08",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-007",
+      "class": "literal-2",
+      "query": "\u691C\u7D22",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "literal-2-008",
+      "class": "literal-2",
+      "query": "\u30C7\u30FC",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-000",
+      "class": "common",
+      "query": "report",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-001",
+      "class": "common",
+      "query": "config",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-002",
+      "class": "common",
+      "query": "project",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-003",
+      "class": "common",
+      "query": "data",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-004",
+      "class": "common",
+      "query": "test",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-005",
+      "class": "common",
+      "query": "source",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-006",
+      "class": "common",
+      "query": "backup",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-007",
+      "class": "common",
+      "query": "2026",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-008",
+      "class": "common",
+      "query": "design",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-009",
+      "class": "common",
+      "query": "search",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-010",
+      "class": "common",
+      "query": "\u8A2D\u8A08",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-011",
+      "class": "common",
+      "query": "\u8CC7\u6599",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "common-012",
+      "class": "common",
+      "query": "\u30ED\u30B0",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-000",
+      "class": "medium-long",
+      "query": "personalrag",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-001",
+      "class": "medium-long",
+      "query": "application",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-002",
+      "class": "medium-long",
+      "query": "benchmark",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-003",
+      "class": "medium-long",
+      "query": "controller",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-004",
+      "class": "medium-long",
+      "query": "documents",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-005",
+      "class": "medium-long",
+      "query": "needle",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-006",
+      "class": "medium-long",
+      "query": "\u8B70\u4E8B\u9332",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "medium-long-007",
+      "class": "medium-long",
+      "query": "\u969C\u5BB3",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "rare-000",
+      "class": "rare",
+      "query": "zxqv7319",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "rare-001",
+      "class": "rare",
+      "query": "needle_kappa_9901",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "rare-002",
+      "class": "rare",
+      "query": "\u552F\u4E00\u91DD",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "zero-hit-000",
+      "class": "zero-hit",
+      "query": "__NO_HIT_7F31C2__",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "zero-hit-001",
+      "class": "zero-hit",
+      "query": "zzzz_unique_absent_991827",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "zero-hit-002",
+      "class": "zero-hit",
+      "query": "\u5B58\u5728\u3057\u306A\u3044\u691C\u7D22\u8A9E_8841",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "case-insensitive-000",
+      "class": "case-insensitive",
+      "query": "README",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "case-insensitive-001",
+      "class": "case-insensitive",
+      "query": "readme",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "case-insensitive-002",
+      "class": "case-insensitive",
+      "query": "PersonalRag",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "case-insensitive-003",
+      "class": "case-insensitive",
+      "query": "personalrag",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "case-insensitive-004",
+      "class": "case-insensitive",
+      "query": "PERSONALRAG",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "case-sensitive-000",
+      "class": "case-sensitive",
+      "query": "README",
+      "scope": "filename",
+      "case_sensitive": true,
+      "limit": 1000000
+    },
+    {
+      "id": "case-sensitive-001",
+      "class": "case-sensitive",
+      "query": "readme",
+      "scope": "filename",
+      "case_sensitive": true,
+      "limit": 1000000
+    },
+    {
+      "id": "case-sensitive-002",
+      "class": "case-sensitive",
+      "query": "PersonalRag",
+      "scope": "filename",
+      "case_sensitive": true,
+      "limit": 1000000
+    },
+    {
+      "id": "case-sensitive-003",
+      "class": "case-sensitive",
+      "query": "personalrag",
+      "scope": "filename",
+      "case_sensitive": true,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-000",
+      "class": "wildcard",
+      "query": "*.rs",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-001",
+      "class": "wildcard",
+      "query": "*.cpp",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-002",
+      "class": "wildcard",
+      "query": "*.xlsx",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-003",
+      "class": "wildcard",
+      "query": "report_*.xlsx",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-004",
+      "class": "wildcard",
+      "query": "*personalrag*",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-005",
+      "class": "wildcard",
+      "query": "*2026*",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-006",
+      "class": "wildcard",
+      "query": "???.log",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-007",
+      "class": "wildcard",
+      "query": "\u8A2D\u8A08*.docx",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "wildcard-008",
+      "class": "wildcard",
+      "query": "*\u691C\u7D22*",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-000",
+      "class": "path-literal",
+      "query": "\\src_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-001",
+      "class": "path-literal",
+      "query": "\\documents_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-002",
+      "class": "path-literal",
+      "query": "\\project_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-003",
+      "class": "path-literal",
+      "query": "\\backup_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-004",
+      "class": "path-literal",
+      "query": "\\\u8A2D\u8A08_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-005",
+      "class": "path-literal",
+      "query": "\\\u691C\u7D22_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-006",
+      "class": "path-literal",
+      "query": "personalrag",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-007",
+      "class": "path-literal",
+      "query": "2026",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-008",
+      "class": "path-literal",
+      "query": "D:\\Projects",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-literal-009",
+      "class": "path-literal",
+      "query": "C:\\Source",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-wildcard-000",
+      "class": "path-wildcard",
+      "query": "*\\src_*\\*.rs",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-wildcard-001",
+      "class": "path-wildcard",
+      "query": "*\\reports_*\\*",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-wildcard-002",
+      "class": "path-wildcard",
+      "query": "D:\\Projects\\*",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-wildcard-003",
+      "class": "path-wildcard",
+      "query": "C:\\Documents\\*",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "path-wildcard-004",
+      "class": "path-wildcard",
+      "query": "*\\\u8A2D\u8A08_*\\*.docx",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "and-000",
+      "class": "and",
+      "query": "personalrag 2026",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "and-001",
+      "class": "and",
+      "query": "report xlsx",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "and-002",
+      "class": "and",
+      "query": "design test",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "and-003",
+      "class": "and",
+      "query": "\u8A2D\u8A08 2026",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "and-004",
+      "class": "and",
+      "query": "search benchmark",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-123-stem-3",
+      "class": "sampled-stem-3",
+      "query": "ist",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-123-stem-5",
+      "class": "sampled-stem-5",
+      "query": "histo",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-123-stem-9",
+      "class": "sampled-stem-9",
+      "query": "w-history",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-123-path-7",
+      "class": "sampled-path-7",
+      "query": "0q\\sour",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-123-directory",
+      "class": "sampled-directory",
+      "query": "Archive",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-10007-stem-3",
+      "class": "sampled-stem-3",
+      "query": "esu",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-10007-stem-5",
+      "class": "sampled-stem-5",
+      "query": "resul",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-10007-stem-9",
+      "class": "sampled-stem-9",
+      "query": "\u9A13_results",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-10007-path-7",
+      "class": "sampled-path-7",
+      "query": "uo\\temp",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-10007-directory",
+      "class": "sampled-directory",
+      "query": "Documents",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-77777-stem-3",
+      "class": "sampled-stem-3",
+      "query": "_hi",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-77777-stem-5",
+      "class": "sampled-stem-5",
+      "query": "k_his",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-77777-stem-9",
+      "class": "sampled-stem-9",
+      "query": "ark_histo",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-77777-path-7",
+      "class": "sampled-path-7",
+      "query": "ce_benc",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-77777-directory",
+      "class": "sampled-directory",
+      "query": "Users",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-131071-stem-3",
+      "class": "sampled-stem-3",
+      "query": "xam",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-131071-stem-5",
+      "class": "sampled-stem-5",
+      "query": "examp",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-131071-stem-9",
+      "class": "sampled-stem-9",
+      "query": "r-example",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-131071-path-7",
+      "class": "sampled-path-7",
+      "query": "eports_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-131071-directory",
+      "class": "sampled-directory",
+      "query": "Projects",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-222223-stem-3",
+      "class": "sampled-stem-3",
+      "query": "e-v",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-222223-stem-5",
+      "class": "sampled-stem-5",
+      "query": "ce-vi",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-222223-stem-9",
+      "class": "sampled-stem-9",
+      "query": "oice-view",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-222223-path-7",
+      "class": "sampled-path-7",
+      "query": "ort\\set",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-222223-directory",
+      "class": "sampled-directory",
+      "query": "Projects",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-333331-stem-3",
+      "class": "sampled-stem-3",
+      "query": "nde",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-333331-stem-5",
+      "class": "sampled-stem-5",
+      "query": "index",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-333331-stem-9",
+      "class": "sampled-stem-9",
+      "query": "\u7F6E-index_5",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-333331-path-7",
+      "class": "sampled-path-7",
+      "query": "_mrb\\\u88C5\u7F6E",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-333331-directory",
+      "class": "sampled-directory",
+      "query": "Projects",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-444443-stem-3",
+      "class": "sampled-stem-3",
+      "query": "_re",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-444443-stem-5",
+      "class": "sampled-stem-5",
+      "query": "s_res",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-444443-stem-9",
+      "class": "sampled-stem-9",
+      "query": "ngs_resul",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-444443-path-7",
+      "class": "sampled-path-7",
+      "query": "t_3w8\\c",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-444443-directory",
+      "class": "sampled-directory",
+      "query": "Users",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-555557-stem-3",
+      "class": "sampled-stem-3",
+      "query": "-se",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-555557-stem-5",
+      "class": "sampled-stem-5",
+      "query": "p-ser",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-555557-stem-9",
+      "class": "sampled-stem-9",
+      "query": "kup-serve",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-555557-path-7",
+      "class": "sampled-path-7",
+      "query": "_8nu\\re",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-555557-directory",
+      "class": "sampled-directory",
+      "query": "Shared",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-666667-stem-3",
+      "class": "sampled-stem-3",
+      "query": "ati",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-666667-stem-5",
+      "class": "sampled-stem-5",
+      "query": "catio",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-666667-stem-9",
+      "class": "sampled-stem-9",
+      "query": "lication_",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-666667-path-7",
+      "class": "sampled-path-7",
+      "query": "ort_7lx",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-666667-directory",
+      "class": "sampled-directory",
+      "query": "Build",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-777779-stem-3",
+      "class": "sampled-stem-3",
+      "query": "\u6599_\u7D50",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-777779-stem-5",
+      "class": "sampled-stem-5",
+      "query": "\u8CC7\u6599_\u7D50\u679C",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-777779-stem-9",
+      "class": "sampled-stem-9",
+      "query": "\u7D22_\u8CC7\u6599_\u7D50\u679C_o",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-777779-path-7",
+      "class": "sampled-path-7",
+      "query": "g-repor",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-777779-directory",
+      "class": "sampled-directory",
+      "query": "Shared",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-888889-stem-3",
+      "class": "sampled-stem-3",
+      "query": "ult",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-888889-stem-5",
+      "class": "sampled-stem-5",
+      "query": "sult-",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-888889-stem-9",
+      "class": "sampled-stem-9",
+      "query": "result-se",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-888889-path-7",
+      "class": "sampled-path-7",
+      "query": "2s\\docs",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-888889-directory",
+      "class": "sampled-directory",
+      "query": "Users",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-999983-stem-3",
+      "class": "sampled-stem-3",
+      "query": "mee",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-999983-stem-5",
+      "class": "sampled-stem-5",
+      "query": "-meet",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-999983-stem-9",
+      "class": "sampled-stem-9",
+      "query": "ig-meetin",
+      "scope": "filename",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-999983-path-7",
+      "class": "sampled-path-7",
+      "query": "8pa\\\u9867\u5BA2_",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    },
+    {
+      "id": "sample-999983-directory",
+      "class": "sampled-directory",
+      "query": "Archive",
+      "scope": "full_path",
+      "case_sensitive": false,
+      "limit": 1000000
+    }
+  ]
 }
