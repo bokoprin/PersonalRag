@@ -362,7 +362,10 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         {
             FileSystemEntry entry = discovered[index];
             if (!prior.TryGetValue(entry.Path, out FilenameRecord? old)) return;
-            if (old.IsDirectory)
+            // Large roots retain persisted metadata for paths that still exist and let
+            // the live watcher handle subsequent metadata changes. Avoid one metadata
+            // syscall per entry on GUI startup; topology deltas are still reconciled.
+            if (old.IsDirectory || discovered.Length > 4_096)
             {
                 reusable[index] = true;
                 return;

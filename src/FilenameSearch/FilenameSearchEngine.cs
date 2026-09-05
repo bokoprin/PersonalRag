@@ -47,7 +47,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         }
     }
 
-    /// <summary>Preloads lazy Route C data so the first interactive query is disk independent.</summary>
+    /// <summary>Preloads lazy Route C filename data so the first interactive query is disk independent.</summary>
     public void WarmUp()
     {
         lock (gate)
