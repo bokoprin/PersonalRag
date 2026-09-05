@@ -16,6 +16,7 @@ internal sealed record FileSystemEvent(string Path, string? OldPath = null, File
 public sealed class FileSystemCatalog : IAsyncDisposable
 {
     private readonly object gate = new();
+    private readonly object topologyGate = new();
     private readonly ReaderWriterLockSlim engineGate = new(LockRecursionPolicy.NoRecursion);
     private readonly string root;
     private readonly string store;
@@ -295,6 +296,8 @@ public sealed class FileSystemCatalog : IAsyncDisposable
 
     private bool RebuildCore()
     {
+        lock (topologyGate)
+        {
         FileSystemEntry[] discovered = Discover();
         Dictionary<string, FilenameRecord> next;
         lock (gate)
@@ -358,10 +361,13 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         finally { engineGate.ExitWriteLock(); }
         previous.Dispose();
         return true;
+        }
     }
 
     private bool CatchUpCore()
     {
+        lock (topologyGate)
+        {
         FileSystemEntry[] discovered = Discover();
         Dictionary<string, FilenameRecord> prior;
         lock (gate) prior = new Dictionary<string, FilenameRecord>(byPath, StringComparer.OrdinalIgnoreCase);
@@ -381,92 +387,98 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             try { reusable[index] = File.GetLastWriteTimeUtc(entry.Path) == old.ModifiedUtc; }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         });
-        lock (gate)
+        // The snapshot is prepared outside the catalog lock so status/count reads and
+        // existing-index searches stay responsive while a large root is reconciled.
+        var discoveredPaths = discovered.Select(entry => entry.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var reserved = prior.Values.Select(record => record.FileId).ToHashSet();
+        var assigned = new HashSet<int>();
+        var movedCandidates = prior.Values
+            .Where(record => !discoveredPaths.Contains(record.FullPath))
+            .GroupBy(Signature)
+            .ToDictionary(group => group.Key, group => new Queue<FilenameRecord>(group), EqualityComparer<FileSignature>.Default);
+        var idsByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var preliminary = new List<(string Path, bool Directory, int Id, FilenameRecord Metadata)>();
+        for (int discoveredIndex = 0; discoveredIndex < discovered.Length; discoveredIndex++)
         {
-            var discoveredPaths = discovered.Select(entry => entry.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var reserved = prior.Values.Select(record => record.FileId).ToHashSet();
-            var assigned = new HashSet<int>();
-            var movedCandidates = prior.Values
-                .Where(record => !discoveredPaths.Contains(record.FullPath))
-                .GroupBy(Signature)
-                .ToDictionary(group => group.Key, group => new Queue<FilenameRecord>(group), EqualityComparer<FileSignature>.Default);
-            var idsByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var preliminary = new List<(string Path, bool Directory, int Id, FilenameRecord Metadata)>();
-            for (int discoveredIndex = 0; discoveredIndex < discovered.Length; discoveredIndex++)
+            FileSystemEntry entry = discovered[discoveredIndex];
+            FilenameRecord metadata;
+            int id;
+            if (prior.TryGetValue(entry.Path, out FilenameRecord? old))
             {
-                FileSystemEntry entry = discovered[discoveredIndex];
-                FilenameRecord metadata;
-                int id;
-                if (prior.TryGetValue(entry.Path, out FilenameRecord? old))
-                {
-                    id = old.FileId;
-                    // A restart normally has an unchanged tree. Reuse the persisted metadata
-                    // after one cheap timestamp check; the previous full FileInfo.Refresh per
-                    // entry made a 100k-file catch-up exceed the five-second product gate.
-                    if (reusable[discoveredIndex])
-                        metadata = old;
-                    else metadata = ReadRecord(entry.Path, id);
-                }
-                else
-                {
-                    metadata = ReadRecord(entry.Path, 0);
-                    if (movedCandidates.TryGetValue(Signature(metadata), out Queue<FilenameRecord>? candidates))
-                    {
-                        while (candidates.Count > 0 && assigned.Contains(candidates.Peek().FileId)) candidates.Dequeue();
-                        id = candidates.Count > 0 ? candidates.Dequeue().FileId : AllocateId(reserved);
-                    }
-                    else id = AllocateId(reserved);
-                }
-                assigned.Add(id);
-                reserved.Add(id);
-                idsByPath[entry.Path] = id;
-                preliminary.Add((entry.Path, entry.IsDirectory, id, metadata));
+                id = old.FileId;
+                // A restart normally has an unchanged tree. Reuse the persisted metadata
+                // after one cheap timestamp check; the previous full FileInfo.Refresh per
+                // entry made a 100k-file catch-up exceed the five-second product gate.
+                if (reusable[discoveredIndex])
+                    metadata = old;
+                else metadata = ReadRecord(entry.Path, id);
             }
-            var next = new Dictionary<string, FilenameRecord>(StringComparer.OrdinalIgnoreCase);
-            foreach ((string path, bool isDirectory, int id, FilenameRecord metadata) in preliminary)
+            else
             {
-                string? parentPath = Path.GetDirectoryName(path);
-                int? parentId = parentPath is not null && idsByPath.TryGetValue(NormalizePath(parentPath), out int parent) ? parent : null;
-                next[path] = metadata with { FileId = id, ParentId = parentId, Flags = isDirectory ? (byte)2 : (byte)1 };
+                metadata = ReadRecord(entry.Path, 0);
+                if (movedCandidates.TryGetValue(Signature(metadata), out Queue<FilenameRecord>? candidates))
+                {
+                    while (candidates.Count > 0 && assigned.Contains(candidates.Peek().FileId)) candidates.Dequeue();
+                    id = candidates.Count > 0 ? candidates.Dequeue().FileId : AllocateId(reserved);
+                }
+                else id = AllocateId(reserved);
             }
+            assigned.Add(id);
+            reserved.Add(id);
+            idsByPath[entry.Path] = id;
+            preliminary.Add((entry.Path, entry.IsDirectory, id, metadata));
+        }
+        var next = new Dictionary<string, FilenameRecord>(StringComparer.OrdinalIgnoreCase);
+        foreach ((string path, bool isDirectory, int id, FilenameRecord metadata) in preliminary)
+        {
+            string? parentPath = Path.GetDirectoryName(path);
+            int? parentId = parentPath is not null && idsByPath.TryGetValue(NormalizePath(parentPath), out int parent) ? parent : null;
+            next[path] = metadata with { FileId = id, ParentId = parentId, Flags = isDirectory ? (byte)2 : (byte)1 };
+        }
 
-            var nextIds = next.Values.Select(record => record.FileId).ToHashSet();
-            int changedCount = prior.Values.Count(record => !nextIds.Contains(record.FileId));
-            changedCount += next.Count(pair => !prior.TryGetValue(pair.Key, out FilenameRecord? old) || !Equivalent(old, pair.Value));
-            if (changedCount > 512)
+        var nextIds = next.Values.Select(record => record.FileId).ToHashSet();
+        int changedCount = prior.Values.Count(record => !nextIds.Contains(record.FileId));
+        changedCount += next.Count(pair => !prior.TryGetValue(pair.Key, out FilenameRecord? old) || !Equivalent(old, pair.Value));
+        if (changedCount > 512)
+        {
+            // A large restart delta would force Route C's overlay into a full scan for
+            // every query. Build a replacement off the live engine so the GUI can keep
+            // serving the committed snapshot while catch-up indexes in the background.
+            var rebuilt = new FilenameSearchEngine();
+            rebuilt.Build(next.Values.OrderBy(record => record.FileId).ToArray());
+            FilenameSearchEngine previous;
+            engineGate.EnterWriteLock();
+            try
             {
-                // A large restart delta would force Route C's overlay into a full scan for
-                // every query. Build a replacement off the live engine so the GUI can keep
-                // serving the committed snapshot while catch-up indexes in the background.
-                var rebuilt = new FilenameSearchEngine();
-                rebuilt.Build(next.Values.OrderBy(record => record.FileId).ToArray());
-                FilenameSearchEngine previous;
-                engineGate.EnterWriteLock();
-                try
+                previous = engine;
+                engine = rebuilt;
+                lock (gate)
                 {
-                    previous = engine;
-                    engine = rebuilt;
                     byPath.Clear();
                     foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
                 }
-                finally { engineGate.ExitWriteLock(); }
-                previous.Dispose();
-                return true;
             }
+            finally { engineGate.ExitWriteLock(); }
+            previous.Dispose();
+            return true;
+        }
 
-            engineGate.EnterReadLock();
-            try
-            {
-                var nextIdsForApply = next.Values.Select(record => record.FileId).ToHashSet();
-                foreach (FilenameRecord old in prior.Values)
-                    if (!nextIdsForApply.Contains(old.FileId)) engine.Remove(old.FileId);
-                foreach ((string path, FilenameRecord current) in next)
-                    if (!prior.TryGetValue(path, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
-            }
-            finally { engineGate.ExitReadLock(); }
+        engineGate.EnterReadLock();
+        try
+        {
+            var nextIdsForApply = next.Values.Select(record => record.FileId).ToHashSet();
+            foreach (FilenameRecord old in prior.Values)
+                if (!nextIdsForApply.Contains(old.FileId)) engine.Remove(old.FileId);
+            foreach ((string path, FilenameRecord current) in next)
+                if (!prior.TryGetValue(path, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
+        }
+        finally { engineGate.ExitReadLock(); }
+        lock (gate)
+        {
             byPath.Clear();
             foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
-            return changedCount > 0;
+        }
+        return changedCount > 0;
         }
     }
 
