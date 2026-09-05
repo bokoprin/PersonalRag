@@ -1,0 +1,33 @@
+{
+  "complete": true,
+  "pass": true,
+  "phases": [
+    {
+      "phase": "create",
+      "count": 10000,
+      "seconds": 99.3691107
+    },
+    {
+      "phase": "modify",
+      "count": 10000,
+      "seconds": 25.2070485
+    },
+    {
+      "phase": "rename",
+      "count": 10000,
+      "seconds": 9.5687074
+    },
+    {
+      "phase": "delete",
+      "count": 10000,
+      "seconds": 1.8344004
+    }
+  ],
+  "count": 10000,
+  "sourceBytes": 10737418240,
+  "persistentBytes": 953199,
+  "ratio": 8.877357468008995E-05,
+  "peakPrivateBytes": 1587261440,
+  "restartFiles": 10240,
+  "utc": "2026-09-05T09:55:43.3175591Z"
+}

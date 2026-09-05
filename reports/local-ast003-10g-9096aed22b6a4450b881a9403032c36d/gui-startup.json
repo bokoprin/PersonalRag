@@ -1,0 +1,13 @@
+{
+  "pass": true,
+  "filenameOnly": false,
+  "filenameReadyMs": 617.3057,
+  "filenamePrivateBytes": 332980224,
+  "contentReadyMs": 827.1613,
+  "contentPrivateBytes": 614363136,
+  "filenameRows": 100,
+  "finalRows": 100,
+  "privateBytes": 614363136,
+  "coreBinarySha256": "DC91AA15189AF329DB5BEBE576CB83BC735A8EE386B33FABE321A9213EACB499",
+  "utc": "2026-09-05T09:57:04.0927688Z"
+}
