@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -8,9 +7,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\FilenameSearch.Core\FilenameSearch.Core.csproj" />
-    <ProjectReference Include="..\query_generator\QueryGenerator.csproj" />
-    <ProjectReference Include="..\route_a\RouteA.csproj" />
-    <ProjectReference Include="..\route_b\RouteB.csproj" />
-    <ProjectReference Include="..\route_c\RouteC.csproj" />
   </ItemGroup>
 </Project>
