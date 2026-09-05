@@ -51,13 +51,14 @@ public static class RunnerApp
         if (args.Length < (requireLock ? 10 : 7)) throw new ArgumentException(requireLock ? "benchmark ROUTE CORPUS_RECORDS QUERY_SET ORACLE_JSON OUTPUT_JSON ROUNDS REPO_ROOT LOCK SPEC" : "benchmark-calibration ROUTE CORPUS_RECORDS QUERY_SET ORACLE_JSON OUTPUT_JSON ROUNDS");
         string route = args[1], corpusPath = args[2], queryPath = args[3], oraclePath = args[4], outputPath = args[5]; int rounds = int.Parse(args[6]);
         if (requireLock && !LockFile.Verify(args[8], args[9], args[7])) throw new InvalidDataException("EXPERIMENT_LOCK verification failed; benchmark refused");
-        CorpusData corpus = CorpusIO.Read(corpusPath); QuerySetDocument querySet = Read<QuerySetDocument>(queryPath); OracleFile oracle = Read<OracleFile>(oraclePath);
+        QuerySetDocument querySet = Read<QuerySetDocument>(queryPath); OracleFile oracle = Read<OracleFile>(oraclePath);
         string corpusHash = Sha256File(corpusPath), queryHash = Sha256File(queryPath); if (!oracle.CorpusSha256.Equals(corpusHash, StringComparison.OrdinalIgnoreCase) || !oracle.QuerySetSha256.Equals(queryHash, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Oracle does not match corpus/query hashes");
-        RouteReport report = RunRoute(route, corpus, querySet, oracle, rounds, outputPath, requireLock); Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!); File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions)); Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions)); return report.HardGate == "PASS" ? 0 : 1;
+        RouteReport report = RunRoute(route, corpusPath, querySet, oracle, rounds, outputPath, requireLock); Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!); File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions)); Console.WriteLine(JsonSerializer.Serialize(report, JsonOptions)); return report.HardGate == "PASS" ? 0 : 1;
     }
 
-    private static RouteReport RunRoute(string route, CorpusData corpus, QuerySetDocument querySet, OracleFile oracle, int rounds, string outputPath, bool official)
+    private static RouteReport RunRoute(string route, string corpusPath, QuerySetDocument querySet, OracleFile oracle, int rounds, string outputPath, bool official)
     {
+        CorpusData corpus = CorpusIO.Read(corpusPath);
         Process process = Process.GetCurrentProcess(); FileRecord[] updateSources = SelectUpdateSources(corpus.Records); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         Stopwatch buildWatch = Stopwatch.StartNew(); long buildPrivate; double persistSeconds; string storePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"route-{route.ToUpperInvariant()}.store");
         {
