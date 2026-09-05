@@ -8,9 +8,29 @@ using Astra.Core;
 System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
 var json = new JsonSerializerOptions { WriteIndented = true };
 void WriteJson(string path, object value) => File.WriteAllText(path, JsonSerializer.Serialize(value, json));
-if (args.Length < 2) throw new ArgumentException("generate ROOT GiB | names ROOT COUNT | run ROOT STORE RESULT [REPETITIONS] | churn ROOT STORE RESULT COUNT");
+if (args.Length < 2) throw new ArgumentException("generate ROOT GiB | names ROOT COUNT | mixed ROOT GiB | build ROOT STORE RESULT | search ROOT STORE RESULT [REPETITIONS] | names-search ROOT STORE RESULT [REPETITIONS] | run ROOT STORE RESULT [REPETITIONS] | updates ROOT STORE RESULT [SAMPLES] | churn ROOT STORE RESULT COUNT | recovery STORE RESULT | idle STORE RESULT SECONDS");
 switch (args[0])
 {
+    case "build": await FormalBench.Build(args[1], args[2], args[3]); break;
+    case "search": await FormalBench.Search(args[1], args[2], args[3], args.Length > 4 ? int.Parse(args[4]) : 100, false); break;
+    case "names-search": await FormalBench.Search(args[1], args[2], args[3], args.Length > 4 ? int.Parse(args[4]) : 100, true); break;
+    case "updates": await UpdateLatencyBench.Run(args[1], args[2], args[3], args.Length > 4 ? int.Parse(args[4]) : 100); break;
+    case "churn": await ChurnBench.Run(args[1], args[2], args[3], int.Parse(args[4])); break;
+    case "recovery": await RecoveryBench.Run(args[1], args[2]); break;
+    case "crash-write":
+    {
+        var snapshot = IndexStore.Load(args[1]);
+        Action? beforeCommit = args.Length > 2 ? () =>
+        {
+            string marker = Path.GetFullPath(args[2]);
+            File.WriteAllText(marker, "ready");
+            while (File.Exists(marker)) Thread.Sleep(25);
+        } : null;
+        IndexStore.Save(args[1], snapshot, beforeCommit: beforeCommit);
+        break;
+    }
+    case "idle": await IdleBench.Run(args[1], args[2], int.Parse(args[3])); break;
+    case "mixed": MixedCorpusGenerator.Generate(args[1], double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture)); break;
     case "generate":
     case "names":
     {

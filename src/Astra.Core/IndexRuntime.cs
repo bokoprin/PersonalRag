@@ -12,8 +12,10 @@ public sealed class IndexRuntime : IAsyncDisposable
     private readonly Task worker, saver;
     private readonly IndexWriteLease lease;
     private IndexSnapshot snapshot;
+    private IndexSnapshot? persisted;
     private int rescan;
     public IndexSnapshot Snapshot => Volatile.Read(ref snapshot);
+    public bool IsSettled => Status == "Ready" && ReferenceEquals(Snapshot, Volatile.Read(ref persisted)) && changes.Reader.Count == 0;
     public string Status { get; private set; } = "差分を確認中";
     public event Action? Changed;
 
@@ -27,7 +29,11 @@ public sealed class IndexRuntime : IAsyncDisposable
         watcher.Created += (_, e) => Queue(e.FullPath);
         watcher.Changed += (_, e) => Queue(e.FullPath);
         watcher.Deleted += (_, e) => Queue(e.FullPath);
-        watcher.Renamed += (_, e) => { Queue(e.OldFullPath); Queue(e.FullPath); Interlocked.Exchange(ref rescan, 1); };
+        watcher.Renamed += (_, e) =>
+        {
+            if (Directory.Exists(e.FullPath)) Interlocked.Exchange(ref rescan, 1);
+            Queue(e.OldFullPath); Queue(e.FullPath);
+        };
         watcher.Error += (_, _) => { Interlocked.Exchange(ref rescan, 1); Queue(snapshot.Root); };
         try { watcher.EnableRaisingEvents = true; }
         catch { watcher.Dispose(); lease.Dispose(); throw; }
@@ -56,19 +62,31 @@ public sealed class IndexRuntime : IAsyncDisposable
                         next = builder.Build(Snapshot.Root, stop.Token, previous: Snapshot);
                     else
                     {
-                        var map = Snapshot.Files.ToDictionary(f => f.Path, StringComparer.OrdinalIgnoreCase);
+                        var prior = Snapshot;
+                        var replacements = new List<FileEntry>();
+                        var deletedDirectories = new List<string>();
                         foreach (string path in paths)
                         {
                             stop.Token.ThrowIfCancellationRequested();
-                            if (File.Exists(path)) map[path] = builder.ReadEntry(path, stop.Token);
+                            if (File.Exists(path)) replacements.Add(builder.ReadEntry(path, stop.Token));
                             else
                             {
-                                map.Remove(path);
-                                string prefix = Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar;
-                                foreach (var descendant in map.Keys.Where(p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToArray()) map.Remove(descendant);
+                                int found = Array.BinarySearch(prior.Files, new FileEntry(path, 0, 0, null, ReadOnlyMemory<byte>.Empty), EntryPathComparer.Instance);
+                                if (found < 0) deletedDirectories.Add(Path.TrimEndingDirectorySeparator(path) + Path.DirectorySeparatorChar);
                             }
                         }
-                        next = new IndexSnapshot(Snapshot.Root, map.Values.OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase).ToArray(), DateTime.UtcNow);
+                        replacements.Sort(EntryPathComparer.Instance);
+                        var merged = new List<FileEntry>(prior.Files.Length + replacements.Count);
+                        int inserted = 0;
+                        foreach (var entry in prior.Files)
+                        {
+                            if (paths.Contains(entry.Path) || deletedDirectories.Any(prefix => entry.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))) continue;
+                            while (inserted < replacements.Count && EntryPathComparer.Instance.Compare(replacements[inserted], entry) < 0)
+                                merged.Add(replacements[inserted++]);
+                            merged.Add(entry);
+                        }
+                        while (inserted < replacements.Count) merged.Add(replacements[inserted++]);
+                        next = new IndexSnapshot(prior.Root, merged.ToArray(), DateTime.UtcNow);
                     }
                     Volatile.Write(ref snapshot, next); saves.Writer.TryWrite(next);
                     Status = "Ready"; Changed?.Invoke();
@@ -92,7 +110,7 @@ public sealed class IndexRuntime : IAsyncDisposable
             var newest = pending;
             await Task.Delay(100);
             while (saves.Reader.TryRead(out var later)) newest = later;
-            try { IndexStore.Save(store, newest, lease); }
+            try { IndexStore.Save(store, newest, lease); Volatile.Write(ref persisted, newest); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Status = "保存エラー: " + ex.Message; Changed?.Invoke();
@@ -107,4 +125,10 @@ public sealed class IndexRuntime : IAsyncDisposable
         try { await worker; await saver; }
         finally { lease.Dispose(); stop.Dispose(); }
     }
+}
+
+internal sealed class EntryPathComparer : IComparer<FileEntry>
+{
+    public static readonly EntryPathComparer Instance = new();
+    public int Compare(FileEntry? x, FileEntry? y) => StringComparer.OrdinalIgnoreCase.Compare(x?.Path, y?.Path);
 }

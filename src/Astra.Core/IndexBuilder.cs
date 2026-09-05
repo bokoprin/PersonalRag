@@ -12,7 +12,7 @@ public sealed class IndexBuilder(ITextExtractor? extractor = null)
         var entries = new ConcurrentBag<FileEntry>();
         var old = previous?.Files.ToDictionary(f => f.Path, StringComparer.OrdinalIgnoreCase);
         int done = 0;
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = false,
+        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true,
             AttributesToSkip = FileAttributes.ReparsePoint };
         Parallel.ForEach(Directory.EnumerateFiles(root, "*", options),
             new ParallelOptions { MaxDegreeOfParallelism = Math.Min(8, Environment.ProcessorCount), CancellationToken = cancellationToken },
@@ -39,7 +39,7 @@ public sealed class IndexBuilder(ITextExtractor? extractor = null)
             if (!info.Exists || info.Length != size || info.LastWriteTimeUtc.Ticks != modified)
                 throw new IOException("File changed while indexing");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.DecoderFallbackException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.DecoderFallbackException)
         { error = ex.Message; bits = []; }
         return new FileEntry(path, size, modified, error, bits);
     }

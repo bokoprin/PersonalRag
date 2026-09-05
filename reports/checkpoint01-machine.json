@@ -1,0 +1,34 @@
+{
+  "utc": "2026-09-05T06:10:59.4839069Z",
+  "commit": "9ececee0842240466e2aa28fa84ba15ce3b44786",
+  "cpu": {
+    "Name": "Intel(R) Core(TM) Ultra 9 285H"
+  },
+  "memory": {
+    "TotalPhysicalMemory": 33682821120
+  },
+  "os": {
+    "Caption": "Microsoft Windows 11 Home",
+    "Version": "10.0.26200"
+  },
+  "battery": {
+    "BatteryStatus": 2
+  },
+  "disk": {
+    "FriendlyName": "NVMe MTFDKBA1T0QGN-1BN1AABGA",
+    "BusType": "NVMe",
+    "MediaType": "SSD"
+  },
+  "generatorSha256": "1F97C01F3DE5D94D23612CA4C0744842C47673E31B487D05A0A24E510FC28354",
+  "corpus": {
+    "generator": "astra-corpus-v1",
+    "seed": 20260905,
+    "names": false,
+    "count": 10240,
+    "bytes": 10737418240,
+    "fileSize": 1048576,
+    "utc": "2026-09-05T05:57:43.1977407Z",
+    "seconds": 16.6210779,
+    "framework": ".NET 8.0.30"
+  }
+}

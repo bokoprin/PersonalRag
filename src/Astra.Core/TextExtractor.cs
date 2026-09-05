@@ -2,7 +2,43 @@ using System.Text;
 
 namespace Astra.Core;
 
+/// <summary>
+/// Format-dispatching extractor. Search/index code depends only on ITextExtractor;
+/// new document formats can be added without changing search semantics or index layout.
+/// </summary>
 public sealed class TextExtractor : ITextExtractor
+{
+    private readonly PlainTextExtractor plain = new();
+    private readonly OpenXmlTextExtractor openXml = new();
+    private readonly PdfTextExtractor pdf = new();
+    private readonly DocumentExtractionCache? cache;
+
+    public TextExtractor(bool enableDocumentCache = false)
+    {
+        if (enableDocumentCache) cache = new DocumentExtractionCache();
+    }
+
+    public IEnumerable<TextUnit> Extract(string path, CancellationToken cancellationToken = default)
+    {
+        string extension = Path.GetExtension(path).ToLowerInvariant();
+        if (extension is not (".docx" or ".xlsx" or ".pptx" or ".pdf")) return plain.Extract(path, cancellationToken);
+        ITextExtractor extractor = extension == ".pdf" ? pdf : openXml;
+        if (cache is null) return extractor.Extract(path, cancellationToken);
+        var info = new FileInfo(path);
+        // Avoid materializing exceptionally large compressed documents solely for caching.
+        if (info.Length > 32L * 1024 * 1024) return extractor.Extract(path, cancellationToken);
+        if (cache.TryGet(path, info, out var cached)) return cached;
+        long beforeSize = info.Length, beforeTicks = info.LastWriteTimeUtc.Ticks;
+        var units = extractor.Extract(path, cancellationToken).ToArray();
+        info.Refresh();
+        // Never poison the cache with units extracted while the source was changing.
+        if (info.Exists && info.Length == beforeSize && info.LastWriteTimeUtc.Ticks == beforeTicks)
+            cache.Put(path, info, units);
+        return units;
+    }
+}
+
+internal sealed class PlainTextExtractor : ITextExtractor
 {
     public IEnumerable<TextUnit> Extract(string path, CancellationToken cancellationToken = default)
     {

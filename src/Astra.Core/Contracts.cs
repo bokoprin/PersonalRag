@@ -6,7 +6,8 @@ public record SearchRequest(string FileQuery = "", string ContentQuery = "", Fil
     ContentMode Mode = ContentMode.Literal, bool CaseSensitive = false);
 public record TextUnit(string Location, string Text);
 public record Hit(long Ordinal, string Location, string Text, int Start, int Length);
-public record FileEntry(string Path, long Size, long ModifiedUtcTicks, string? Unsearchable, byte[] Signature)
+public record FileEntry(string Path, long Size, long ModifiedUtcTicks, string? Unsearchable,
+    [property: System.Text.Json.Serialization.JsonIgnore] ReadOnlyMemory<byte> Signature)
 {
     public string Name { get; } = System.IO.Path.GetFileName(Path);
 }

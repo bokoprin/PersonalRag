@@ -13,6 +13,7 @@ public partial class MainWindow : Window
 {
     private readonly ObservableCollection<ResultItem> rows = [];
     private readonly string store;
+    private readonly string settingsFile;
     private IndexRuntime? runtime;
     private SearchEngine? engine;
     private CancellationTokenSource queryCancellation = new(), hitCancellation = new();
@@ -23,7 +24,9 @@ public partial class MainWindow : Window
     public MainWindow() : this(null) { }
     public MainWindow(string? storeOverride)
     {
-        store = storeOverride ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PersonalRagAstra", "index");
+        string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PersonalRagAstra");
+        store = storeOverride ?? Path.Combine(appData, "index");
+        settingsFile = Path.Combine(appData, "root.txt");
         InitializeComponent(); Results.ItemsSource = rows;
     }
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -33,8 +36,24 @@ public partial class MainWindow : Window
         {
             try { await StartRuntime(await Task.Run(() => IndexStore.Load(store))); }
             catch (Exception ex) { Status.Text = "インデックスを利用できません: " + ex.Message; }
+            return;
         }
-        else Status.Text = "対象フォルダーを選択してください";
+
+        string? root = Environment.GetEnvironmentVariable("PERSONALRAG_ROOT");
+        if (string.IsNullOrWhiteSpace(root) && File.Exists(settingsFile))
+            root = (await File.ReadAllTextAsync(settingsFile)).Trim();
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        {
+            var dialog = new OpenFolderDialog { Title = "最初に検索対象フォルダーを選択してください" };
+            if (dialog.ShowDialog(this) != true)
+            {
+                Status.Text = "検索対象が未設定です。再起動すると設定できます。";
+                Summary.Text = "検索対象が未設定です。";
+                return;
+            }
+            root = dialog.FolderName;
+        }
+        await BuildInitialIndex(root);
     }
     private async Task StartRuntime(IndexSnapshot snapshot)
     {
@@ -46,24 +65,26 @@ public partial class MainWindow : Window
             Status.Text = $"{runtime.Status} · {runtime.Snapshot.Files.Length:N0} files";
             if (!ReferenceEquals(engine?.Snapshot, runtime.Snapshot)) { engine = new SearchEngine(runtime.Snapshot); _ = Search(false); }
         });
-        engine = new SearchEngine(snapshot); Status.Text = $"Ready · {snapshot.Files.Length:N0} files";
+        engine = new SearchEngine(snapshot); Status.Text = $"差分を確認中 · {snapshot.Files.Length:N0} files";
         await Search(false);
     }
-    private async void ChooseFolder(object sender, RoutedEventArgs e)
+    private async Task BuildInitialIndex(string root)
     {
-        var dialog = new OpenFolderDialog { Title = "検索するフォルダー" };
-        if (dialog.ShowDialog(this) != true) return;
         try
         {
             Status.Text = "インデックスを構築中";
-            ((Button)sender).IsEnabled = false;
-            var snapshot = await Task.Run(() => new IndexBuilder().Build(dialog.FolderName, progress: n => Dispatcher.BeginInvoke(() => Status.Text = $"構築中 · {n:N0} files")));
-            if (runtime != null) { await runtime.DisposeAsync(); runtime = null; }
+            Summary.Text = "初回インデックスを構築中…";
+            var snapshot = await Task.Run(() => new IndexBuilder().Build(root, progress: n => Dispatcher.BeginInvoke(() => Status.Text = $"構築中 · {n:N0} files")));
             await Task.Run(() => IndexStore.Save(store, snapshot));
+            Directory.CreateDirectory(Path.GetDirectoryName(settingsFile)!);
+            await File.WriteAllTextAsync(settingsFile, snapshot.Root);
             await StartRuntime(snapshot);
         }
-        catch (Exception ex) { Status.Text = "構築エラー: " + ex.Message; }
-        finally { ((Button)sender).IsEnabled = true; }
+        catch (Exception ex)
+        {
+            Status.Text = "構築エラー: " + ex.Message;
+            Summary.Text = "インデックスを構築できませんでした。";
+        }
     }
     private async void QueryChanged(object sender, RoutedEventArgs e) { if (ready) await Search(false); }
     private SearchRequest ReadRequest() => new(FileQuery.Text, ContentQuery.Text, Scope.SelectedIndex == 1 ? FileScope.FullPath : FileScope.Filename,

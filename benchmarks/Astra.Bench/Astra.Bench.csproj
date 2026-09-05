@@ -1,1 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../../src/Astra.Core/Astra.Core.csproj" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Astra.Core/Astra.Core.csproj" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+  </ItemGroup>
+</Project>

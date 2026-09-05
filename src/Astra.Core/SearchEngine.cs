@@ -4,7 +4,7 @@ namespace Astra.Core;
 
 public sealed class SearchEngine(IndexSnapshot snapshot, ITextExtractor? extractor = null) : IDeterministicSearch
 {
-    private readonly ITextExtractor extractor = extractor ?? new TextExtractor();
+    private readonly ITextExtractor extractor = extractor ?? new TextExtractor(enableDocumentCache: true);
     public IndexSnapshot Snapshot { get; } = snapshot;
     public SearchPage Search(SearchRequest request, int offset = 0, int limit = 100, CancellationToken cancellationToken = default)
     {
@@ -30,7 +30,7 @@ public sealed class SearchEngine(IndexSnapshot snapshot, ITextExtractor? extract
                 var hits = GetHits(file.Path, matcher, 0, 1, false, cancellationToken);
                 if (hits.Hits.Count > 0) rows.Add(new SearchRow(file, hits.Total, hits.Complete, hits.Hits[0]));
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.DecoderFallbackException or System.Text.RegularExpressions.RegexMatchTimeoutException)
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.DecoderFallbackException)
             { if (warnings.Count < 100) warnings.Add(file.Path + ": " + ex.Message); }
         }
         return new SearchPage(rows, next, next == Snapshot.Files.Length, watch.Elapsed.TotalMilliseconds, warnings);
@@ -44,7 +44,11 @@ public sealed class SearchEngine(IndexSnapshot snapshot, ITextExtractor? extract
     }
     private HitPage GetHits(string path, QueryMatcher matcher, long offset, int limit, bool countAll, CancellationToken cancellationToken)
     {
+        var before = new FileInfo(path);
+        if (!before.Exists) throw new FileNotFoundException("Source file disappeared", path);
+        long beforeSize = before.Length, beforeTicks = before.LastWriteTimeUtc.Ticks;
         var hits = new List<Hit>(); long total = 0;
+        bool stoppedEarly = false;
         foreach (var unit in extractor.Extract(path, cancellationToken))
         {
             foreach (var match in matcher.Matches(unit.Text))
@@ -57,9 +61,13 @@ public sealed class SearchEngine(IndexSnapshot snapshot, ITextExtractor? extract
                     hits.Add(new Hit(total, unit.Location, unit.Text.Substring(start, length), match.Start - start, Math.Min(match.Length, length - (match.Start - start))));
                 }
                 total++;
-                if (!countAll && hits.Count == limit) return new HitPage(hits, total, false);
+                if (!countAll && hits.Count == limit) { stoppedEarly = true; break; }
             }
+            if (stoppedEarly) break;
         }
-        return new HitPage(hits, total, true);
+        var after = new FileInfo(path); after.Refresh();
+        if (!after.Exists || after.Length != beforeSize || after.LastWriteTimeUtc.Ticks != beforeTicks)
+            throw new IOException("File changed while searching");
+        return new HitPage(hits, total, !stoppedEarly);
     }
 }

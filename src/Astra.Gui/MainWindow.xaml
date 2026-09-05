@@ -18,11 +18,11 @@
     <TextBlock Grid.Row="2" Text="内容" VerticalAlignment="Center"/>
     <TextBox x:Name="ContentQuery" Grid.Row="2" Grid.Column="1" AutomationProperties.AutomationId="contentQuery" TextChanged="QueryChanged"/>
     <ComboBox x:Name="Mode" Grid.Row="2" Grid.Column="2" SelectedIndex="0" Margin="8,0" VerticalContentAlignment="Center" SelectionChanged="QueryChanged"><ComboBoxItem Content="Literal"/><ComboBoxItem Content="Regex"/><ComboBoxItem Content="Wildcard"/></ComboBox>
-    <Button Grid.Row="2" Grid.Column="3" Content="内容をクリア" HorizontalAlignment="Left" Click="ClearContent"/>
+    <Button Grid.Row="2" Grid.Column="3" Content="×" ToolTip="内容検索をクリア" Width="32" HorizontalAlignment="Left" Click="ClearContent"/>
    </Grid>
   </Border>
   <Border DockPanel.Dock="Top" BorderBrush="#D4D4D4" BorderThickness="0,0,0,1" Padding="10,5">
-   <DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button Content="対象フォルダー" Click="ChooseFolder"/><Button x:Name="More" Content="さらに表示" Click="ShowMore" IsEnabled="False"/></StackPanel><TextBlock x:Name="Summary" Text="対象フォルダーを選択してください" VerticalAlignment="Center"/></DockPanel>
+   <DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><Button x:Name="More" Content="さらに表示" Click="ShowMore" IsEnabled="False"/></StackPanel><TextBlock x:Name="Summary" Text="準備中" VerticalAlignment="Center"/></DockPanel>
   </Border>
   <Border DockPanel.Dock="Bottom" Background="#F7F7F7" BorderBrush="#D4D4D4" BorderThickness="0,1,0,0" Padding="10,5">
    <DockPanel><TextBlock DockPanel.Dock="Right" Foreground="#777" Text="Ctrl+F: ファイル検索 / Ctrl+Shift+F: 内容検索 / 一覧↑↓: ファイル / 一致欄↑↓: ヒット"/><TextBlock x:Name="Status" Text="準備中"/></DockPanel>

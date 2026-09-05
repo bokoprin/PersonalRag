@@ -1,37 +1,82 @@
 # 進捗と再開位置
 
-2026-09-05、ブランチ `feat/astra-gate1`。goalは継続中。Gate 1未完了、Gate 2未着手。
+## 現在状態
 
-## 確認済み
+Gate 1 / Gate 2 の**source implementationとローカル回帰試験は完了したが、formal acceptanceは未完了**。
+現環境ではReleaseソリューションビルド、Astra.Tests 686 checks、Astra.Gui.Tests 9 checks、ASTRA003復旧smoke testがPASSしている。
+次の正本作業は official Windows machine で acceptance runner を実行し、FAILした数値だけを最適化すること。
 
-- 正本仕様/GUIのSHA256は同梱delivery JSONと一致。仕様は変更していない。
-- 指定CPU、32GB、NVMe、Windows 11。ユーザーがAC接続を回答し、BatteryStatus=2を確認。
-- .NET 8.0.424、外部NuGet依存なし。検索Core / CLI / WPF GUI / Core tests / WPF tests / Benchを新規実装。
-- コア150検証にPASS（名前、内容、Unicode/encoding、binary、regex、50,000hit、保存破損、変更追従、再起動差分）。
-- WPFテスト9検証にPASS。32件のhit page、上下/Home/End、世代棄却、AND、構文エラーを実コントロールで試験。外部UI入力ではなくWPF routed eventによる検証。native keyboard/Enter実ファイル起動、フォーカス、freeze/正式起動性能は別途必要。
-- 1GiBベースライン `reports/baseline-1g.json` は一部queryが0.75〜2.37秒でFAIL。
-- 2/3文字signatureと必要literal抽出後 `reports/baseline-1g-v2.json` はquery全体概ね0.1〜11ms。構築2.186秒、容量0.36468%。正式スケールのPASSではない。
+## ASTRA003 ローカル実測（正式判定ではない）
 
-## 生成済み/生成中
+同一の10GiB / 10,240ファイル `bench-data/core-10g` で、現行Release binaryを実測した。
 
-- `bench-data/baseline-1g`: 1024 files, 1GiB。
-- `bench-data/core-10g`: 10240 files, 10GiB。
-- `bench-data/core-100g`: 102400 files, 100GiB（生成完了をmanifestとプロセス出力で確認すること）。
-- `benchmarks/Astra.Bench/Program.cs` の生成手順はv1として固定。seed20260905、1MiB files、5種類、10% UTF16。内容分布/queryを性能結果に合わせて変えない。
-- generated corpus / index / build outputsはignore、reportsはcommitする。
+- build: 13.32秒、永続比率0.00888%、unsearchable 0
+- content search 100回: 全query完了、binary SHA256をbuild/searchで照合
+- update latency 20 samples: create p95 47.9ms、modify 171.7ms、rename 142.6ms、move 120.2ms、delete 49.4ms
+- 10,000件churn: create 99.37秒、modify 25.21秒、rename 9.57秒、delete 1.83秒、再起動後10,240ファイル一致、ピークprivate 1.59GiB
+- crash-write / abandoned temp recovery: `RECOVERY PASS`
+- 実WPF startup: filename 617ms、content 827ms、filename-ready private 333MiB、content-search private 614MiB
 
-## 次の作業
+上記は現行実装の回帰・容量・挙動確認用であり、100GiB / 1M filesを含むofficial GateのPASS宣言には使わない。
 
-1. 100GiB生成は494.49秒で完了。Windows DLL lockによるbuild失敗は解消し、全体build+コア152 checks+GUI9 checksにPASS。
-2. queryfilter事前計算、filenameキャッシュ、writer排他、temp回収、保存retryを含めた初回checkpointを保存する。
-3. 正式測定用はpublish先を一意のartifacts配下に固定し、実行中binaryと開発buildを分離。
-4. 10GiB/100GiBの構築・容量・100回/query性能・メモリ・再起動を測定。baseline結果を残したまま改善。
-5. 100万実ファイル、独立全件oracle、10,000×4 churn/force-kill recovery、10分idle、GUI正式測定。
-6. Gate 1全PASSまでGate 2に着手しない。
+## Astraから引き継いだ実測 checkpoint (ASTRA002)
 
-## 未解決の設計確認事項
+100GiB / 102,400 files:
 
-- 非常に長い改行なしテキストはStreamReader.ReadLineで1行分を確保する。メモリ上限を含め境界試験が必要。
-- 検索はsnapshot世代を使い、候補の元ファイルを実照合する。更新公開までの時間窓は変更追従条件で測る。
-- 所有indexへの複数writer排他、強制終了時temp回収、保存失敗retryの強化が必要。
-- 100GiBを小規模結果から推定PASSにしない。全HARD条件はAC/Releaseで実測する。
+- build 332.27s
+- persistent ratio 0.3646%
+- normal content p95 max 33.35ms
+- short content p95 max 16.69ms
+- load 4.28s (FAIL)
+- 同一process全体peak private 約5.13GiB（Ready値としては計測汚染あり）
+
+Astraはこのload/memory問題に対してASTRA003 block persistenceへ変更中に停止した。
+
+## 今回仕上げた内容
+
+- ASTRA003: 256-file Brotli block、block SHA256、共有raw buffer slice
+- formal benchmarkをbuild processとfresh search processに分離
+- Ready/search/build memoryを別指標化
+- cold first queryを参考値として保存
+- 1,000,000-file filename/path専用測定
+- create/modify/rename/move/delete各100 samples p95測定
+- Gate1 PowerShell runner / summary
+- DOCX/XLSX/PPTX extractor
+- PdfPig 0.1.16 PDF extractor
+- Office/PDF bounded RAM LRU cache
+- Gate2 functional fixture tests + location検証
+- Gate2 mixed corpus generatorを10GiBで固定
+- Gate2 PowerShell runner / summary
+- Frozen GUIから外れていた常設「対象フォルダー」buttonを削除。初回だけmodal setup。
+- inaccessible directoryは全体index buildを停止しない
+- 破損DOCX / binary-control text等の `InvalidDataException` を1ファイル単位で隔離
+- Office/PDF cacheの更新中poison防止（抽出前後size/mtime一致時のみcache）
+- `formal-startup` を実WPF test runnerへ実装し、10GiB/100GiB/1M filename first batchを測定
+- 実WPFのfilename-ready/content-search private memoryを正式Gateへ追加（Gate1 100GiB/1M、Gate2 mixed 10GiB）
+- `DataRoot` の実配置物理ディスクがNVMeであることをformal runnerで検証
+- 1M-file storeにもload/Ready/Search RAM hard gateを適用
+- Gate2 DOCX live update / restart persistence回帰testを追加
+- GUIテストの`Key`名前衝突を修正し、現行ソースでWPF 9 checksを再実行
+- `dotnet run`配下でもrecovery childを正しく起動し、コミット前停止を再現可能化
+- recovery / idle / update / churnレポートの完了状態をformal summaryへ反映
+
+## 次に実機で行うこと
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/Run-Gate1.ps1 -Generate`
+2. `GATE1_SUMMARY.json` のFAILを確認
+3. FAILがあれば corpus/query/thresholdを変えず実装だけ修正
+4. Gate1全PASS後 `powershell -ExecutionPolicy Bypass -File scripts/Run-Gate2.ps1 -Generate`
+5. Gate2全PASS後だけ `PERSONALRAG V1 COMPLETE`
+
+この環境の直近電源APIは`ACLineStatus=0` / `BatteryStatus=1`を返しているため、runnerのACチェックを通すには電源状態の再確認が必要。
+
+特に最初に注目する指標:
+
+- ASTRA003 100GiB fresh-process load <= 2s(filename), <=3s(content)
+- Ready private <=2GiB
+- search peak <=3GiB
+- 1M filename/path p95 <=50ms
+- mixed document normal p95 <=100ms
+- mixed persistent <=5%
+
+未実行項目をPASSと記録しない。

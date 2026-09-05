@@ -31,13 +31,14 @@ public static class Signature
             bits[bit >> 3] |= (byte)(1 << (bit & 7));
         }
     }
-    public static bool MayContain(byte[] bits, SearchRequest request)
+    public static bool MayContain(ReadOnlyMemory<byte> bits, SearchRequest request)
         => Compile(request)(bits);
-    public static Func<byte[], bool> Compile(SearchRequest request)
+    public static Func<ReadOnlyMemory<byte>, bool> Compile(SearchRequest request)
     {
         var groups = RequiredLiterals.For(request).Select(alternatives => alternatives.Select(value => Hashes(value, request.Mode != ContentMode.Literal)).ToArray()).ToArray();
-        return bits =>
+        return memory =>
         {
+            var bits = memory.Span;
             if (bits.Length == 0) return true;
             uint mask = (uint)(bits.Length * 8 - 1);
             foreach (var alternatives in groups)

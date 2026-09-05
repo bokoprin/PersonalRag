@@ -7,22 +7,22 @@
 
 |検証|規模・条件|合格閾値|状態|
 |---|---|---|---|
-|GUI|正本の入力、列、選択、別々のフォーカスとキー、非同期・古い応答抑止|全動作一致|未実施|
+|GUI|正本の入力、列、選択、別々のフォーカスとキー、非同期・古い応答抑止|全動作一致|ローカル9 checks PASS・formal未実施|
 |正確性|独立した直接走査oracle、Unicode/日本語/全mode/AND/空/0件|FP=FN=0|未実施|
 |名前/パス|実ファイル1,000,000、warm|p50≤20/p95≤50/p99≤100ms|未実施|
 |通常内容|100GiB、全固定query|p50≤50/p95≤100/p99≤200ms|未実施|
 |短い高頻度内容|th/in/er/00/日本|p95≤200ms、max≤300ms|未実施|
 |大量hit|同一ファイル50,000箇所、選択と上下/Home/End|初回p95≤100ms、GUI展開有界|未実施|
 |初回構築|10GiB / 100GiB|120秒 / 900秒|未実施|
-|起動|既存index、正常/強制終了後|名前≤2秒、内容≤3秒|未実施|
+|起動|fresh process + 実WPF、既存index、正常/強制終了後|名前≤2秒、内容≤3秒|未実施|
 |変更|create/delete/rename/move/modify各独立測定|名前p95≤1秒、内容p95≤2秒|未実施|
 |容量|10GiB/100GiB、全アプリ永続検索データ|≤5.00%|未実施|
 |メモリ|process-private/commit|idle≤2GiB/search≤3GiB/build≤8GiB/update≤4GiB|未実施|
 |idle|変更なし10分|平均CPU≤1%、不要な継続I/Oなし|未実施|
 |churn|同一corpusに各10,000 create/modify/rename/delete、その後restart|正確性・容量・回復すべてPASS|未実施|
-|Gate 2|DOCX/XLSX/PPTX/PDF、location、mixed性能/容量、回復、Gate 1回帰|全PASS|Gate 1完了まで着手しない|
+|Gate 2|DOCX/XLSX/PPTX/PDF、location、mixed 10GiB性能/容量、回復、Gate 1回帰|全PASS|source実装済み・formal未測定|
 
-正式性能測定はWindows 11 / Core Ultra 9 285H / 32GB / 内蔵NVMe / AC / Release。
+正式性能測定はWindows 11 / Core Ultra 9 285H / 32GB / 内蔵NVMe / AC / Release。`DataRoot` の実配置ディスク自体がNVMeであることをrunnerが検証する。
 machine、電源、ビルドSHA、corpus manifest/hash、query一覧、日時を結果に記録する。
 First useful batchは最大100ファイル、先頭一致表示情報を含む。全件完了時間も別に記録する。
 部分成功、タイムアウト、例外、0hit queryを結果から捨てない。性能改善時もcorpus/queryを変えない。
@@ -45,4 +45,31 @@ First useful batchは最大100ファイル、先頭一致表示情報を含む�
 
 ## 判定の記録
 
-Gate 1: 未完了。Gate 2: 未着手。性能ベースライン: 実装前のため未測定。
+Gate 1: AstraのASTRA002 checkpointでは100GiB build/容量/検索latencyまで実測済みだが、ASTRA003以降のformal gateは未測定。
+Gate 2: source実装済み、formal未測定。現時点ではどちらもCOMPLETEではない。
+
+## Formal runner
+
+Gate 1 official run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/Run-Gate1.ps1 -Generate
+```
+
+Gate 2 は Gate 1 summary が PASS の場合のみ:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/Run-Gate2.ps1 -Generate
+```
+
+Gate 2 synthetic mixed corpus **v2-searchable** は正式測定前に **10 GiB** と固定する。plain/DOCX/XLSX/PPTX/PDFを循環配置し、seed=20260905、通常query/short queryはGate 1と同じものを保持する。容量の大半は実際にextract/search可能なtext payloadで構成し、5%の分母を増やすためのopaque paddingは禁止する。結果を見て分布やqueryを変更しない。
+
+Build memory と Ready/Search memory は別プロセスで測定する。`build` command終了後、fresh processの `search` / `names-search` でload・Ready・search peakを測る。Build processのGC reservationをReady RAMへ混ぜない。
+
+## Formal startup / robustness の追加固定
+
+- 10GiB / 100GiB store、1,000,000-file store、Gate 2 mixed 10GiB store は、実WPF `MainWindow` を fresh process で起動し、最初のfilename batchまでを測る。
+- 10GiB / 100GiBとGate 2 mixed 10GiBでは続けて `PersonalRag` 内容queryを投入し、process開始から最初のcontent batchまでを測る。
+- 実WPF processでも filename-ready private memory ≤2GiB、content-search private memory ≤3GiB を要求する。
+- 壊れたDOCX/PDF、binary controlを含むtextなど1ファイルの抽出失敗は、そのファイルを内容検索不能として隔離し、全index build/searchを停止させない。
+- Office/PDF RAM cacheは抽出前後でsize/mtimeが一致した場合だけ投入し、更新途中の抽出結果をcacheしない。

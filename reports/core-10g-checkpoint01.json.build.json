@@ -1,0 +1,16 @@
+{
+  "utc": "2026-09-05T06:11:41.07166Z",
+  "os": "Microsoft Windows 10.0.26200",
+  "framework": ".NET 8.0.30",
+  "processor": "Intel64 Family 6 Model 197 Stepping 2, GenuineIntel",
+  "logicalProcessors": 16,
+  "files": 10240,
+  "sourceBytes": 10737418240,
+  "persistentBytes": 39152493,
+  "ratio": 0.00364636005833745,
+  "buildSeconds": 37.4441219,
+  "restartSeconds": 0.4971317,
+  "buildPeakPrivateBytes": 380203008,
+  "unsearchable": 0,
+  "binarySha256": "CA83A1BB1F7218D32CC24EC4E32552588F58CD728E8BC0F714BBCE0053035056"
+}

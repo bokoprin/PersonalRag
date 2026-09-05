@@ -36,9 +36,13 @@ try
     }
     File.WriteAllBytes(Path.Combine(root, "binary.bin"), [0, 1, 2, 3, 0xff, 0xfe]);
     File.WriteAllBytes(Path.Combine(root, "bad-utf8.txt"), [0xc3, 0x28]);
+    File.WriteAllText(Path.Combine(root, "binary-control.txt"), "prefix\0suffix", new UTF8Encoding(false, true));
+    File.WriteAllText(Path.Combine(root, "corrupt.docx"), "this is not a zip package", new UTF8Encoding(false, true));
     var snapshot = new IndexBuilder().Build(root);
-    Check(snapshot.Files.Length == 12, "all filenames, including binary");
-    Check(snapshot.Files.Count(f => f.Unsearchable != null) == 2, "binary and malformed UTF8 rejected");
+    Check(snapshot.Files.Length == 14, "all filenames, including unsearchable files");
+    Check(snapshot.Files.Count(f => f.Unsearchable != null) == 4, "binary malformed text and corrupt document rejected");
+    Check(snapshot.Files.Single(f => Path.GetFileName(f.Path) == "binary-control.txt").Unsearchable != null, "binary control text isolated");
+    Check(snapshot.Files.Single(f => Path.GetFileName(f.Path) == "corrupt.docx").Unsearchable != null, "corrupt DOCX isolated");
     IndexStore.Save(store, snapshot); snapshot = IndexStore.Load(store);
     using (var lease = IndexStore.AcquireWriter(store))
         Throws<IOException>(() => IndexStore.Save(store, snapshot), "concurrent writer rejected");
@@ -83,7 +87,7 @@ try
         Check(actual.SequenceEqual(expected), "regex direct oracle " + query);
     }
     Check(engine.Search(new SearchRequest("*.md", "hello")).Rows.Count == 1, "filename AND content");
-    Check(engine.Search(new SearchRequest("source", Scope: FileScope.FullPath)).Rows.Count == 12, "full path search");
+    Check(engine.Search(new SearchRequest("source", Scope: FileScope.FullPath)).Rows.Count == 14, "full path search");
     Check(engine.Search(new SearchRequest(ContentQuery: "config*value", Mode: ContentMode.Wildcard)).Rows.Count == 1, "content wildcard");
     var huge = engine.Search(new SearchRequest(ContentQuery: "needle"));
     Check(huge.Rows.Count == 1 && !huge.Rows[0].HitsComplete, "huge file first useful row is bounded");
@@ -125,8 +129,58 @@ try
     var stable = new IndexBuilder().Build(root); var counting = new CountingExtractor();
     new IndexBuilder(counting).Build(root, previous: stable);
     Check(counting.Count == 0, "restart catchup does not reindex unchanged content");
+    string documentRoot = Path.Combine(work, "documents"), documentStore = Path.Combine(work, "document-index");
+    DocumentFixtures.Create(documentRoot);
+    var documentSnapshot = new IndexBuilder().Build(documentRoot);
+    Check(documentSnapshot.Files.Length == 4 && documentSnapshot.Files.All(f => f.Unsearchable is null), "Gate 2 document formats indexed");
+    IndexStore.Save(documentStore, documentSnapshot);
+    var documentEngine = new SearchEngine(IndexStore.Load(documentStore));
+    var documentCases = new[]
+    {
+        ("GateTwoDocxNeedle", "sample.docx", "Paragraph"),
+        ("GateTwoXlsxNeedle", "sample.xlsx", "SearchSheet!B27"),
+        ("GateTwoPptxNeedle", "sample.pptx", "Slide 1"),
+        ("GateTwoPdfNeedle", "sample.pdf", "Page 1")
+    };
+    foreach (var (query, file, location) in documentCases)
+    {
+        var page = documentEngine.Search(new SearchRequest(ContentQuery: query));
+        Check(page.Rows.Count == 1 && Path.GetFileName(page.Rows[0].File.Path) == file, "Gate 2 search " + file);
+        var hits = documentEngine.GetHits(page.Rows[0].File.Path, new SearchRequest(ContentQuery: query), countAll: true);
+        Check(hits.Total == 1 && hits.Hits[0].Location.StartsWith(location, StringComparison.Ordinal), "Gate 2 location " + file);
+    }
+    await using (var documentRuntime = new IndexRuntime(documentStore, documentSnapshot))
+    {
+        await Until(() => documentRuntime.Status == "Ready", "Gate 2 runtime ready");
+        DocumentFixtures.RewriteDocx(documentRoot, "GateTwoDocxChangedNeedle replacement document text");
+        await Until(() => new SearchEngine(documentRuntime.Snapshot).Search(new SearchRequest(ContentQuery: "GateTwoDocxChangedNeedle")).Rows.Count == 1,
+            "Gate 2 DOCX live update");
+        var changedDocuments = new SearchEngine(documentRuntime.Snapshot);
+        Check(changedDocuments.Search(new SearchRequest(ContentQuery: "GateTwoDocxNeedle")).Rows.Count == 0, "Gate 2 old DOCX content removed");
+        Check(changedDocuments.Search(new SearchRequest(ContentQuery: "GateTwoDocxChangedNeedle")).Rows.Count == 1, "Gate 2 new DOCX content searchable");
+    }
+    var persistedDocuments = new SearchEngine(IndexStore.Load(documentStore));
+    Check(persistedDocuments.Search(new SearchRequest(ContentQuery: "GateTwoDocxChangedNeedle")).Rows.Count == 1, "Gate 2 document update persisted across restart");
     var bytes = File.ReadAllBytes(Path.Combine(store, "snapshot.astra")); bytes[^1] ^= 1; File.WriteAllBytes(Path.Combine(store, "snapshot.astra"), bytes);
     Throws<InvalidDataException>(() => IndexStore.Load(store), "corruption fails safe");
+    string blockRoot = Path.Combine(work, "block-source"), blockStore = Path.Combine(work, "block-index");
+    Directory.CreateDirectory(blockRoot);
+    var random = new Random(513);
+    var blockFiles = Enumerable.Range(0, 513).Select(i =>
+    {
+        var signature = new byte[i % 5 == 0 ? 65536 : 128]; random.NextBytes(signature);
+        return new FileEntry(Path.Combine(blockRoot, $"file_{i:D5}_日本語.txt"), i + 10, DateTime.UtcNow.Ticks, i % 17 == 0 ? "unreadable test" : null, signature);
+    }).ToArray();
+    IndexStore.Save(blockStore, new IndexSnapshot(blockRoot, blockFiles, DateTime.UtcNow));
+    var blockLoaded = IndexStore.Load(blockStore);
+    Check(blockLoaded.Files.Length == 513, "parallel block count across 256 boundary");
+    for (int attempt = 0; attempt < 5; attempt++)
+        Check(IndexStore.Load(blockStore).Files.Length == 513, "parallel block repeated load " + attempt);
+    for (int i = 0; i < blockFiles.Length; i++)
+        Check(blockLoaded.Files[i].Path == blockFiles[i].Path && blockLoaded.Files[i].Unsearchable == blockFiles[i].Unsearchable &&
+            blockLoaded.Files[i].Signature.Span.SequenceEqual(blockFiles[i].Signature.Span), "parallel block content " + i);
+    IndexStore.Save(blockStore, new IndexSnapshot(blockRoot, [], DateTime.UtcNow));
+    Check(IndexStore.Load(blockStore).Files.Length == 0, "zero-block empty snapshot");
     Console.WriteLine($"PASS {checks} checks");
 }
 finally { Directory.Delete(work, true); }
