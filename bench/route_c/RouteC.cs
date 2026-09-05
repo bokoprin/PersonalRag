@@ -6,7 +6,7 @@ using FilenameSearch.Core;
 namespace FilenameSearch.RouteC;
 
 /// <summary>Route C: corpus-statistics-driven hybrid of complete short-gram and selective trigram postings.</summary>
-public sealed class RouteCEngine : IFilenameSearchEngine
+public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
 {
     private const string Magic = "FRC002";
     private readonly object gate = new();
@@ -48,7 +48,10 @@ public sealed class RouteCEngine : IFilenameSearchEngine
 
     public void Load(string store)
     {
-        FileStream stream = new(store, FileMode.Open, FileAccess.Read, FileShare.Read); bool keepOpen = false;
+        // Allow the product's atomic replace writer to publish a new snapshot while a
+        // reader still has the previous lazy table open. The old handle remains valid
+        // until the next Load/Dispose and never exposes a partially written store.
+        FileStream stream = new(store, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete); bool keepOpen = false;
         try
         {
             using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
@@ -75,6 +78,12 @@ public sealed class RouteCEngine : IFilenameSearchEngine
         if (requiresSort) results.Sort((a, b) => a.FileId.CompareTo(b.FileId)); if (request.Limit > 0 && results.Count > request.Limit) results.RemoveRange(request.Limit, results.Count - request.Limit); stopwatch.Stop(); return new SearchResult(results, stopwatch.Elapsed.TotalMilliseconds, candidates, usedScan);
     }
 
+    /// <summary>Releases the file handle used by lazy persisted tables.</summary>
+    public void Dispose()
+    {
+        lock (gate) CloseLazyStore();
+    }
+
     public void Upsert(FileRecord record) { lock (gate) changes[record.FileId] = Prepare(record); }
     public bool Remove(int fileId) { lock (gate) { bool existed = ids.Contains(fileId) || (changes.TryGetValue(fileId, out Prepared? current) && current is not null); if (!existed) return false; changes[fileId] = null; return true; } }
 
@@ -83,6 +92,13 @@ public sealed class RouteCEngine : IFilenameSearchEngine
         Dictionary<string, Posting> index = scope == FilenameScope.Filename ? nameIndex : pathIndex; int[]? intersection = null; bool indexed = false;
         foreach (string token in tokens)
         {
+            // The path index intentionally starts at two-code-point grams. A one-code-point
+            // path token therefore has no complete posting list and must use exact scan.
+            if (scope == FilenameScope.FullPath && token.EnumerateRunes().Count() < 2)
+            {
+                usedScan = true;
+                return null;
+            }
             string indexToken = caseSensitive ? FilenameSemantics.Normalize(token, false) : token; int[]? tokenCandidates = FindTokenCandidates(index, indexToken);
             if (tokenCandidates is null) { usedScan = true; return null; }
             indexed = true; if (tokenCandidates.Length == 0) { usedScan = false; return []; }

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-filename-e2e-269c893921784476ba0c5177b4927266",
+  "count_requested": 100000,
+  "started_utc": "2026-09-05T20:59:42.1397888Z",
+  "generation_seconds": 80.2410675,
+  "initial_entries": 104001,
+  "ready_private_bytes": 707272704,
+  "first_batch_ms": 13.2821,
+  "first_batch_count": 100,
+  "create_ms": 112.5095,
+  "delete_ms": 69.6921,
+  "rename_ms": 127.5916,
+  "move_ms": 77.9702,
+  "idle_private_bytes": 622755840,
+  "restart_catchup": true,
+  "corrupt_store_recovery": true,
+  "checks": 5,
+  "pass": true,
+  "finished_utc": "2026-09-05T21:02:19.7364549Z"
+}
