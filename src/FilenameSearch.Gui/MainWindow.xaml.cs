@@ -101,7 +101,7 @@ public partial class MainWindow : Window
         if (current is null) return;
         var request = new SearchRequest(FileQuery.Text,
             Scope.SelectedIndex == 1 ? SearchScope.FullPath : SearchScope.Filename,
-            CaseSensitive.IsChecked == true, 25, version);
+            CaseSensitive.IsChecked == true, 10, version);
         Summary.Text = "検索中…";
         try
         {

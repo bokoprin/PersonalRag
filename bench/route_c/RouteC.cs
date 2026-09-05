@@ -146,6 +146,8 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
             for (int i = 0; i < records.Length; i++) _ = namesFolded[i];
             foreach (Posting posting in nameIndex.Values) _ = posting.Data;
         }
+        // Compile and exercise the common scan-backed path before the first user query.
+        _ = Search(new FilenameQuery("*", FilenameScope.Filename, Limit: 1));
     }
 
     /// <summary>Releases the file handle used by lazy persisted tables.</summary>

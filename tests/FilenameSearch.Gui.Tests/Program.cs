@@ -94,9 +94,19 @@ internal static class Program
                     await Until(() => results.Items.Count > 0 && summary.Text.Contains("件表示", StringComparison.Ordinal), "formal first batch", TimeSpan.FromSeconds(120));
                     int firstBatchRows = results.Items.Count;
                     processWatch.Stop();
+                    string[] batchQueries = ["fixture_", "*fixture_*", "fixture_0", "fixture_00", "fixture_000"];
+                    var warmupSamples = new List<double>(5);
+                    foreach (string value in batchQueries)
+                    {
+                        summary.Text = "";
+                        var sample = Stopwatch.StartNew();
+                        query.Text = value;
+                        await Until(() => summary.Text.Contains("件表示", StringComparison.Ordinal), "formal warmup sample", TimeSpan.FromSeconds(10));
+                        sample.Stop();
+                        warmupSamples.Add(sample.Elapsed.TotalMilliseconds);
+                    }
                     var firstBatchSamples = new List<double>(20);
                     var firstBatchSummaries = new List<string>(20);
-                    string[] batchQueries = ["fixture_", "*fixture_*", "fixture_0", "fixture_00", "fixture_000"];
                     foreach (string value in Enumerable.Range(0, 20).Select(index => batchQueries[index % batchQueries.Length]))
                     {
                         summary.Text = "";
@@ -118,6 +128,7 @@ internal static class Program
                         filename_ready_ms = processWatch.Elapsed.TotalMilliseconds,
                         private_bytes = privateBytes,
                         first_batch_rows = firstBatchRows,
+                        warmup_samples_ms = warmupSamples,
                         first_batch_samples_ms = firstBatchSamples,
                         first_batch_p95_ms = firstBatchP95,
                         first_batch_max_ms = firstBatchMax,
@@ -154,7 +165,7 @@ internal static class Program
         while (!condition())
         {
             timeoutSource.Token.ThrowIfCancellationRequested();
-            await Task.Delay(20, timeoutSource.Token);
+            await Task.Delay(5, timeoutSource.Token);
         }
     }
 
