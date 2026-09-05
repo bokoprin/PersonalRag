@@ -61,13 +61,13 @@ public static class RunnerApp
         Process process = Process.GetCurrentProcess(); FileRecord[] updateSources = SelectUpdateSources(corpus.Records); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         Stopwatch buildWatch = Stopwatch.StartNew(); long buildPrivate; double persistSeconds; string storePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"route-{route.ToUpperInvariant()}.store");
         {
-            IFilenameSearchEngine built = CreateEngine(route); built.Build(corpus.Records); buildWatch.Stop(); buildPrivate = process.PrivateMemorySize64;
+            IFilenameSearchEngine built = CreateEngine(route); built.Build(corpus.Records); buildWatch.Stop(); process.Refresh(); buildPrivate = process.PrivateMemorySize64;
             Stopwatch saveWatch = Stopwatch.StartNew(); built.Save(storePath); saveWatch.Stop(); persistSeconds = saveWatch.Elapsed.TotalSeconds;
         }
         corpus = null!;
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         long persistentBytes = new FileInfo(storePath).Length;
-        IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); long readyPrivate = process.PrivateMemorySize64;
+        IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); process.Refresh(); long readyPrivate = process.PrivateMemorySize64;
         var oracleById = oracle.Results.ToDictionary(r => r.Id, StringComparer.Ordinal); var measurements = querySet.Queries.ToDictionary(q => q.Id, _ => new List<double>(), StringComparer.Ordinal); var counts = querySet.Queries.ToDictionary(q => q.Id, _ => 0, StringComparer.Ordinal); int fp = 0, fn = 0; bool correctness = true; string previous = "";
         int totalRounds = Math.Max(3, rounds);
         bool noGcRegion = false;

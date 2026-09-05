@@ -5,14 +5,14 @@ using FilenameSearch.Core;
 
 namespace FilenameSearch.RouteB;
 
-/// <summary>Route B: folded filename/path trigram postings with scan fallback for short queries.</summary>
+/// <summary>Route B: compact folded trigram postings with scan fallback for short queries.</summary>
 public sealed class RouteBEngine : IFilenameSearchEngine
 {
-    private const string Magic = "FRB001";
+    private const string Magic = "FRB002";
     private readonly object gate = new();
     private FileRecord[] records = [];
-    private string[] namesSensitive = [], pathsSensitive = [], namesFolded = [], pathsFolded = [];
-    private Dictionary<string, int[]> namePostings = new(StringComparer.Ordinal), pathPostings = new(StringComparer.Ordinal);
+    private string[] namesFolded = [], pathsFolded = [];
+    private Dictionary<string, Posting> namePostings = new(StringComparer.Ordinal), pathPostings = new(StringComparer.Ordinal);
     private Dictionary<int, Prepared?> changes = [];
     private HashSet<int> ids = [];
 
@@ -21,16 +21,14 @@ public sealed class RouteBEngine : IFilenameSearchEngine
 
     public void Build(IReadOnlyList<FileRecord> source)
     {
-        FileRecord[] next = source.OrderBy(r => r.FileId).ToArray(); ValidateIds(next);
-        string[] nextNameSensitive = next.Select(r => r.Name.Normalize(NormalizationForm.FormC)).ToArray();
-        string[] nextPathSensitive = next.Select(r => r.FullPath.Normalize(NormalizationForm.FormC)).ToArray();
+        FileRecord[] next = source.OrderBy(r => r.FileId).Select(Canonicalize).ToArray(); ValidateIds(next);
         string[] nextNameFolded = next.Select(r => FilenameSemantics.Normalize(r.Name, false)).ToArray();
         string[] nextPathFolded = next.Select(r => FilenameSemantics.Normalize(r.FullPath, false)).ToArray();
-        Dictionary<string, int[]> nextNamePostings = BuildPostings(nextNameFolded);
-        Dictionary<string, int[]> nextPathPostings = BuildPostings(nextPathFolded);
+        Dictionary<string, Posting> nextNamePostings = BuildPostings(nextNameFolded);
+        Dictionary<string, Posting> nextPathPostings = BuildPostings(nextPathFolded);
         lock (gate)
         {
-            records = next; namesSensitive = nextNameSensitive; pathsSensitive = nextPathSensitive; namesFolded = nextNameFolded; pathsFolded = nextPathFolded;
+            records = next; namesFolded = nextNameFolded; pathsFolded = nextPathFolded;
             namePostings = nextNamePostings; pathPostings = nextPathPostings; ids = next.Select(r => r.FileId).ToHashSet(); changes = [];
         }
     }
@@ -38,16 +36,16 @@ public sealed class RouteBEngine : IFilenameSearchEngine
     public void Save(string store)
     {
         string fullPath = Path.GetFullPath(store); Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        FileRecord[] current; string[] ns, ps, nf, pf; Dictionary<string, int[]> ni, pi;
+        FileRecord[] current; string[] nf, pf; Dictionary<string, Posting> ni, pi;
         lock (gate)
         {
-            current = SnapshotRecords(); ns = current.Select(r => r.Name.Normalize(NormalizationForm.FormC)).ToArray(); ps = current.Select(r => r.FullPath.Normalize(NormalizationForm.FormC)).ToArray();
-            nf = current.Select(r => FilenameSemantics.Normalize(r.Name, false)).ToArray(); pf = current.Select(r => FilenameSemantics.Normalize(r.FullPath, false)).ToArray(); ni = BuildPostings(nf); pi = BuildPostings(pf);
+            current = SnapshotRecords(); nf = current.Select(r => FilenameSemantics.Normalize(r.Name, false)).ToArray();
+            pf = current.Select(r => FilenameSemantics.Normalize(r.FullPath, false)).ToArray(); ni = BuildPostings(nf); pi = BuildPostings(pf);
         }
         using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.Read);
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
         writer.Write(Magic); writer.Write(1); writer.Write(current.Length); foreach (FileRecord record in current) WriteRecord(writer, record);
-        WriteStrings(writer, ns); WriteStrings(writer, ps); WriteStrings(writer, nf); WriteStrings(writer, pf); WriteIndex(writer, ni); WriteIndex(writer, pi);
+        WriteStrings(writer, nf); WriteStrings(writer, pf); WriteIndex(writer, ni); WriteIndex(writer, pi);
     }
 
     public void Load(string store)
@@ -56,11 +54,10 @@ public sealed class RouteBEngine : IFilenameSearchEngine
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
         if (reader.ReadString() != Magic || reader.ReadInt32() != 1) throw new InvalidDataException("Route B store header mismatch");
         int count = reader.ReadInt32(); if (count < 0 || count > 10_000_000) throw new InvalidDataException("Route B store count invalid");
-        var next = new FileRecord[count]; for (int i = 0; i < count; i++) next[i] = ReadRecord(reader);
-        string[] ns = ReadStrings(reader, count), ps = ReadStrings(reader, count), nf = ReadStrings(reader, count), pf = ReadStrings(reader, count);
-        Dictionary<string, int[]> ni = ReadIndex(reader), pi = ReadIndex(reader);
+        var next = new FileRecord[count]; for (int i = 0; i < count; i++) next[i] = Canonicalize(ReadRecord(reader));
+        string[] nf = ReadStrings(reader, count), pf = ReadStrings(reader, count); Dictionary<string, Posting> ni = ReadIndex(reader), pi = ReadIndex(reader);
         if (stream.Position != stream.Length) throw new InvalidDataException("Route B store has trailing bytes"); ValidateIds(next);
-        lock (gate) { records = next; namesSensitive = ns; pathsSensitive = ps; namesFolded = nf; pathsFolded = pf; namePostings = ni; pathPostings = pi; ids = next.Select(r => r.FileId).ToHashSet(); changes = []; }
+        lock (gate) { records = next; namesFolded = nf; pathsFolded = pf; namePostings = ni; pathPostings = pi; ids = next.Select(r => r.FileId).ToHashSet(); changes = []; }
     }
 
     public SearchResult Search(FilenameQuery request)
@@ -80,9 +77,9 @@ public sealed class RouteBEngine : IFilenameSearchEngine
                 candidates = candidateIndexes?.Length ?? records.Length;
                 if (candidateIndexes is null)
                 {
-                    for (int index = 0; index < records.Length; index++) if (Matches(new Prepared(records[index], namesSensitive[index], pathsSensitive[index], namesFolded[index], pathsFolded[index]), request.Scope, request.CaseSensitive, tokens)) results.Add(records[index]);
+                    for (int index = 0; index < records.Length; index++) if (Matches(new Prepared(records[index], namesFolded[index], pathsFolded[index]), request.Scope, request.CaseSensitive, tokens)) results.Add(records[index]);
                 }
-                else foreach (int index in candidateIndexes) if (Matches(new Prepared(records[index], namesSensitive[index], pathsSensitive[index], namesFolded[index], pathsFolded[index]), request.Scope, request.CaseSensitive, tokens)) results.Add(records[index]);
+                else foreach (int index in candidateIndexes) if (Matches(new Prepared(records[index], namesFolded[index], pathsFolded[index]), request.Scope, request.CaseSensitive, tokens)) results.Add(records[index]);
             }
         }
         if (requiresSort) results.Sort((a, b) => a.FileId.CompareTo(b.FileId));
@@ -96,22 +93,24 @@ public sealed class RouteBEngine : IFilenameSearchEngine
     private int[]? CandidateIndexes(string[] tokens, FilenameScope scope, bool caseSensitive, out bool usedScan)
     {
         if (caseSensitive) { usedScan = true; return null; }
-        Dictionary<string, int[]> index = scope == FilenameScope.Filename ? namePostings : pathPostings;
+        Dictionary<string, Posting> index = scope == FilenameScope.Filename ? namePostings : pathPostings;
         int[]? intersection = null; bool indexed = false;
         foreach (string token in tokens)
         {
             string[] trigrams = (token.IndexOfAny(['*', '?']) >= 0 ? ExtractPatternTrigrams(token) : ExtractTrigrams(token)).Distinct(StringComparer.Ordinal).ToArray();
             if (trigrams.Length == 0) continue;
             indexed = true;
-            int[]? tokenCandidates = null;
+            var postings = new List<Posting>(trigrams.Length);
             foreach (string trigram in trigrams)
             {
-                if (!index.TryGetValue(trigram, out int[]? posting)) { usedScan = false; return []; }
-                tokenCandidates = tokenCandidates is null ? posting : Intersect(tokenCandidates, posting);
-                if (tokenCandidates.Length == 0) { usedScan = false; return []; }
+                if (!index.TryGetValue(trigram, out Posting posting)) { usedScan = false; return []; }
+                postings.Add(posting);
             }
-            int[] tokenSet = tokenCandidates ?? [];
-            intersection = intersection is null ? tokenSet : Intersect(intersection, tokenSet);
+            postings.Sort((left, right) => left.Count.CompareTo(right.Count));
+            int[] tokenCandidates = postings[0].ToArray();
+            for (int i = 1; i < postings.Count && tokenCandidates.Length > 0; i++) tokenCandidates = Intersect(tokenCandidates, postings[i].ToArray());
+            if (tokenCandidates.Length == 0) { usedScan = false; return []; }
+            intersection = intersection is null ? tokenCandidates : Intersect(intersection, tokenCandidates);
             if (intersection.Length == 0) { usedScan = false; return []; }
         }
         if (!indexed) { usedScan = true; return null; }
@@ -120,7 +119,7 @@ public sealed class RouteBEngine : IFilenameSearchEngine
 
     private static bool Matches(Prepared prepared, FilenameScope scope, bool caseSensitive, string[] tokens)
     {
-        ReadOnlySpan<char> target = (caseSensitive ? (scope == FilenameScope.Filename ? prepared.NameSensitive : prepared.PathSensitive) : (scope == FilenameScope.Filename ? prepared.NameFolded : prepared.PathFolded)).AsSpan();
+        ReadOnlySpan<char> target = (caseSensitive ? (scope == FilenameScope.Filename ? prepared.Record.Name : prepared.Record.FullPath) : (scope == FilenameScope.Filename ? prepared.NameFolded : prepared.PathFolded)).AsSpan();
         foreach (string token in tokens) { if (token.IndexOfAny(['*', '?']) >= 0 ? !Glob(target, token.AsSpan()) : !target.Contains(token.AsSpan(), StringComparison.Ordinal)) return false; }
         return true;
     }
@@ -143,11 +142,20 @@ public sealed class RouteBEngine : IFilenameSearchEngine
         static IEnumerable<string> Trigrams(List<Rune> values) { for (int i = 0; i + 2 < values.Count; i++) yield return string.Concat(values[i].ToString(), values[i + 1].ToString(), values[i + 2].ToString()); }
     }
 
-    private static Dictionary<string, int[]> BuildPostings(IReadOnlyList<string> values)
+    private static Dictionary<string, Posting> BuildPostings(IReadOnlyList<string> values)
     {
         var mutable = new Dictionary<string, List<int>>(StringComparer.Ordinal);
         for (int i = 0; i < values.Count; i++) foreach (string trigram in ExtractTrigrams(values[i])) { if (!mutable.TryGetValue(trigram, out List<int>? list)) mutable[trigram] = list = []; if (list.Count == 0 || list[^1] != i) list.Add(i); }
-        return mutable.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray(), StringComparer.Ordinal);
+        var result = new Dictionary<string, Posting>(mutable.Count, StringComparer.Ordinal);
+        foreach ((string key, List<int> valuesForKey) in mutable) result.Add(key, new Posting(valuesForKey.Count, EncodePosting(valuesForKey)));
+        return result;
+    }
+
+    private static byte[] EncodePosting(IReadOnlyList<int> values)
+    {
+        var buffer = new ArrayBufferWriter<byte>(); int previous = 0;
+        foreach (int value in values) { WriteVarUInt(buffer, checked((uint)(value - previous))); previous = value; }
+        return buffer.WrittenMemory.ToArray();
     }
 
     private static int[] Intersect(int[] left, int[] right)
@@ -157,9 +165,10 @@ public sealed class RouteBEngine : IFilenameSearchEngine
         return result[..count];
     }
 
-    private bool TryCurrent(int index, out Prepared prepared) { int id = records[index].FileId; if (changes.TryGetValue(id, out Prepared? change)) { if (change.HasValue) { prepared = change.Value; return true; } prepared = default; return false; } prepared = new Prepared(records[index], namesSensitive[index], pathsSensitive[index], namesFolded[index], pathsFolded[index]); return true; }
+    private bool TryCurrent(int index, out Prepared prepared) { int id = records[index].FileId; if (changes.TryGetValue(id, out Prepared? change)) { if (change.HasValue) { prepared = change.Value; return true; } prepared = default; return false; } prepared = new Prepared(records[index], namesFolded[index], pathsFolded[index]); return true; }
     private FileRecord[] SnapshotRecords() { var result = new List<FileRecord>(records.Length + changes.Count); for (int i = 0; i < records.Length; i++) if (TryCurrent(i, out Prepared current)) result.Add(current.Record); foreach ((int id, Prepared? change) in changes) if (!ids.Contains(id) && change is not null) result.Add(change.Value.Record); result.Sort((a, b) => a.FileId.CompareTo(b.FileId)); return result.ToArray(); }
-    private static Prepared Prepare(FileRecord record) => new(record, record.Name.Normalize(NormalizationForm.FormC), record.FullPath.Normalize(NormalizationForm.FormC), FilenameSemantics.Normalize(record.Name, false), FilenameSemantics.Normalize(record.FullPath, false));
+    private static Prepared Prepare(FileRecord record) { FileRecord canonical = Canonicalize(record); return new(canonical, FilenameSemantics.Normalize(canonical.Name, false), FilenameSemantics.Normalize(canonical.FullPath, false)); }
+    private static FileRecord Canonicalize(FileRecord record) => record with { Name = record.Name.Normalize(NormalizationForm.FormC), FullPath = record.FullPath.Normalize(NormalizationForm.FormC) };
 
     private static bool Glob(ReadOnlySpan<char> text, ReadOnlySpan<char> pattern)
     {
@@ -184,9 +193,21 @@ public sealed class RouteBEngine : IFilenameSearchEngine
     private static FileRecord ReadRecord(BinaryReader reader) { int id = reader.ReadInt32(), parent = reader.ReadInt32(); bool hasParent = reader.ReadBoolean(); ulong size = reader.ReadUInt64(); long modified = reader.ReadInt64(); byte flags = reader.ReadByte(); return new FileRecord(id, hasParent ? parent : null, reader.ReadString(), reader.ReadString(), size, modified, flags); }
     private static void WriteStrings(BinaryWriter writer, IReadOnlyList<string> values) { writer.Write(values.Count); foreach (string value in values) writer.Write(value); }
     private static string[] ReadStrings(BinaryReader reader, int expected) { int count = reader.ReadInt32(); if (count != expected) throw new InvalidDataException("Route B string count mismatch"); var values = new string[count]; for (int i = 0; i < count; i++) values[i] = reader.ReadString(); return values; }
-    private static void WriteIndex(BinaryWriter writer, IReadOnlyDictionary<string, int[]> index) { writer.Write(index.Count); foreach ((string key, int[] posting) in index.OrderBy(p => p.Key, StringComparer.Ordinal)) { writer.Write(key); writer.Write(posting.Length); int previous = 0; foreach (int value in posting) { WriteVarUInt(writer, checked((uint)(value - previous))); previous = value; } } }
-    private static Dictionary<string, int[]> ReadIndex(BinaryReader reader) { int count = reader.ReadInt32(); if (count < 0 || count > 10_000_000) throw new InvalidDataException("Route B index count invalid"); var index = new Dictionary<string, int[]>(count, StringComparer.Ordinal); for (int i = 0; i < count; i++) { string key = reader.ReadString(); int n = reader.ReadInt32(); var posting = new int[n]; int previous = 0; for (int j = 0; j < n; j++) { previous = checked(previous + (int)ReadVarUInt(reader)); posting[j] = previous; } index.Add(key, posting); } return index; }
-    private static void WriteVarUInt(BinaryWriter writer, uint value) { while (value >= 0x80) { writer.Write((byte)((value & 0x7F) | 0x80)); value >>= 7; } writer.Write((byte)value); }
-    private static uint ReadVarUInt(BinaryReader reader) { uint value = 0; int shift = 0; while (true) { byte b = reader.ReadByte(); value |= (uint)(b & 0x7F) << shift; if ((b & 0x80) == 0) return value; shift += 7; if (shift > 28) throw new InvalidDataException("Route B varint is too long"); } }
-    private readonly record struct Prepared(FileRecord Record, string NameSensitive, string PathSensitive, string NameFolded, string PathFolded);
+    private static void WriteIndex(BinaryWriter writer, IReadOnlyDictionary<string, Posting> index) { writer.Write(index.Count); foreach ((string key, Posting posting) in index.OrderBy(p => p.Key, StringComparer.Ordinal)) { writer.Write(key); writer.Write(posting.Count); writer.Write(posting.Data.Length); writer.Write(posting.Data); } }
+    private static Dictionary<string, Posting> ReadIndex(BinaryReader reader) { int count = reader.ReadInt32(); if (count < 0 || count > 10_000_000) throw new InvalidDataException("Route B index count invalid"); var index = new Dictionary<string, Posting>(count, StringComparer.Ordinal); for (int i = 0; i < count; i++) { string key = reader.ReadString(); int n = reader.ReadInt32(), byteCount = reader.ReadInt32(); if (n < 0 || byteCount < 0 || byteCount > 1_000_000_000) throw new InvalidDataException("Route B posting is invalid"); byte[] data = reader.ReadBytes(byteCount); if (data.Length != byteCount) throw new EndOfStreamException(); index.Add(key, new Posting(n, data)); } return index; }
+    private static void WriteVarUInt(ArrayBufferWriter<byte> buffer, uint value) { while (value >= 0x80) { Span<byte> span = buffer.GetSpan(1); span[0] = (byte)((value & 0x7F) | 0x80); buffer.Advance(1); value >>= 7; } Span<byte> last = buffer.GetSpan(1); last[0] = (byte)value; buffer.Advance(1); }
+    private static uint ReadVarUInt(ReadOnlySpan<byte> data, ref int offset) { uint value = 0; int shift = 0; while (offset < data.Length) { byte b = data[offset++]; value |= (uint)(b & 0x7F) << shift; if ((b & 0x80) == 0) return value; shift += 7; if (shift > 28) throw new InvalidDataException("Route B varint is too long"); } throw new EndOfStreamException(); }
+
+    private readonly record struct Posting(int Count, byte[] Data)
+    {
+        public int[] ToArray()
+        {
+            var values = new int[Count]; int previous = 0, offset = 0;
+            for (int i = 0; i < values.Length; i++) { previous = checked(previous + (int)ReadVarUInt(Data, ref offset)); values[i] = previous; }
+            if (offset != Data.Length) throw new InvalidDataException("Route B posting has trailing bytes");
+            return values;
+        }
+    }
+
+    private readonly record struct Prepared(FileRecord Record, string NameFolded, string PathFolded);
 }
