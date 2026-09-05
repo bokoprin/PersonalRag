@@ -95,12 +95,20 @@ public sealed class RouteCEngine : IFilenameSearchEngine
     {
         var mutable = new Dictionary<string, List<int>>(StringComparer.Ordinal);
         for (int i = 0; i < values.Count; i++) foreach (string key in ExtractTrigrams(values[i])) { if (!mutable.TryGetValue(key, out List<int>? list)) mutable[key] = list = []; if (list.Count == 0 || list[^1] != i) list.Add(i); }
+        int bitmapCap = BitmapCap(universe);
+        HashSet<string> bitmapKeys = mutable.Where(pair => pair.Value.Count > rare && pair.Value.Count <= medium)
+            .OrderByDescending(pair => pair.Value.Count).Take(bitmapCap).Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal);
         var result = new Dictionary<string, Posting>(StringComparer.Ordinal);
-        foreach ((string key, List<int> valuesForKey) in mutable) { if (valuesForKey.Count <= rare) result.Add(key, Posting.List(valuesForKey.ToArray())); else if (valuesForKey.Count <= medium) result.Add(key, Posting.Bitmap(valuesForKey, universe)); }
+        foreach ((string key, List<int> valuesForKey) in mutable)
+        {
+            if (valuesForKey.Count <= rare) result.Add(key, Posting.List(valuesForKey.ToArray()));
+            else if (bitmapKeys.Contains(key)) result.Add(key, Posting.Bitmap(valuesForKey, universe));
+        }
         return result;
     }
 
     private static (int rare, int medium) Thresholds(int count) { int rare = Math.Max(32, count / 1_000); int medium = Math.Max(rare * 4, count / 8); return (rare, medium); }
+    private static int BitmapCap(int universe) => Math.Max(64, Math.Min(1_024, universe / 1_000));
     private static int[] Intersect(int[] left, int[] right) { int[] result = new int[Math.Min(left.Length, right.Length)]; int i = 0, j = 0, count = 0; while (i < left.Length && j < right.Length) { if (left[i] == right[j]) { result[count++] = left[i]; i++; j++; } else if (left[i] < right[j]) i++; else j++; } return result[..count]; }
     private static IEnumerable<string> ExtractTrigrams(string value) { Rune[] runes = value.EnumerateRunes().ToArray(); for (int i = 0; i + 2 < runes.Length; i++) yield return string.Concat(runes[i].ToString(), runes[i + 1].ToString(), runes[i + 2].ToString()); }
     private static IEnumerable<string> ExtractPatternTrigrams(string value) { var runes = new List<Rune>(); foreach (Rune rune in value.EnumerateRunes()) { if (rune.Value is '*' or '?') { foreach (string key in Trigrams(runes)) yield return key; runes.Clear(); } else runes.Add(rune); } foreach (string key in Trigrams(runes)) yield return key; static IEnumerable<string> Trigrams(List<Rune> values) { for (int i = 0; i + 2 < values.Count; i++) yield return string.Concat(values[i].ToString(), values[i + 1].ToString(), values[i + 2].ToString()); } }
