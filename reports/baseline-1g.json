@@ -1,0 +1,1254 @@
+{
+  "baseline": {
+    "utc": "2026-09-05T05:56:18.3274208Z",
+    "os": "Microsoft Windows 10.0.26200",
+    "framework": ".NET 8.0.30",
+    "processor": "Intel64 Family 6 Model 197 Stepping 2, GenuineIntel",
+    "logicalProcessors": 16,
+    "files": 1024,
+    "sourceBytes": 1073741824,
+    "persistentBytes": 3597882,
+    "ratio": 0.003350788727402687,
+    "buildSeconds": 1.4873856,
+    "restartSeconds": 0.0417523,
+    "buildPeakPrivateBytes": 97808384,
+    "unsearchable": 0,
+    "binarySha256": "1F698F7BCB6A56D8816835D41B919F36B7B78AF623EA32B9A1FAB35C5D8E3FD3"
+  },
+  "measures": [
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "*.txt",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.8887,
+      "p95": 2.2283,
+      "p99": 2.2283,
+      "max": 2.2283,
+      "samplesMs": [
+        1.7944,
+        1.8887,
+        2.2283
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "\u65E5\u672C",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1171.0154,
+      "p95": 1214.085,
+      "p99": 1214.085,
+      "max": 1214.085,
+      "samplesMs": [
+        1166.0615,
+        1171.0154,
+        1214.085
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "configuration",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.9085,
+      "p95": 6.4134,
+      "p99": 6.4134,
+      "max": 6.4134,
+      "samplesMs": [
+        5.1743,
+        5.9085,
+        6.4134
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": ".txt",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.1019,
+      "p95": 1.243,
+      "p99": 1.243,
+      "max": 1.243,
+      "samplesMs": [
+        1.0824,
+        1.1019,
+        1.243
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "\u65E5\u672C\u8A9E",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 17.7941,
+      "p95": 18.7074,
+      "p99": 18.7074,
+      "max": 18.7074,
+      "samplesMs": [
+        16.7498,
+        17.7941,
+        18.7074
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "\u65E5\u672C\u8A9E",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0514,
+      "p95": 0.1748,
+      "p99": 0.1748,
+      "max": 0.1748,
+      "samplesMs": [
+        0.0495,
+        0.0514,
+        0.1748
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "PersonalRag",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.889,
+      "p95": 6.488,
+      "p99": 6.488,
+      "max": 6.488,
+      "samplesMs": [
+        5.2535,
+        5.889,
+        6.488
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "source log",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0423,
+      "p95": 0.0436,
+      "p99": 0.0436,
+      "max": 0.0436,
+      "samplesMs": [
+        0.0418,
+        0.0423,
+        0.0436
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "PersonalRag",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.9573,
+      "p95": 5.9685,
+      "p99": 5.9685,
+      "max": 5.9685,
+      "samplesMs": [
+        5.8698,
+        5.9573,
+        5.9685
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "er",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.5937,
+      "p95": 6.0054,
+      "p99": 6.0054,
+      "max": 6.0054,
+      "samplesMs": [
+        5.2567,
+        5.5937,
+        6.0054
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "^ERROR.*timeout",
+        "Scope": 0,
+        "Mode": 1,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 749.3092,
+      "p95": 751.2252,
+      "p99": 751.2252,
+      "max": 751.2252,
+      "samplesMs": [
+        731.9884,
+        749.3092,
+        751.2252
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "absent_ASTRA_9f23c751",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0397,
+      "p95": 0.0528,
+      "p99": 0.0528,
+      "max": 0.0528,
+      "samplesMs": [
+        0.0392,
+        0.0397,
+        0.0528
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "in",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 6.1485,
+      "p95": 6.1508,
+      "p99": 6.1508,
+      "max": 6.1508,
+      "samplesMs": [
+        5.9046,
+        6.1485,
+        6.1508
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "^ERROR.*timeout",
+        "Scope": 0,
+        "Mode": 1,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 786.6892,
+      "p95": 1188.1713,
+      "p99": 1188.1713,
+      "max": 1188.1713,
+      "samplesMs": [
+        767.3032,
+        786.6892,
+        1188.1713
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "00",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 6.9523,
+      "p95": 8.0508,
+      "p99": 8.0508,
+      "max": 8.0508,
+      "samplesMs": [
+        5.9138,
+        6.9523,
+        8.0508
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "\u65E5\u672C\u8A9E",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.2713,
+      "p95": 1.3699,
+      "p99": 1.3699,
+      "max": 1.3699,
+      "samplesMs": [
+        1.0991,
+        1.2713,
+        1.3699
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "source file",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.169,
+      "p95": 1.2673,
+      "p99": 1.2673,
+      "max": 1.2673,
+      "samplesMs": [
+        1.1326,
+        1.169,
+        1.2673
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "absent_ASTRA_9f23c751",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0427,
+      "p95": 0.0699,
+      "p99": 0.0699,
+      "max": 0.0699,
+      "samplesMs": [
+        0.0426,
+        0.0427,
+        0.0699
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "absent_ASTRA_9f23c751",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 16.9472,
+      "p95": 18.7108,
+      "p99": 18.7108,
+      "max": 18.7108,
+      "samplesMs": [
+        13.8314,
+        16.9472,
+        18.7108
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "absent_ASTRA_9f23c751",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0378,
+      "p95": 0.0442,
+      "p99": 0.0442,
+      "max": 0.0442,
+      "samplesMs": [
+        0.0353,
+        0.0378,
+        0.0442
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "\u65E5\u672C\u8A9E",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.4881,
+      "p95": 1.5025,
+      "p99": 1.5025,
+      "max": 1.5025,
+      "samplesMs": [
+        1.302,
+        1.4881,
+        1.5025
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "main",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0463,
+      "p95": 0.0721,
+      "p99": 0.0721,
+      "max": 0.0721,
+      "samplesMs": [
+        0.0432,
+        0.0463,
+        0.0721
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "source",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.2515,
+      "p95": 1.2792,
+      "p99": 1.2792,
+      "max": 1.2792,
+      "samplesMs": [
+        1.1884,
+        1.2515,
+        1.2792
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "config*value",
+        "Scope": 0,
+        "Mode": 2,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 6.5123,
+      "p95": 6.7624,
+      "p99": 6.7624,
+      "max": 6.7624,
+      "samplesMs": [
+        5.4988,
+        6.5123,
+        6.7624
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": ".txt",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.2093,
+      "p95": 1.3141,
+      "p99": 1.3141,
+      "max": 1.3141,
+      "samplesMs": [
+        1.1401,
+        1.2093,
+        1.3141
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "request_id",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 9.2599,
+      "p95": 9.7889,
+      "p99": 9.7889,
+      "max": 9.7889,
+      "samplesMs": [
+        8.8498,
+        9.2599,
+        9.7889
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "config*value",
+        "Scope": 0,
+        "Mode": 2,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 8.0084,
+      "p95": 9.6244,
+      "p99": 9.6244,
+      "max": 9.6244,
+      "samplesMs": [
+        7.0899,
+        8.0084,
+        9.6244
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "00",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 6.3179,
+      "p95": 6.3419,
+      "p99": 6.3419,
+      "max": 6.3419,
+      "samplesMs": [
+        5.9384,
+        6.3179,
+        6.3419
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.1073,
+      "p95": 1.2179,
+      "p99": 1.2179,
+      "max": 1.2179,
+      "samplesMs": [
+        1.0906,
+        1.1073,
+        1.2179
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "er",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.9868,
+      "p95": 6.0704,
+      "p99": 6.0704,
+      "max": 6.0704,
+      "samplesMs": [
+        5.8184,
+        5.9868,
+        6.0704
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "\u5B58\u5728\u3057\u306A\u3044*\u7D42\u7AEF",
+        "Scope": 0,
+        "Mode": 2,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 1755.8544,
+      "p95": 1770.26,
+      "p99": 1770.26,
+      "max": 1770.26,
+      "samplesMs": [
+        1713.0966,
+        1755.8544,
+        1770.26
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "configuration",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.7045,
+      "p95": 6.9818,
+      "p99": 6.9818,
+      "max": 6.9818,
+      "samplesMs": [
+        5.5719,
+        5.7045,
+        6.9818
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "ERROR",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 11.27,
+      "p95": 11.3711,
+      "p99": 11.3711,
+      "max": 11.3711,
+      "samplesMs": [
+        10.309,
+        11.27,
+        11.3711
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "absent_ASTRA_9f23c751",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0424,
+      "p95": 0.0438,
+      "p99": 0.0438,
+      "max": 0.0438,
+      "samplesMs": [
+        0.0388,
+        0.0424,
+        0.0438
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "absent_ASTRA_9f23c751",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 12.0425,
+      "p95": 13.1776,
+      "p99": 13.1776,
+      "max": 13.1776,
+      "samplesMs": [
+        10.9381,
+        12.0425,
+        13.1776
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "\u65E5\u672C\u8A9E",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.18,
+      "p95": 0.2385,
+      "p99": 0.2385,
+      "max": 0.2385,
+      "samplesMs": [
+        0.179,
+        0.18,
+        0.2385
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "file_000000?",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.1041,
+      "p95": 0.7454,
+      "p99": 0.7454,
+      "max": 0.7454,
+      "samplesMs": [
+        0.084,
+        0.1041,
+        0.7454
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "\u5B58\u5728\u3057\u306A\u3044*\u7D42\u7AEF",
+        "Scope": 0,
+        "Mode": 2,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 1776.3391,
+      "p95": 1799.876,
+      "p99": 1799.876,
+      "max": 1799.876,
+      "samplesMs": [
+        1720.8662,
+        1776.3391,
+        1799.876
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "*.txt",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.4994,
+      "p95": 2.3788,
+      "p99": 2.3788,
+      "max": 2.3788,
+      "samplesMs": [
+        1.4797,
+        1.4994,
+        2.3788
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "main",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0788,
+      "p95": 0.0827,
+      "p99": 0.0827,
+      "max": 0.0827,
+      "samplesMs": [
+        0.0686,
+        0.0788,
+        0.0827
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "source log",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.0387,
+      "p95": 0.041,
+      "p99": 0.041,
+      "max": 0.041,
+      "samplesMs": [
+        0.0378,
+        0.0387,
+        0.041
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "request_id",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 8.4327,
+      "p95": 8.5002,
+      "p99": 8.5002,
+      "max": 8.5002,
+      "samplesMs": [
+        8.2096,
+        8.4327,
+        8.5002
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "source",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.1184,
+      "p95": 1.1637,
+      "p99": 1.1637,
+      "max": 1.1637,
+      "samplesMs": [
+        1.1182,
+        1.1184,
+        1.1637
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "request_[0-9]\u002B",
+        "Scope": 0,
+        "Mode": 1,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1386.9509,
+      "p95": 1395.3622,
+      "p99": 1395.3622,
+      "max": 1395.3622,
+      "samplesMs": [
+        1381.6488,
+        1386.9509,
+        1395.3622
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "request_[0-9]\u002B",
+        "Scope": 0,
+        "Mode": 1,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1236.394,
+      "p95": 1243.6244,
+      "p99": 1243.6244,
+      "max": 1243.6244,
+      "samplesMs": [
+        1221.3681,
+        1236.394,
+        1243.6244
+      ]
+    },
+    {
+      "group": "path",
+      "request": {
+        "FileQuery": "source file",
+        "ContentQuery": "",
+        "Scope": 1,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.0856,
+      "p95": 1.2462,
+      "p99": 1.2462,
+      "max": 1.2462,
+      "samplesMs": [
+        1.0445,
+        1.0856,
+        1.2462
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "\u65E5\u672C",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 2277.3558,
+      "p95": 2366.7659,
+      "p99": 2366.7659,
+      "max": 2366.7659,
+      "samplesMs": [
+        2228.3333,
+        2277.3558,
+        2366.7659
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "th",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 6.1873,
+      "p95": 7.1554,
+      "p99": 7.1554,
+      "max": 7.1554,
+      "samplesMs": [
+        5.0039,
+        6.1873,
+        7.1554
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "*.json",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.5439,
+      "p95": 2.8765,
+      "p99": 2.8765,
+      "max": 2.8765,
+      "samplesMs": [
+        1.0381,
+        1.5439,
+        2.8765
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "th",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.7119,
+      "p95": 5.844,
+      "p99": 5.844,
+      "max": 5.844,
+      "samplesMs": [
+        5.1825,
+        5.7119,
+        5.844
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.076,
+      "p95": 1.1151,
+      "p99": 1.1151,
+      "max": 1.1151,
+      "samplesMs": [
+        1.0682,
+        1.076,
+        1.1151
+      ]
+    },
+    {
+      "group": "short",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "in",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 5.4437,
+      "p95": 5.697,
+      "p99": 5.697,
+      "max": 5.697,
+      "samplesMs": [
+        4.9851,
+        5.4437,
+        5.697
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "ERROR",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 12.3199,
+      "p95": 12.9531,
+      "p99": 12.9531,
+      "max": 12.9531,
+      "samplesMs": [
+        11.3222,
+        12.3199,
+        12.9531
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "*.json",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 1.0932,
+      "p95": 1.1962,
+      "p99": 1.1962,
+      "max": 1.1962,
+      "samplesMs": [
+        1.0744,
+        1.0932,
+        1.1962
+      ]
+    },
+    {
+      "group": "normal",
+      "request": {
+        "FileQuery": "",
+        "ContentQuery": "\u65E5\u672C\u8A9E",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": true
+      },
+      "repetitions": 3,
+      "returned": 100,
+      "errors": 0,
+      "p50": 17.8252,
+      "p95": 22.438,
+      "p99": 22.438,
+      "max": 22.438,
+      "samplesMs": [
+        17.0505,
+        17.8252,
+        22.438
+      ]
+    },
+    {
+      "group": "filename",
+      "request": {
+        "FileQuery": "file_000000?",
+        "ContentQuery": "",
+        "Scope": 0,
+        "Mode": 0,
+        "CaseSensitive": false
+      },
+      "repetitions": 3,
+      "returned": 0,
+      "errors": 0,
+      "p50": 0.1074,
+      "p95": 0.1253,
+      "p99": 0.1253,
+      "max": 0.1253,
+      "samplesMs": [
+        0.0994,
+        0.1074,
+        0.1253
+      ]
+    }
+  ],
+  "complete": true,
+  "peakPrivateBytes": 97808384
+}
