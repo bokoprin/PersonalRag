@@ -355,9 +355,23 @@ public sealed class FileSystemCatalog : IAsyncDisposable
     private bool CatchUpCore()
     {
         FileSystemEntry[] discovered = Discover();
+        Dictionary<string, FilenameRecord> prior;
+        lock (gate) prior = new Dictionary<string, FilenameRecord>(byPath, StringComparer.OrdinalIgnoreCase);
+        var reusable = new bool[discovered.Length];
+        Parallel.For(0, discovered.Length, index =>
+        {
+            FileSystemEntry entry = discovered[index];
+            if (!prior.TryGetValue(entry.Path, out FilenameRecord? old)) return;
+            if (old.IsDirectory)
+            {
+                reusable[index] = true;
+                return;
+            }
+            try { reusable[index] = File.GetLastWriteTimeUtc(entry.Path) == old.ModifiedUtc; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        });
         lock (gate)
         {
-            var prior = new Dictionary<string, FilenameRecord>(byPath, StringComparer.OrdinalIgnoreCase);
             var discoveredPaths = discovered.Select(entry => entry.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var reserved = prior.Values.Select(record => record.FileId).ToHashSet();
             var assigned = new HashSet<int>();
@@ -367,8 +381,9 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 .ToDictionary(group => group.Key, group => new Queue<FilenameRecord>(group), EqualityComparer<FileSignature>.Default);
             var idsByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var preliminary = new List<(string Path, bool Directory, int Id, FilenameRecord Metadata)>();
-            foreach (FileSystemEntry entry in discovered)
+            for (int discoveredIndex = 0; discoveredIndex < discovered.Length; discoveredIndex++)
             {
+                FileSystemEntry entry = discovered[discoveredIndex];
                 FilenameRecord metadata;
                 int id;
                 if (prior.TryGetValue(entry.Path, out FilenameRecord? old))
@@ -377,7 +392,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                     // A restart normally has an unchanged tree. Reuse the persisted metadata
                     // after one cheap timestamp check; the previous full FileInfo.Refresh per
                     // entry made a 100k-file catch-up exceed the five-second product gate.
-                    if (old.IsDirectory || File.GetLastWriteTimeUtc(entry.Path) == old.ModifiedUtc)
+                    if (reusable[discoveredIndex])
                         metadata = old;
                     else metadata = ReadRecord(entry.Path, id);
                 }
