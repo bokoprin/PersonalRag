@@ -79,7 +79,7 @@ public partial class MainWindow : Window
             try
             {
                 if (closing || catalog is null) return;
-                SetStatus($"{catalog.Status} · {catalog.Records.Count:N0} entries");
+                SetStatus($"{catalog.Status} · {catalog.RecordCount:N0} entries");
             }
             finally { Interlocked.Exchange(ref statusUpdateQueued, 0); }
         });
@@ -112,7 +112,7 @@ public partial class MainWindow : Window
             if (version != Volatile.Read(ref searchVersion) || closing) return;
             rows.ReplaceAll(result.Records.Select(record => new ResultRow(record)));
             Summary.Text = $"{rows.Count:N0}件表示 · {result.ElapsedMs:F1} ms";
-            SetStatus($"{current.Status} · {current.Records.Count:N0} entries");
+            SetStatus($"{current.Status} · {current.RecordCount:N0} entries");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)

@@ -122,6 +122,14 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         }
     }
 
+    public int RecordCount
+    {
+        get
+        {
+            lock (gate) return byPath.Count;
+        }
+    }
+
     public FilenameSearchResult Search(SearchRequest request)
     {
         ThrowIfDisposed();
