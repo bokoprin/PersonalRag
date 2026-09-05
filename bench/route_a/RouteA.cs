@@ -71,9 +71,10 @@ public sealed class RouteAEngine : IFilenameSearchEngine
         var stopwatch = Stopwatch.StartNew();
         string[] tokens = request.Query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
             .Select(t => FilenameSemantics.Normalize(t, request.CaseSensitive)).ToArray();
-        var matches = new List<FileRecord>(); int candidates = 0;
+        var matches = new List<FileRecord>(); int candidates = 0; bool requiresSort;
         lock (gate)
         {
+            requiresSort = changes.Count > 0;
             for (int i = 0; i < records.Length; i++)
             {
                 if (!TryCurrent(i, out Prepared prepared)) continue;
@@ -87,7 +88,7 @@ public sealed class RouteAEngine : IFilenameSearchEngine
                 if (Matches(change, request.Scope, request.CaseSensitive, tokens)) matches.Add(change.Record);
             }
         }
-        matches.Sort((left, right) => left.FileId.CompareTo(right.FileId));
+        if (requiresSort) matches.Sort((left, right) => left.FileId.CompareTo(right.FileId));
         if (request.Limit > 0 && matches.Count > request.Limit) matches.RemoveRange(request.Limit, matches.Count - request.Limit);
         stopwatch.Stop();
         return new SearchResult(matches, stopwatch.Elapsed.TotalMilliseconds, candidates, true);

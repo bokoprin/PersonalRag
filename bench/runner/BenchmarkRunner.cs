@@ -58,9 +58,15 @@ public static class RunnerApp
 
     private static RouteReport RunRoute(string route, CorpusData corpus, QuerySetDocument querySet, OracleFile oracle, int rounds, string outputPath, bool official)
     {
-        IFilenameSearchEngine engine = CreateEngine(route); Process process = Process.GetCurrentProcess(); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-        Stopwatch buildWatch = Stopwatch.StartNew(); engine.Build(corpus.Records); buildWatch.Stop(); long buildPrivate = process.PrivateMemorySize64;
-        string storePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"route-{route.ToUpperInvariant()}.store"); Stopwatch saveWatch = Stopwatch.StartNew(); engine.Save(storePath); saveWatch.Stop(); long persistentBytes = new FileInfo(storePath).Length;
+        Process process = Process.GetCurrentProcess(); FileRecord[] updateSources = SelectUpdateSources(corpus.Records); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        Stopwatch buildWatch = Stopwatch.StartNew(); long buildPrivate; double persistSeconds; string storePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(outputPath))!, $"route-{route.ToUpperInvariant()}.store");
+        {
+            IFilenameSearchEngine built = CreateEngine(route); built.Build(corpus.Records); buildWatch.Stop(); buildPrivate = process.PrivateMemorySize64;
+            Stopwatch saveWatch = Stopwatch.StartNew(); built.Save(storePath); saveWatch.Stop(); persistSeconds = saveWatch.Elapsed.TotalSeconds;
+        }
+        corpus = null!;
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        long persistentBytes = new FileInfo(storePath).Length;
         IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); long readyPrivate = process.PrivateMemorySize64;
         var oracleById = oracle.Results.ToDictionary(r => r.Id, StringComparer.Ordinal); var measurements = querySet.Queries.ToDictionary(q => q.Id, _ => new List<double>(), StringComparer.Ordinal); var counts = querySet.Queries.ToDictionary(q => q.Id, _ => 0, StringComparer.Ordinal); int fp = 0, fn = 0; bool correctness = true; string previous = "";
         int totalRounds = Math.Max(3, rounds);
@@ -81,14 +87,21 @@ public static class RunnerApp
             }
         }
         finally { if (noGcRegion) { try { GC.EndNoGCRegion(); } catch (InvalidOperationException) { } } }
-        UpdateSummary update = MeasureUpdates(loaded, corpus.Records); List<double> all = measurements.Values.SelectMany(x => x).ToList(); var queryMetrics = measurements.Select(pair => { QuerySpec query = querySet.Queries.First(q => q.Id == pair.Key); return new QueryMetric(query.Id, query.Class, Percentile(pair.Value, .50), Percentile(pair.Value, .95), Percentile(pair.Value, .99), pair.Value.Count == 0 ? 0 : pair.Value.Max(), counts[pair.Key]); }).ToArray(); var classMetrics = queryMetrics.GroupBy(q => q.Class, StringComparer.Ordinal).Select(group => new ClassMetric(group.Key, Percentile(group.Select(q => q.P95Ms).ToList(), .95))).ToArray(); double worstClass = classMetrics.Length == 0 ? 0 : classMetrics.Max(c => c.P95Ms); SearchSummary search = new(Percentile(all, .50), Percentile(all, .95), Percentile(all, .99), all.Count == 0 ? 0 : all.Max(), worstClass, queryMetrics, classMetrics);
+        UpdateSummary update = MeasureUpdates(loaded, updateSources); List<double> all = measurements.Values.SelectMany(x => x).ToList(); var queryMetrics = measurements.Select(pair => { QuerySpec query = querySet.Queries.First(q => q.Id == pair.Key); return new QueryMetric(query.Id, query.Class, Percentile(pair.Value, .50), Percentile(pair.Value, .95), Percentile(pair.Value, .99), pair.Value.Count == 0 ? 0 : pair.Value.Max(), counts[pair.Key]); }).ToArray(); var classMetrics = queryMetrics.GroupBy(q => q.Class, StringComparer.Ordinal).Select(group => new ClassMetric(group.Key, Percentile(group.Select(q => q.P95Ms).ToList(), .95))).ToArray(); double worstClass = classMetrics.Length == 0 ? 0 : classMetrics.Max(c => c.P95Ms); SearchSummary search = new(Percentile(all, .50), Percentile(all, .95), Percentile(all, .99), all.Count == 0 ? 0 : all.Max(), worstClass, queryMetrics, classMetrics);
         HardGate hard = new(!correctness, buildWatch.Elapsed.TotalSeconds > 60, loadWatch.Elapsed.TotalSeconds > 1.5, persistentBytes > 1L * 1024 * 1024 * 1024, readyPrivate > 1L * 1024 * 1024 * 1024, search.P50Ms > 20, search.P95Ms > 50, search.P99Ms > 100, search.WorstClassP95Ms > 50, update.P95Ms > 10);
-        return new RouteReport(route.ToUpperInvariant(), GetGitCommit(), new Correctness(fp, fn, correctness), buildWatch.Elapsed.TotalSeconds, loadWatch.Elapsed.TotalSeconds, persistentBytes, readyPrivate, buildPrivate, saveWatch.Elapsed.TotalSeconds, search, update.P95Ms, hard.Pass ? "PASS" : "FAIL", new { official, rounds = totalRounds, warmup_rounds = Math.Min(2, totalRounds - 1), timed_rounds = Math.Max(0, totalRounds - 2), store_path = storePath, environment = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "unknown" });
+        return new RouteReport(route.ToUpperInvariant(), GetGitCommit(), new Correctness(fp, fn, correctness), buildWatch.Elapsed.TotalSeconds, loadWatch.Elapsed.TotalSeconds, persistentBytes, readyPrivate, buildPrivate, persistSeconds, search, update.P95Ms, hard.Pass ? "PASS" : "FAIL", new { official, rounds = totalRounds, warmup_rounds = Math.Min(2, totalRounds - 1), timed_rounds = Math.Max(0, totalRounds - 2), store_path = storePath, environment = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "unknown" });
     }
 
     private static UpdateSummary MeasureUpdates(IFilenameSearchEngine engine, IReadOnlyList<FileRecord> records)
     {
         var times = new List<double>(10_000); var random = new RunnerRandom(0x5550444154455F31UL); for (int i = 0; i < 10_000; i++) { FileRecord source = records[random.NextInt(records.Count)]; FileRecord changed = source with { Name = source.Name + "_u" + i.ToString(System.Globalization.CultureInfo.InvariantCulture), FullPath = source.FullPath + "_u" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) }; Stopwatch watch = Stopwatch.StartNew(); engine.Upsert(changed); watch.Stop(); times.Add(watch.Elapsed.TotalMilliseconds); } return new UpdateSummary(Percentile(times, .95), times.Max(), times.Count);
+    }
+
+    private static FileRecord[] SelectUpdateSources(IReadOnlyList<FileRecord> records)
+    {
+        var selected = new FileRecord[10_000]; var random = new RunnerRandom(0x5550444154455F31UL);
+        for (int i = 0; i < selected.Length; i++) selected[i] = records[random.NextInt(records.Count)];
+        return selected;
     }
 
     private static QuerySpec[] Shuffle(IReadOnlyList<QuerySpec> source, ulong seed) { QuerySpec[] result = source.ToArray(); var random = new RunnerRandom(seed); for (int i = result.Length - 1; i > 0; i--) { int j = random.NextInt(i + 1); (result[i], result[j]) = (result[j], result[i]); } return result; }

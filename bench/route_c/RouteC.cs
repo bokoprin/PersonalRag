@@ -60,13 +60,14 @@ public sealed class RouteCEngine : IFilenameSearchEngine
     public SearchResult Search(FilenameQuery request)
     {
         if (request is null) throw new ArgumentNullException(nameof(request)); var stopwatch = Stopwatch.StartNew();
-        string[] tokens = request.Query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Select(t => FilenameSemantics.Normalize(t, request.CaseSensitive)).ToArray(); var results = new List<FileRecord>(); int candidates; bool usedScan;
+        string[] tokens = request.Query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Select(t => FilenameSemantics.Normalize(t, request.CaseSensitive)).ToArray(); var results = new List<FileRecord>(); int candidates; bool usedScan; bool requiresSort;
         lock (gate)
         {
+            requiresSort = changes.Count > 0;
             if (changes.Count > 0) { usedScan = true; candidates = 0; for (int i = 0; i < records.Length; i++) if (TryCurrent(i, out Prepared current)) { candidates++; if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } foreach ((int id, Prepared? change) in changes) if (!ids.Contains(id) && change is not null) { candidates++; if (Matches(change.Value, request.Scope, request.CaseSensitive, tokens)) results.Add(change.Value.Record); } }
             else { int[]? candidateIndexes = CandidateIndexes(tokens, request.Scope, request.CaseSensitive, out usedScan); candidates = candidateIndexes?.Length ?? records.Length; if (candidateIndexes is null) { for (int index = 0; index < records.Length; index++) { Prepared current = new(records[index], namesSensitive[index], pathsSensitive[index], namesFolded[index], pathsFolded[index]); if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } } else foreach (int index in candidateIndexes) { Prepared current = new(records[index], namesSensitive[index], pathsSensitive[index], namesFolded[index], pathsFolded[index]); if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } }
         }
-        results.Sort((a, b) => a.FileId.CompareTo(b.FileId)); if (request.Limit > 0 && results.Count > request.Limit) results.RemoveRange(request.Limit, results.Count - request.Limit); stopwatch.Stop(); return new SearchResult(results, stopwatch.Elapsed.TotalMilliseconds, candidates, usedScan);
+        if (requiresSort) results.Sort((a, b) => a.FileId.CompareTo(b.FileId)); if (request.Limit > 0 && results.Count > request.Limit) results.RemoveRange(request.Limit, results.Count - request.Limit); stopwatch.Stop(); return new SearchResult(results, stopwatch.Elapsed.TotalMilliseconds, candidates, usedScan);
     }
 
     public void Upsert(FileRecord record) { lock (gate) changes[record.FileId] = Prepare(record); }

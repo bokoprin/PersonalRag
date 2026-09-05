@@ -68,9 +68,10 @@ public sealed class RouteBEngine : IFilenameSearchEngine
         if (request is null) throw new ArgumentNullException(nameof(request));
         var stopwatch = Stopwatch.StartNew();
         string[] tokens = request.Query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Select(t => FilenameSemantics.Normalize(t, request.CaseSensitive)).ToArray();
-        var results = new List<FileRecord>(); int candidates; bool usedScan;
+        var results = new List<FileRecord>(); int candidates; bool usedScan; bool requiresSort;
         lock (gate)
         {
+            requiresSort = changes.Count > 0;
             // The overlay is deliberately scan-verified until its next persisted rebuild.
             if (changes.Count > 0) { candidates = 0; usedScan = true; for (int i = 0; i < records.Length; i++) if (TryCurrent(i, out Prepared current)) { candidates++; if (Matches(current, request.Scope, request.CaseSensitive, tokens)) results.Add(current.Record); } foreach ((int id, Prepared? change) in changes) if (!ids.Contains(id) && change is not null) { candidates++; if (Matches(change.Value, request.Scope, request.CaseSensitive, tokens)) results.Add(change.Value.Record); } }
             else
@@ -84,7 +85,7 @@ public sealed class RouteBEngine : IFilenameSearchEngine
                 else foreach (int index in candidateIndexes) if (Matches(new Prepared(records[index], namesSensitive[index], pathsSensitive[index], namesFolded[index], pathsFolded[index]), request.Scope, request.CaseSensitive, tokens)) results.Add(records[index]);
             }
         }
-        results.Sort((a, b) => a.FileId.CompareTo(b.FileId));
+        if (requiresSort) results.Sort((a, b) => a.FileId.CompareTo(b.FileId));
         if (request.Limit > 0 && results.Count > request.Limit) results.RemoveRange(request.Limit, results.Count - request.Limit);
         stopwatch.Stop(); return new SearchResult(results, stopwatch.Elapsed.TotalMilliseconds, candidates, usedScan);
     }
