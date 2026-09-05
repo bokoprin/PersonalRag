@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "corpus_manifest_sha256": "4d14896b236bffdf5a0f07b248e42720944c056a67121fceaa93a965400fa9e0",
+  "queries_sha256": "c49032724de077c27334d70d984d8daea39bcaaa323b79162edbd1f0beb208dc",
+  "rounds": 20,
+  "warmup_rounds": 2,
+  "timed_rounds": 18,
+  "routes": [
+    { "route": "A", "branch": "experiment/filename-route-a", "implementation_commit": "a2572d3e62f01e0c2a3c227edce3a3d18e4cabb5", "integration_commit": "44085c3" },
+    { "route": "B", "branch": "experiment/filename-route-b", "implementation_commit": "8344b1e", "integration_commit": "44085c3" },
+    { "route": "C", "branch": "experiment/filename-route-c", "implementation_commit": "7a7860b", "integration_commit": "11a8a49" }
+  ]
+}
