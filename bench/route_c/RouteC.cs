@@ -138,6 +138,21 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         for (int i = 0; i < count; i++) if (selected[i]) results.Add(matched[i]);
     }
 
+    /// <summary>Materializes the lazy tables for the interactive product path.</summary>
+    public void WarmUp()
+    {
+        lock (gate)
+        {
+            for (int i = 0; i < records.Length; i++)
+            {
+                _ = namesFolded[i];
+                _ = pathsFolded[i];
+            }
+            foreach (Posting posting in nameIndex.Values) _ = posting.Data;
+            foreach (Posting posting in pathIndex.Values) _ = posting.Data;
+        }
+    }
+
     /// <summary>Releases the file handle used by lazy persisted tables.</summary>
     public void Dispose()
     {

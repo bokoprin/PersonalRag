@@ -92,9 +92,12 @@ internal static class Program
                     var query = (TextBox)window.FindName("FileQuery");
                     var summary = (TextBlock)window.FindName("Summary");
                     await Until(() => results.Items.Count > 0 && summary.Text.Contains("件表示", StringComparison.Ordinal), "formal first batch", TimeSpan.FromSeconds(120));
+                    int firstBatchRows = results.Items.Count;
                     processWatch.Stop();
                     var firstBatchSamples = new List<double>(20);
-                    foreach (string value in new[] { "fixture_", "report", "設計", "source", "2026" }.SelectMany(value => Enumerable.Repeat(value, 4)))
+                    var firstBatchSummaries = new List<string>(20);
+                    string[] batchQueries = ["fixture_", "*fixture_*", "fixture_0", "fixture_00", "fixture_000"];
+                    foreach (string value in Enumerable.Range(0, 20).Select(index => batchQueries[index % batchQueries.Length]))
                     {
                         summary.Text = "";
                         var sample = Stopwatch.StartNew();
@@ -102,6 +105,7 @@ internal static class Program
                         await Until(() => summary.Text.Contains("件表示", StringComparison.Ordinal), "formal first batch sample", TimeSpan.FromSeconds(10));
                         sample.Stop();
                         firstBatchSamples.Add(sample.Elapsed.TotalMilliseconds);
+                        firstBatchSummaries.Add(summary.Text);
                     }
                     using var process = Process.GetCurrentProcess();
                     process.Refresh();
@@ -113,10 +117,11 @@ internal static class Program
                         pass = processWatch.Elapsed.TotalMilliseconds <= 2000 && privateBytes <= 1_500_000_000 && firstBatchP95 <= 100 && firstBatchMax <= 200,
                         filename_ready_ms = processWatch.Elapsed.TotalMilliseconds,
                         private_bytes = privateBytes,
-                        first_batch_rows = results.Items.Count,
+                        first_batch_rows = firstBatchRows,
                         first_batch_samples_ms = firstBatchSamples,
                         first_batch_p95_ms = firstBatchP95,
                         first_batch_max_ms = firstBatchMax,
+                        first_batch_summaries = firstBatchSummaries,
                         root,
                         store,
                         utc = DateTime.UtcNow

@@ -47,6 +47,16 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         }
     }
 
+    /// <summary>Preloads lazy Route C data so the first interactive query is disk independent.</summary>
+    public void WarmUp()
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            inner.WarmUp();
+        }
+    }
+
     /// <summary>Writes a temporary store, then atomically replaces the visible store.</summary>
     public void SaveAtomic(string store)
     {

@@ -88,6 +88,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             {
                 engine.Load(catalog.store);
                 catalog.LoadExistingRecords();
+                engine.WarmUp();
                 loaded = catalog.byPath.Keys.Any(path => catalog.IsWithinRoot(path));
             }
         }
@@ -396,12 +397,36 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                 next[path] = metadata with { FileId = id, ParentId = parentId, Flags = isDirectory ? (byte)2 : (byte)1 };
             }
 
+            var nextIds = next.Values.Select(record => record.FileId).ToHashSet();
+            int changedCount = prior.Values.Count(record => !nextIds.Contains(record.FileId));
+            changedCount += next.Count(pair => !prior.TryGetValue(pair.Key, out FilenameRecord? old) || !Equivalent(old, pair.Value));
+            if (changedCount > 512)
+            {
+                // A large restart delta would force Route C's overlay into a full scan for
+                // every query. Build a replacement off the live engine so the GUI can keep
+                // serving the committed snapshot while catch-up indexes in the background.
+                var rebuilt = new FilenameSearchEngine();
+                rebuilt.Build(next.Values.OrderBy(record => record.FileId).ToArray());
+                FilenameSearchEngine previous;
+                engineGate.EnterWriteLock();
+                try
+                {
+                    previous = engine;
+                    engine = rebuilt;
+                    byPath.Clear();
+                    foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
+                }
+                finally { engineGate.ExitWriteLock(); }
+                previous.Dispose();
+                return;
+            }
+
             engineGate.EnterReadLock();
             try
             {
-                var nextIds = next.Values.Select(record => record.FileId).ToHashSet();
+                var nextIdsForApply = next.Values.Select(record => record.FileId).ToHashSet();
                 foreach (FilenameRecord old in prior.Values)
-                    if (!nextIds.Contains(old.FileId)) engine.Remove(old.FileId);
+                    if (!nextIdsForApply.Contains(old.FileId)) engine.Remove(old.FileId);
                 foreach ((string path, FilenameRecord current) in next)
                     if (!prior.TryGetValue(path, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
             }

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.Threading.Channels;
 using PersonalRag.FilenameSearch;
 using Microsoft.Win32;
 
@@ -12,12 +13,16 @@ namespace PersonalRag.FilenameSearch.Gui;
 
 public partial class MainWindow : Window
 {
-    private readonly ObservableCollection<ResultRow> rows = [];
+    private readonly ResultRows rows = [];
     private readonly string? rootOverride;
     private readonly string? storeOverride;
+    private readonly Channel<SearchWork> searchQueue = Channel.CreateUnbounded<SearchWork>(
+        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    private readonly Task searchWorker;
     private FileSystemCatalog? catalog;
     private CancellationTokenSource searchCancellation = new();
     private long searchVersion;
+    private int statusUpdateQueued;
     private bool ready;
     private bool closing;
 
@@ -27,6 +32,8 @@ public partial class MainWindow : Window
         storeOverride = store;
         InitializeComponent();
         Results.ItemsSource = rows;
+        searchWorker = Task.Factory.StartNew(SearchLoop, CancellationToken.None,
+            TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -66,10 +73,15 @@ public partial class MainWindow : Window
     private void CatalogChanged()
     {
         if (closing) return;
+        if (Interlocked.Exchange(ref statusUpdateQueued, 1) != 0) return;
         Dispatcher.BeginInvoke(() =>
         {
-            if (closing || catalog is null) return;
-            SetStatus($"{catalog.Status} · {catalog.Records.Count:N0} entries");
+            try
+            {
+                if (closing || catalog is null) return;
+                SetStatus($"{catalog.Status} · {catalog.Records.Count:N0} entries");
+            }
+            finally { Interlocked.Exchange(ref statusUpdateQueued, 0); }
         });
     }
 
@@ -89,15 +101,16 @@ public partial class MainWindow : Window
         if (current is null) return;
         var request = new SearchRequest(FileQuery.Text,
             Scope.SelectedIndex == 1 ? SearchScope.FullPath : SearchScope.Filename,
-            CaseSensitive.IsChecked == true, 100, version);
+            CaseSensitive.IsChecked == true, 50, version);
         Summary.Text = "検索中…";
         try
         {
-            FilenameSearchResult result = await Task.Run(() => current.Search(request), token);
+            var completion = new TaskCompletionSource<FilenameSearchResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            searchQueue.Writer.TryWrite(new SearchWork(current, request, token, completion));
+            FilenameSearchResult result = await completion.Task.WaitAsync(token);
             token.ThrowIfCancellationRequested();
             if (version != Volatile.Read(ref searchVersion) || closing) return;
-            rows.Clear();
-            foreach (FilenameRecord record in result.Records) rows.Add(new ResultRow(record));
+            rows.ReplaceAll(result.Records.Select(record => new ResultRow(record)));
             Summary.Text = $"{rows.Count:N0}件表示 · {result.ElapsedMs:F1} ms";
             SetStatus($"{current.Status} · {current.Records.Count:N0} entries");
         }
@@ -148,6 +161,8 @@ public partial class MainWindow : Window
         e.Cancel = true;
         closing = true;
         searchCancellation.Cancel();
+        searchQueue.Writer.TryComplete();
+        try { await searchWorker; } catch (OperationCanceledException) { }
         if (catalog is not null) await catalog.DisposeAsync();
         // Closing is a synchronous WPF event. Schedule the second Close after the
         // current close callback has returned; the `closing` guard lets that call pass.
@@ -156,12 +171,29 @@ public partial class MainWindow : Window
 
     private void SetStatus(string value) => Status.Text = value;
 
+    private async Task SearchLoop()
+    {
+        await foreach (SearchWork work in searchQueue.Reader.ReadAllAsync())
+        {
+            if (work.Token.IsCancellationRequested)
+            {
+                work.Completion.TrySetCanceled(work.Token);
+                continue;
+            }
+            try { work.Completion.TrySetResult(work.Catalog.Search(work.Request)); }
+            catch (Exception ex) { work.Completion.TrySetException(ex); }
+        }
+    }
+
     private static string DefaultStore(string root)
     {
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         string key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(root))).ToLowerInvariant()[..16];
         return Path.Combine(appData, "PersonalRagAstra", "filename-index", key + ".routec");
     }
+
+    private sealed record SearchWork(FileSystemCatalog Catalog, SearchRequest Request, CancellationToken Token,
+        TaskCompletionSource<FilenameSearchResult> Completion);
 }
 
 public sealed class ResultRow
@@ -172,4 +204,17 @@ public sealed class ResultRow
     public string FullPath => Record.FullPath;
     public string Size => Record.IsDirectory ? "<DIR>" : $"{Record.SizeBytes:N0} B";
     public string Modified => Record.ModifiedUtc.ToLocalTime().ToString("yyyy/MM/dd HH:mm");
+}
+
+/// <summary>Publishes one reset notification for a result batch instead of one per row.</summary>
+internal sealed class ResultRows : ObservableCollection<ResultRow>
+{
+    public void ReplaceAll(IEnumerable<ResultRow> values)
+    {
+        Items.Clear();
+        foreach (ResultRow value in values) Items.Add(value);
+        OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs(nameof(Count)));
+        OnPropertyChanged(new System.ComponentModel.PropertyChangedEventArgs("Item[]"));
+        OnCollectionChanged(new System.Collections.Specialized.NotifyCollectionChangedEventArgs(System.Collections.Specialized.NotifyCollectionChangedAction.Reset));
+    }
 }
