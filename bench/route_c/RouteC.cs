@@ -11,7 +11,7 @@ public sealed class RouteCEngine : IFilenameSearchEngine
     private const string Magic = "FRC002";
     private readonly object gate = new();
     private FileRecord[] records = [];
-    private string[] namesFolded = [], pathsFolded = [];
+    private StringTable namesFolded = StringTable.Empty, pathsFolded = StringTable.Empty;
     private Dictionary<string, Posting> nameIndex = new(StringComparer.Ordinal), pathIndex = new(StringComparer.Ordinal);
     private Dictionary<int, Prepared?> changes = [];
     private HashSet<int> ids = [];
@@ -31,7 +31,7 @@ public sealed class RouteCEngine : IFilenameSearchEngine
         (int rare, int medium) = Thresholds(next.Length);
         Dictionary<string, Posting>? ni = null, pi = null;
         Parallel.Invoke(() => ni = BuildIndex(nf, rare, medium, 1), () => pi = BuildIndex(pf, rare, medium, 2));
-        lock (gate) { CloseLazyStore(); records = next; namesFolded = nf; pathsFolded = pf; nameIndex = ni!; pathIndex = pi!; rareThreshold = rare; mediumThreshold = medium; ids = next.Select(r => r.FileId).ToHashSet(); changes = []; }
+        lock (gate) { CloseLazyStore(); records = next; namesFolded = new StringTable(nf); pathsFolded = new StringTable(pf); nameIndex = ni!; pathIndex = pi!; rareThreshold = rare; mediumThreshold = medium; ids = next.Select(r => r.FileId).ToHashSet(); changes = []; }
     }
 
     public void Save(string store)
@@ -55,7 +55,7 @@ public sealed class RouteCEngine : IFilenameSearchEngine
             if (reader.ReadString() != Magic || reader.ReadInt32() != 1) throw new InvalidDataException("Route C store header mismatch");
             int count = reader.ReadInt32(); if (count < 0 || count > 10_000_000) throw new InvalidDataException("Route C store count invalid"); int rare = reader.ReadInt32(), medium = reader.ReadInt32();
             var next = new FileRecord[count]; for (int i = 0; i < count; i++) next[i] = Canonicalize(ReadRecord(reader));
-            string[] nf = ReadStrings(reader, count), pf = ReadStrings(reader, count); Dictionary<string, Posting> ni = ReadIndex(reader, stream), pi = ReadIndex(reader, stream);
+            StringTable nf = ReadStringTable(reader, stream, count), pf = ReadStringTable(reader, stream, count); Dictionary<string, Posting> ni = ReadIndex(reader, stream), pi = ReadIndex(reader, stream);
             if (stream.Position != stream.Length) throw new InvalidDataException("Route C store has trailing bytes"); ValidateIds(next);
             lock (gate) { CloseLazyStore(); records = next; namesFolded = nf; pathsFolded = pf; nameIndex = ni; pathIndex = pi; rareThreshold = rare; mediumThreshold = medium; ids = next.Select(r => r.FileId).ToHashSet(); changes = []; lazyStore = stream; keepOpen = true; }
         }
@@ -189,11 +189,46 @@ public sealed class RouteCEngine : IFilenameSearchEngine
     private static void WriteRecord(BinaryWriter writer, FileRecord r) { writer.Write(r.FileId); writer.Write(r.ParentId ?? 0); writer.Write(r.ParentId.HasValue); writer.Write(r.SizeBytes); writer.Write(r.ModifiedUtcTicks); writer.Write(r.Flags); writer.Write(r.Name); writer.Write(r.FullPath); }
     private static FileRecord ReadRecord(BinaryReader reader) { int id = reader.ReadInt32(), parent = reader.ReadInt32(); bool hasParent = reader.ReadBoolean(); ulong size = reader.ReadUInt64(); long modified = reader.ReadInt64(); byte flags = reader.ReadByte(); return new FileRecord(id, hasParent ? parent : null, reader.ReadString(), reader.ReadString(), size, modified, flags); }
     private static void WriteStrings(BinaryWriter writer, IReadOnlyList<string> values) { writer.Write(values.Count); foreach (string value in values) writer.Write(value); }
-    private static string[] ReadStrings(BinaryReader reader, int expected) { int count = reader.ReadInt32(); if (count != expected) throw new InvalidDataException("Route C string count mismatch"); var values = new string[count]; for (int i = 0; i < count; i++) values[i] = reader.ReadString(); return values; }
+    private static StringTable ReadStringTable(BinaryReader reader, FileStream stream, int expected)
+    {
+        int count = reader.ReadInt32(); if (count != expected) throw new InvalidDataException("Route C string count mismatch");
+        var offsets = new long[count]; var lengths = new int[count];
+        for (int i = 0; i < count; i++) { int byteCount = Read7BitByteCount(stream); offsets[i] = stream.Position; lengths[i] = byteCount; stream.Seek(byteCount, SeekOrigin.Current); }
+        return new StringTable(stream, offsets, lengths);
+    }
+    private static int Read7BitByteCount(Stream stream)
+    {
+        int value = 0, shift = 0;
+        while (true) { int next = stream.ReadByte(); if (next < 0) throw new EndOfStreamException(); value |= (next & 0x7F) << shift; if ((next & 0x80) == 0) return value; shift += 7; if (shift > 28) throw new InvalidDataException("Route C string length is invalid"); }
+    }
     private static void WriteIndex(BinaryWriter writer, IReadOnlyDictionary<string, Posting> index) { writer.Write(index.Count); foreach ((string key, Posting posting) in index.OrderBy(p => p.Key, StringComparer.Ordinal)) { writer.Write(key); writer.Write(posting.Count); writer.Write(posting.Data.Length); writer.Write(posting.Data); } }
     private static Dictionary<string, Posting> ReadIndex(BinaryReader reader, FileStream stream) { int count = reader.ReadInt32(); if (count < 0 || count > 10_000_000) throw new InvalidDataException("Route C index count invalid"); var result = new Dictionary<string, Posting>(count, StringComparer.Ordinal); for (int i = 0; i < count; i++) { string key = reader.ReadString(); int n = reader.ReadInt32(), byteCount = reader.ReadInt32(); if (n < 0 || byteCount < 0 || byteCount > 1_000_000_000) throw new InvalidDataException("Route C posting is invalid"); long offset = stream.Position; stream.Seek(byteCount, SeekOrigin.Current); result.Add(key, new Posting(n, stream, offset, byteCount)); } return result; }
     private static byte[] EncodePosting(IReadOnlyList<int> values) { var buffer = new ArrayBufferWriter<byte>(); int previous = 0; foreach (int value in values) { uint delta = checked((uint)(value - previous)); while (delta >= 0x80) { Span<byte> span = buffer.GetSpan(1); span[0] = (byte)((delta & 0x7F) | 0x80); buffer.Advance(1); delta >>= 7; } Span<byte> last = buffer.GetSpan(1); last[0] = (byte)delta; buffer.Advance(1); previous = value; } return buffer.WrittenMemory.ToArray(); }
     private static uint ReadVarUInt(ReadOnlySpan<byte> data, ref int offset) { uint value = 0; int shift = 0; while (offset < data.Length) { byte b = data[offset++]; value |= (uint)(b & 0x7F) << shift; if ((b & 0x80) == 0) return value; shift += 7; if (shift > 28) throw new InvalidDataException("Route C varint is too long"); } throw new EndOfStreamException(); }
+    private sealed class StringTable : IReadOnlyList<string>
+    {
+        private readonly string[]? values; private readonly FileStream? stream; private readonly long[]? offsets; private readonly int[]? lengths; private readonly string?[] cache;
+        public static StringTable Empty { get; } = new([]);
+        public StringTable(string[] values) { this.values = values; cache = values.Cast<string?>().ToArray(); }
+        public StringTable(FileStream stream, long[] offsets, int[] lengths) { this.stream = stream; this.offsets = offsets; this.lengths = lengths; cache = new string?[offsets.Length]; }
+        public int Count => values?.Length ?? cache.Length;
+        public string this[int index]
+        {
+            get
+            {
+                if (values is not null) return values[index];
+                string? current = Volatile.Read(ref cache[index]); if (current is not null) return current;
+                lock (stream!)
+                {
+                    current = cache[index]; if (current is null) { stream.Position = offsets![index]; byte[] bytes = new byte[lengths![index]]; int read = 0; while (read < bytes.Length) { int n = stream.Read(bytes, read, bytes.Length - read); if (n == 0) throw new EndOfStreamException(); read += n; } current = Encoding.UTF8.GetString(bytes); cache[index] = current; }
+                }
+                return current;
+            }
+        }
+        public IEnumerator<string> GetEnumerator() { for (int i = 0; i < Count; i++) yield return this[i]; }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private sealed class Posting
     {
         private readonly FileStream? stream; private readonly long offset; private readonly int byteCount; private byte[]? data;
