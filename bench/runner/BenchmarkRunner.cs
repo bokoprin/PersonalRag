@@ -31,6 +31,7 @@ public static class RunnerApp
             "benchmark" => Benchmark(args, requireLock: true),
             "create-lock" => CreateLock(args),
             "verify-lock" => VerifyLockCommand(args),
+            "measure-load" => MeasureLoad(args),
             _ => throw new ArgumentException($"Unknown runner command: {args[0]}")
         };
         return Task.FromResult(code);
@@ -62,7 +63,7 @@ public static class RunnerApp
         BuildSummary build = BuildAndPersist(route, corpusPath, storePath, process);
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         long persistentBytes = new FileInfo(storePath).Length;
-        IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); process.Refresh(); long readyPrivate = process.PrivateMemorySize64;
+        IFilenameSearchEngine loaded = CreateEngine(route); Stopwatch loadWatch = Stopwatch.StartNew(); loaded.Load(storePath); loadWatch.Stop(); long readyPrivate = MeasureFreshLoadMemory(route, storePath);
         var oracleById = oracle.Results.ToDictionary(r => r.Id, StringComparer.Ordinal); var measurements = querySet.Queries.ToDictionary(q => q.Id, _ => new List<double>(), StringComparer.Ordinal); var counts = querySet.Queries.ToDictionary(q => q.Id, _ => 0, StringComparer.Ordinal); int fp = 0, fn = 0; bool correctness = true; string previous = "";
         int totalRounds = Math.Max(3, rounds);
         bool noGcRegion = false;
@@ -119,6 +120,17 @@ public static class RunnerApp
     private static string GetGitCommit() { try { using Process process = Process.Start(new ProcessStartInfo("git", "rev-parse HEAD") { RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true })!; process.WaitForExit(); return process.StandardOutput.ReadToEnd().Trim(); } catch { return "unknown"; } }
     private static int CreateLock(string[] args) { if (args.Length < 8) throw new ArgumentException("create-lock LOCK SPEC GENERATOR ORACLE RUNNER MANIFEST QUERIES [CALIBRATION_SEED OFFICIAL_SEED]"); var data = new LockData(true, Sha256File(args[2]), Sha256File(args[3]), Sha256File(args[4]), Sha256Files(args[5]), Sha256File(args[6]), Sha256File(args[7]), args.Length > 8 ? args[8] : "0x505241475F43414C", args.Length > 9 ? args[9] : "0x505241475F314D31"); Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[1]))!); File.WriteAllText(args[1], JsonSerializer.Serialize(data, JsonOptions)); Console.WriteLine(JsonSerializer.Serialize(data, JsonOptions)); return 0; }
     private static int VerifyLockCommand(string[] args) { if (args.Length < 9) throw new ArgumentException("verify-lock LOCK SPEC GENERATOR ORACLE RUNNER MANIFEST QUERIES REPO_ROOT"); bool valid = LockFile.Verify(args[1], args[2], args[8], args[3], args[4], args[5], args[6], args[7]); Console.WriteLine(valid ? "LOCK_PASS" : "LOCK_FAIL"); return valid ? 0 : 1; }
+    private static int MeasureLoad(string[] args) { if (args.Length < 3) throw new ArgumentException("measure-load ROUTE STORE"); IFilenameSearchEngine engine = CreateEngine(args[1]); engine.Load(args[2]); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); Process process = Process.GetCurrentProcess(); process.Refresh(); Console.WriteLine(JsonSerializer.Serialize(new { ready_private_bytes = process.PrivateMemorySize64 }, JsonOptions)); return 0; }
+    private static long MeasureFreshLoadMemory(string route, string storePath)
+    {
+        string assemblyPath = typeof(RunnerApp).Assembly.Location;
+        var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        start.ArgumentList.Add(assemblyPath); start.ArgumentList.Add("measure-load"); start.ArgumentList.Add(route); start.ArgumentList.Add(storePath);
+        using Process child = Process.Start(start) ?? throw new InvalidOperationException("Could not start fresh load measurement process");
+        string output = child.StandardOutput.ReadToEnd(); string error = child.StandardError.ReadToEnd(); child.WaitForExit();
+        if (child.ExitCode != 0) throw new InvalidOperationException($"Fresh load measurement failed: {error}");
+        using JsonDocument document = JsonDocument.Parse(output); return document.RootElement.GetProperty("ready_private_bytes").GetInt64();
+    }
     private static string Sha256Files(string path) { string[] paths = Directory.GetFiles(path, "*.cs", SearchOption.TopDirectoryOnly).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray(); using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256); foreach (string file in paths) hash.AppendData(File.ReadAllBytes(file)); return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant(); }
 }
 
