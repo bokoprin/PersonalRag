@@ -30,7 +30,7 @@ public sealed class RouteCEngine : IFilenameSearchEngine
         string[] pf = next.Select(r => FilenameSemantics.Normalize(r.FullPath, false)).ToArray();
         (int rare, int medium) = Thresholds(next.Length);
         Dictionary<string, Posting>? ni = null, pi = null;
-        Parallel.Invoke(() => ni = BuildIndex(nf, rare, medium), () => pi = BuildIndex(pf, rare, medium));
+        Parallel.Invoke(() => ni = BuildIndex(nf, rare, medium, 1), () => pi = BuildIndex(pf, rare, medium, 2));
         lock (gate) { CloseLazyStore(); records = next; namesFolded = nf; pathsFolded = pf; nameIndex = ni!; pathIndex = pi!; rareThreshold = rare; mediumThreshold = medium; ids = next.Select(r => r.FileId).ToHashSet(); changes = []; }
     }
 
@@ -40,7 +40,7 @@ public sealed class RouteCEngine : IFilenameSearchEngine
         FileRecord[] current; string[] nf, pf;
         lock (gate) { current = SnapshotRecords(); nf = current.Select(r => FilenameSearch.Core.FilenameSemantics.Normalize(r.Name, false)).ToArray(); pf = current.Select(r => FilenameSearch.Core.FilenameSemantics.Normalize(r.FullPath, false)).ToArray(); }
         Dictionary<string, Posting>? ni = null, pi = null;
-        Parallel.Invoke(() => ni = BuildIndex(nf, rareThreshold, mediumThreshold), () => pi = BuildIndex(pf, rareThreshold, mediumThreshold));
+        Parallel.Invoke(() => ni = BuildIndex(nf, rareThreshold, mediumThreshold, 1), () => pi = BuildIndex(pf, rareThreshold, mediumThreshold, 2));
         using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.Read); using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: false);
         writer.Write(Magic); writer.Write(1); writer.Write(current.Length); writer.Write(rareThreshold); writer.Write(mediumThreshold); foreach (FileRecord record in current) WriteRecord(writer, record);
         WriteStrings(writer, nf); WriteStrings(writer, pf); WriteIndex(writer, ni!); WriteIndex(writer, pi!);
@@ -111,10 +111,19 @@ public sealed class RouteCEngine : IFilenameSearchEngine
         return null;
     }
 
-    private static Dictionary<string, Posting> BuildIndex(IReadOnlyList<string> values, int rare, int medium)
+    private static Dictionary<string, Posting> BuildIndex(IReadOnlyList<string> values, int rare, int medium, int minimumLength)
     {
         var mutable = new Dictionary<string, List<int>>(StringComparer.Ordinal);
-        for (int i = 0; i < values.Count; i++) foreach (string key in EnumerateNgrams(values[i])) { if (!mutable.TryGetValue(key, out List<int>? list)) mutable[key] = list = []; if (list.Count == 0 || list[^1] != i) list.Add(i); }
+        for (int i = 0; i < values.Count; i++) foreach ((string key, int length) in EnumerateIndexedNgrams(values[i], minimumLength))
+        {
+            if (!mutable.TryGetValue(key, out List<int>? list)) mutable[key] = list = [];
+            if (list.Count == 0 || list[^1] != i)
+            {
+                // Counts above the common trigram threshold are not persisted, so stop growing those lists.
+                if (length >= 3 && list.Count > medium) continue;
+                list.Add(i);
+            }
+        }
         var result = new Dictionary<string, Posting>(mutable.Count, StringComparer.Ordinal);
         foreach ((string key, List<int> list) in mutable)
         {
@@ -125,10 +134,10 @@ public sealed class RouteCEngine : IFilenameSearchEngine
         return result;
     }
 
-    private static IEnumerable<string> EnumerateNgrams(string value)
+    private static IEnumerable<(string Key, int Length)> EnumerateIndexedNgrams(string value, int minimumLength)
     {
         Rune[] runes = value.EnumerateRunes().ToArray();
-        for (int length = 1; length <= 3; length++) for (int i = 0; i + length <= runes.Length; i++) yield return ToString(runes, i, length);
+        for (int length = minimumLength; length <= 3; length++) for (int i = 0; i + length <= runes.Length; i++) yield return (ToString(runes, i, length), length);
     }
     private static IEnumerable<string> ExtractNgrams(string value, int length) { Rune[] runes = value.EnumerateRunes().ToArray(); for (int i = 0; i + length <= runes.Length; i++) yield return ToString(runes, i, length); }
     private static IEnumerable<string> ExtractPatternNgrams(string value, int length)
