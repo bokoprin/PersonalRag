@@ -1,0 +1,234 @@
+{
+  "version": 1,
+  "phase": "filename/path",
+  "created_utc": "2026-09-05T20:42:48.2676675Z",
+  "spec_sha256": "9a10515eee6aaed64517aa57891def400cd8515e290425b6d2ec896389cd607b",
+  "lock_sha256": "e17171bfceb236d0a26562e0139988629dd1960106d1f6af054e22e9c877f52e",
+  "official": {
+    "manifest_sha256": "ad8c7abcd08916a39e588781e5bd478b1a834a75fa47ce59111d7f4a30398bd7",
+    "record_count": 1000000,
+    "logical_bytes": 107374182400,
+    "records_sha256": "4d14896b236bffdf5a0f07b248e42720944c056a67121fceaa93a965400fa9e0",
+    "queries_sha256": "c49032724de077c27334d70d984d8daea39bcaaa323b79162edbd1f0beb208dc",
+    "rounds": 20,
+    "warmup_rounds": 2,
+    "timed_rounds": 18
+  },
+  "hard_limits": {
+    "worst_query_class_p95_ms": 50.0,
+    "global_p99_ms": 100.0,
+    "ready_private_bytes": 1073741824,
+    "persistent_bytes": 1073741824,
+    "load_seconds": 1.5,
+    "build_seconds": 60.0,
+    "update_p95_ms": 10.0
+  },
+  "score_formula": {
+    "worst_query_class_p95": 0.35,
+    "global_p99": 0.2,
+    "ready_private_memory": 0.15,
+    "persistent_bytes": 0.15,
+    "load_seconds": 0.05,
+    "build_seconds": 0.05,
+    "update_p95": 0.05,
+    "normalization": "measured / hard_limit; lower is better"
+  },
+  "routes": [
+    {
+      "route": "A",
+      "branch": "experiment/filename-route-a",
+      "implementation_commit": "a2572d3e62f01e0c2a3c227edce3a3d18e4cabb5",
+      "measured_commit": "29870c91322675b2d3232225d05528af7dff2f88",
+      "report": "bench-data/official-20260905/reports/route-a-final-child.json",
+      "report_sha256": "0d5eba2d8acbd48c5a785e450ebc435d61dacbadd3d0a948251aeef929cbf1b0",
+      "correctness": {
+        "false_positive": 0,
+        "false_negative": 0,
+        "hash_and_count_match": true
+      },
+      "build_seconds": 2.7238877,
+      "load_seconds": 2.8579558,
+      "persistent_bytes": 442965507,
+      "ready_private_bytes": 1806721024,
+      "build_private_bytes": 1325965312,
+      "persist_seconds": 3.4909547,
+      "search": {
+        "p50_ms": 82.6732,
+        "p95_ms": 133.1241,
+        "p99_ms": 305.1893,
+        "max_ms": 325.0861,
+        "worst_class_p95_ms": 325.0861,
+        "top_classes": [
+          {
+            "class": "path-wildcard",
+            "p95_ms": 325.0861
+          },
+          {
+            "class": "wildcard",
+            "p95_ms": 158.5878
+          },
+          {
+            "class": "sampled-stem-5",
+            "p95_ms": 122.7806
+          },
+          {
+            "class": "common",
+            "p95_ms": 122.54
+          },
+          {
+            "class": "sampled-stem-3",
+            "p95_ms": 107.7794
+          }
+        ]
+      },
+      "update_p95_ms": 0.0036,
+      "hard_gate": "FAIL",
+      "gates": {
+        "correctness": true,
+        "search_p50": false,
+        "search_p95": false,
+        "search_p99": false,
+        "every_class_p95": false,
+        "persistent": true,
+        "ready": false,
+        "build": true,
+        "load": false,
+        "update": true
+      },
+      "score": null
+    },
+    {
+      "route": "B",
+      "branch": "experiment/filename-route-b",
+      "implementation_commit": "639722308659e4657c14848a94b54caad9e54944",
+      "measured_commit": "29870c91322675b2d3232225d05528af7dff2f88",
+      "report": "bench-data/official-20260905/reports/route-b-final-child.json",
+      "report_sha256": "7040961d720bba0006e4d92f0aacfdee42fc1dfab2060f6d5708d4688dcdde4b",
+      "correctness": {
+        "false_positive": 0,
+        "false_negative": 0,
+        "hash_and_count_match": true
+      },
+      "build_seconds": 14.2220006,
+      "load_seconds": 2.2261481,
+      "persistent_bytes": 417279961,
+      "ready_private_bytes": 939847680,
+      "build_private_bytes": 1750192128,
+      "persist_seconds": 14.2271563,
+      "search": {
+        "p50_ms": 8.0046,
+        "p95_ms": 33.3929,
+        "p99_ms": 59.3894,
+        "max_ms": 183.5996,
+        "worst_class_p95_ms": 183.5996,
+        "top_classes": [
+          {
+            "class": "wildcard",
+            "p95_ms": 183.5996
+          },
+          {
+            "class": "path-wildcard",
+            "p95_ms": 62.2536
+          },
+          {
+            "class": "path-literal",
+            "p95_ms": 46.858
+          },
+          {
+            "class": "sampled-directory",
+            "p95_ms": 38.4334
+          },
+          {
+            "class": "literal-1",
+            "p95_ms": 30.7676
+          }
+        ]
+      },
+      "update_p95_ms": 0.0038,
+      "hard_gate": "FAIL",
+      "gates": {
+        "correctness": true,
+        "search_p50": true,
+        "search_p95": true,
+        "search_p99": true,
+        "every_class_p95": false,
+        "persistent": true,
+        "ready": true,
+        "build": true,
+        "load": false,
+        "update": true
+      },
+      "score": null
+    },
+    {
+      "route": "C",
+      "branch": "experiment/filename-route-c",
+      "implementation_commit": "29870c91322675b2d3232225d05528af7dff2f88",
+      "measured_commit": "29870c91322675b2d3232225d05528af7dff2f88",
+      "report": "bench-data/official-20260905/reports/route-c-final-lazy.json",
+      "report_sha256": "7b10593a95c7ec8ed872f71254172287f877d5ac3db3157811cb33ec7ed0a9c0",
+      "correctness": {
+        "false_positive": 0,
+        "false_negative": 0,
+        "hash_and_count_match": true
+      },
+      "build_seconds": 26.2466092,
+      "load_seconds": 1.485577,
+      "persistent_bytes": 477165162,
+      "ready_private_bytes": 552587264,
+      "build_private_bytes": 2316324864,
+      "persist_seconds": 30.6380185,
+      "search": {
+        "p50_ms": 6.5847,
+        "p95_ms": 35.8819,
+        "p99_ms": 43.3916,
+        "max_ms": 49.6872,
+        "worst_class_p95_ms": 49.6872,
+        "top_classes": [
+          {
+            "class": "path-wildcard",
+            "p95_ms": 49.6872
+          },
+          {
+            "class": "literal-1",
+            "p95_ms": 45.9475
+          },
+          {
+            "class": "sampled-directory",
+            "p95_ms": 41.1973
+          },
+          {
+            "class": "path-literal",
+            "p95_ms": 39.1703
+          },
+          {
+            "class": "literal-2",
+            "p95_ms": 35.9054
+          }
+        ]
+      },
+      "update_p95_ms": 0.0036,
+      "hard_gate": "PASS",
+      "gates": {
+        "correctness": true,
+        "search_p50": true,
+        "search_p95": true,
+        "search_p99": true,
+        "every_class_p95": true,
+        "persistent": true,
+        "ready": true,
+        "build": true,
+        "load": true,
+        "update": true
+      },
+      "score": 0.6498577597564947
+    }
+  ],
+  "champion": {
+    "route": "C",
+    "implementation_commit": "29870c91322675b2d3232225d05528af7dff2f88",
+    "selection": "only route with every hard gate passing",
+    "score": 0.6498577597564947,
+    "status": "SELECTED"
+  }
+}

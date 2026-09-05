@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "kind": "calibration",
+  "corpus": "100000 records / 10 GiB",
+  "seed": "0x505241475F43414C",
+  "note": "Threshold and representation tuning was performed only against calibration data; these reports predate the official bake-off freeze.",
+  "routes": [
+    {
+      "report": "route-a-nogc.json",
+      "route": "A",
+      "commit": "a2572d3e62f01e0c2a3c227edce3a3d18e4cabb5",
+      "correctness": {
+        "false_positive": 0,
+        "false_negative": 0,
+        "hash_and_count_match": true
+      },
+      "build_seconds": 0.517685,
+      "load_seconds": 0.2836813,
+      "persistent_bytes": 44344671,
+      "ready_private_bytes": 153063424,
+      "search": {
+        "p50_ms": 8.5928,
+        "p95_ms": 19.128,
+        "p99_ms": 29.7446,
+        "worst_class_p95_ms": 46.7295
+      },
+      "update_p95_ms": 0.0045,
+      "hard_gate": "PASS",
+      "report_sha256": "8d48337cded8df1f5cdf710bf7a5bf19511e731270c3b402ef72c0998344cfb5"
+    },
+    {
+      "report": "route-b-gc.json",
+      "route": "B",
+      "commit": "639722308659e4657c14848a94b54caad9e54944",
+      "correctness": {
+        "false_positive": 0,
+        "false_negative": 0,
+        "hash_and_count_match": true
+      },
+      "build_seconds": 2.9738271,
+      "load_seconds": 0.4152053,
+      "persistent_bytes": 42914685,
+      "ready_private_bytes": 112332800,
+      "search": {
+        "p50_ms": 1.8786,
+        "p95_ms": 7.5754,
+        "p99_ms": 13.031,
+        "worst_class_p95_ms": 32.9037
+      },
+      "update_p95_ms": 0.0054,
+      "hard_gate": "PASS",
+      "report_sha256": "652da7f3a67367e27ba4822458e48159193ad525ddf47798123140a45a8c7083"
+    },
+    {
+      "report": "route-c-cap.json",
+      "route": "C",
+      "commit": "739d693ee056338f1f81c415b0bee1f274ad77b1",
+      "correctness": {
+        "false_positive": 0,
+        "false_negative": 0,
+        "hash_and_count_match": true
+      },
+      "build_seconds": 3.1300794,
+      "load_seconds": 0.2028607,
+      "persistent_bytes": 48897609,
+      "ready_private_bytes": 102031360,
+      "search": {
+        "p50_ms": 0.7092,
+        "p95_ms": 2.8771,
+        "p99_ms": 3.9477,
+        "worst_class_p95_ms": 6.2617
+      },
+      "update_p95_ms": 0.0038,
+      "hard_gate": "PASS",
+      "report_sha256": "4808f2bd65f76dc8920bd7107f345f2c90be5352318454e692fe2cdac45fb4e2"
+    }
+  ]
+}

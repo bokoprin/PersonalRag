@@ -6,8 +6,23 @@
   "warmup_rounds": 2,
   "timed_rounds": 18,
   "routes": [
-    { "route": "A", "branch": "experiment/filename-route-a", "implementation_commit": "a2572d3e62f01e0c2a3c227edce3a3d18e4cabb5", "integration_commit": "44085c3" },
-    { "route": "B", "branch": "experiment/filename-route-b", "implementation_commit": "8344b1e", "integration_commit": "44085c3" },
-    { "route": "C", "branch": "experiment/filename-route-c", "implementation_commit": "7a7860b", "integration_commit": "11a8a49" }
+    {
+      "route": "A",
+      "branch": "experiment/filename-route-a",
+      "implementation_commit": "a2572d3e62f01e0c2a3c227edce3a3d18e4cabb5",
+      "integration_commit": "29870c91322675b2d3232225d05528af7dff2f88"
+    },
+    {
+      "route": "B",
+      "branch": "experiment/filename-route-b",
+      "implementation_commit": "639722308659e4657c14848a94b54caad9e54944",
+      "integration_commit": "29870c91322675b2d3232225d05528af7dff2f88"
+    },
+    {
+      "route": "C",
+      "branch": "experiment/filename-route-c",
+      "implementation_commit": "29870c91322675b2d3232225d05528af7dff2f88",
+      "integration_commit": "29870c91322675b2d3232225d05528af7dff2f88"
+    }
   ]
 }
