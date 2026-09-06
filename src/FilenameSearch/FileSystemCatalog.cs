@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 
 namespace PersonalRag.FilenameSearch;
@@ -365,11 +366,24 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         var priorByPath = prior.ToDictionary(r => r.FullPath, StringComparer.Ordinal);
         var priorByKey = prior.GroupBy(r => r.Key).ToDictionary(g => g.Key, g => new Queue<FilenameRecord>(g.OrderBy(r => r.FileId)));
         var used = new HashSet<int>(); var reserved = prior.Select(r => r.FileId).ToHashSet();
-        var prelim = new List<FilenameRecord>();
-        foreach ((string path, bool isDirectory) in Discover(token))
+        // Directory enumeration is the inexpensive part of a reconcile. File metadata and
+        // native FileKey lookup are independent per entry, so collect them in parallel before
+        // assigning stable FileIds. This keeps stopped-app catch-up bounded without changing
+        // exact spelling, identity pairing, or the public feed contract.
+        (string Path, bool IsDirectory)[] discovered = Discover(token).ToArray();
+        var readRecords = new ConcurrentBag<(string Path, bool IsDirectory, FilenameRecord Record)>();
+        Parallel.ForEach(discovered, new ParallelOptions
         {
-            token.ThrowIfCancellationRequested();
-            FilenameRecord? read = TryReadRecord(path, 0); if (read is null) continue;
+            CancellationToken = token,
+            MaxDegreeOfParallelism = Math.Max(4, Environment.ProcessorCount)
+        }, entry =>
+        {
+            FilenameRecord? read = TryReadRecord(entry.Path, 0);
+            if (read is not null) readRecords.Add((entry.Path, entry.IsDirectory, read));
+        });
+        var prelim = new List<FilenameRecord>(readRecords.Count);
+        foreach ((string path, bool isDirectory, FilenameRecord read) in readRecords.OrderBy(item => item.Path, StringComparer.Ordinal))
+        {
             int id;
             if (priorByPath.TryGetValue(path, out FilenameRecord? same)) id = same.FileId;
             else if (read.Key.IsNative && priorByKey.TryGetValue(read.Key, out Queue<FilenameRecord>? q))
