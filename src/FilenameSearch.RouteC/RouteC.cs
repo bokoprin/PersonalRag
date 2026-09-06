@@ -126,8 +126,11 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         Dictionary<string, Posting> nextNames = ReadIndex(reader);
         Dictionary<string, Posting> nextPaths = ReadIndex(reader);
         if (stream.Position != stream.Length) throw new InvalidDataException("Route C store has trailing bytes");
-        ValidatePostingBounds(nextNames, count);
-        ValidatePostingBounds(nextPaths, count);
+        // The immutable base file is verified by GenerationStore's SHA-256 before this
+        // method is called. Decoding every posting list here made restart/load scale with
+        // the total index rather than the bytes read; posting bounds are checked lazily by
+        // Posting.ToArray when a candidate list is actually used. Header/count validation
+        // above still rejects truncated or structurally impossible records immediately.
 
         lock (gate)
         {

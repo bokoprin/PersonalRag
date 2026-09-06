@@ -18,6 +18,8 @@ internal sealed class GenerationStore : IDisposable
     private readonly FileStream lease;
     private Manifest? manifest;
     private long journalEntries;
+    private long persistenceWriteBytes;
+    private long fullBaseRewriteCount;
     private bool clean;
 
     public GenerationStore(string rootIdentity, string storePath)
@@ -41,6 +43,18 @@ internal sealed class GenerationStore : IDisposable
 
     public bool WasDirtyShutdown { get; }
     public long PersistedGeneration => manifest?.LastGeneration ?? 0;
+    internal long PersistenceWriteBytes => Interlocked.Read(ref persistenceWriteBytes);
+    internal long FullBaseRewriteCount => Interlocked.Read(ref fullBaseRewriteCount);
+    internal long DeltaChangeCount => Interlocked.Read(ref journalEntries);
+    internal long BaseGeneration => manifest?.BaseGeneration ?? 0;
+    internal long DeltaBytes
+    {
+        get
+        {
+            Manifest? current = manifest;
+            return current is null ? 0 : TryLength(Data(current.DeltaFile));
+        }
+    }
     public bool ShouldCompact
     {
         get
@@ -94,6 +108,7 @@ internal sealed class GenerationStore : IDisposable
         byte[] bytes = Encoding.UTF8.GetBytes(line);
         stream.Write(bytes);
         stream.Flush(true);
+        Interlocked.Add(ref persistenceWriteBytes, bytes.Length);
         Interlocked.Add(ref journalEntries, Math.Max(1, batch.Changes.Count));
         manifest = current with { LastGeneration = Math.Max(current.LastGeneration, batch.Generation) };
     }
@@ -126,7 +141,8 @@ internal sealed class GenerationStore : IDisposable
         long total = File.Exists(full) ? TryLength(full) : 0;
         string data = full + ".data";
         if (Directory.Exists(data))
-            foreach (string file in Directory.EnumerateFiles(data)) total = checked(total + TryLength(file));
+            foreach (string file in Directory.EnumerateFiles(data, "*", SearchOption.AllDirectories))
+                total = checked(total + TryLength(file));
         return total;
     }
 
@@ -149,13 +165,17 @@ internal sealed class GenerationStore : IDisposable
             using (var empty = new FileStream(deltaTmp, FileMode.Create, FileAccess.Write, FileShare.Read)) empty.Flush(true);
             File.Move(indexTmp, index); File.Move(metaTmp, meta); File.Move(deltaTmp, delta);
             var next = new Manifest(
-                FormatVersion, rootIdentity, FilenameSearch.Core.FilenameSemantics.NormalizerVersion,
+                FormatVersion, rootIdentity, global::FilenameSearch.Core.FilenameSemantics.NormalizerVersion,
                 generation, generation, indexName, ShaFile(index), metaName, ShaFile(meta), deltaName);
             File.WriteAllText(manifestTmp, JsonSerializer.Serialize(next, Json), new UTF8Encoding(false));
             Flush(manifestTmp);
             File.Move(manifestTmp, manifestPath, overwrite: true);
             File.WriteAllText(manifestShaPath, ShaFile(manifestPath), new UTF8Encoding(false));
             Flush(manifestShaPath);
+            Interlocked.Add(ref persistenceWriteBytes,
+                TryLength(index) + TryLength(meta) + TryLength(delta) +
+                TryLength(manifestPath) + TryLength(manifestShaPath));
+            Interlocked.Increment(ref fullBaseRewriteCount);
             manifest = next;
             Interlocked.Exchange(ref journalEntries, 0);
             CleanupOld(next);
@@ -174,7 +194,7 @@ internal sealed class GenerationStore : IDisposable
         if (value.Version != FormatVersion) throw new InvalidDataException("Filename manifest version mismatch");
         if (!value.RootIdentity.Equals(rootIdentity, StringComparison.Ordinal))
             throw new InvalidDataException("Filename store root identity mismatch");
-        if (!value.NormalizerVersion.Equals(FilenameSearch.Core.FilenameSemantics.NormalizerVersion, StringComparison.Ordinal))
+        if (!value.NormalizerVersion.Equals(global::FilenameSearch.Core.FilenameSemantics.NormalizerVersion, StringComparison.Ordinal))
             throw new InvalidDataException("Filename normalizer version mismatch");
         if (value.BaseGeneration < 0 || value.LastGeneration < value.BaseGeneration)
             throw new InvalidDataException("Filename manifest generation is invalid");

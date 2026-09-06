@@ -23,7 +23,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Dictionary<string, FilenameRecord> byPath = new(StringComparer.Ordinal);
     private FilenameSearchEngine engine;
-    private int nextId = 1, pendingEvents, forceReconcile, compactionRunning;
+    private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, compactionRunning;
+    private long queueSaturationCount, reconcileCount, compactionCount;
     private long generation;
     private string status = "準備中";
     private bool started;
@@ -58,6 +59,25 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     public bool WasDirtyShutdown => persistence.WasDirtyShutdown;
     public event Action<CatalogChangeBatch>? Changed;
     public IReadOnlyList<FilenameRecord> Records { get { lock (gate) return byPath.Values.OrderBy(r => r.FileId).ToArray(); } }
+
+    internal FilenameCatalogDiagnostics GetDiagnostics() => new(
+        Volatile.Read(ref pendingEvents),
+        Volatile.Read(ref maxPendingEvents),
+        Interlocked.Read(ref queueSaturationCount),
+        Interlocked.Read(ref reconcileCount),
+        Interlocked.Read(ref compactionCount),
+        persistence.FullBaseRewriteCount,
+        persistence.DeltaChangeCount,
+        persistence.DeltaBytes,
+        persistence.PersistenceWriteBytes,
+        Generation,
+        persistence.BaseGeneration);
+
+    internal bool ContainsPath(string path)
+    {
+        string full = Path.GetFullPath(path);
+        lock (gate) return byPath.ContainsKey(full);
+    }
 
     public static FileSystemCatalog Open(string root, string store, IEnumerable<string>? excludedRoots = null)
     {
@@ -146,13 +166,26 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         bool oldExcluded = change.OldPath is not null && IsExcluded(change.OldPath);
         if (change.OldPath is null ? nowExcluded : nowExcluded && oldExcluded) return;
         if (change.Reconcile) Interlocked.Exchange(ref forceReconcile, 1);
-        if (events.Writer.TryWrite(change)) Interlocked.Increment(ref pendingEvents);
-        else { Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile(); }
+        if (events.Writer.TryWrite(change))
+        {
+            int pending = Interlocked.Increment(ref pendingEvents);
+            UpdateMaxPending(pending);
+        }
+        else
+        {
+            Interlocked.Increment(ref queueSaturationCount);
+            Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile();
+        }
     }
 
     private void SignalReconcile()
     {
-        if (events.Writer.TryWrite(new FileSystemEvent(root, Reconcile: true))) Interlocked.Increment(ref pendingEvents);
+        if (events.Writer.TryWrite(new FileSystemEvent(root, Reconcile: true)))
+        {
+            int pending = Interlocked.Increment(ref pendingEvents);
+            UpdateMaxPending(pending);
+        }
+        else Interlocked.Increment(ref queueSaturationCount);
     }
 
     private async Task UpdateLoop()
@@ -288,6 +321,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             engineGate.EnterReadLock(); try { compacted = engine.CreateCompacted(); } finally { engineGate.ExitReadLock(); }
             FilenameRecord[] snapshot; lock (gate) snapshot = byPath.Values.OrderBy(r => r.FileId).ToArray();
             persistence.CommitCompaction(compacted, snapshot, Generation);
+            Interlocked.Increment(ref compactionCount);
             engineGate.EnterWriteLock();
             try { FilenameSearchEngine old = engine; engine = compacted; compacted = null!; old.Dispose(); }
             finally { engineGate.ExitWriteLock(); }
@@ -306,6 +340,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
 
     private IReadOnlyList<CatalogChange> ReconcileCore(CancellationToken token)
     {
+        Interlocked.Increment(ref reconcileCount);
         Dictionary<string, FilenameRecord> prior; lock (gate) prior = new(byPath, StringComparer.Ordinal);
         FilenameRecord[] records = DiscoverRecords(prior.Values, token);
         var next = records.ToDictionary(r => r.FullPath, StringComparer.Ordinal);
@@ -430,6 +465,15 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 if (!PathIdentity.IsSameOrChild(root, r.FullPath) || IsExcluded(r.FullPath)) continue;
                 byPath[r.FullPath] = r; nextId = Math.Max(nextId, r.FileId == int.MaxValue ? int.MaxValue : r.FileId + 1);
             }
+        }
+    }
+
+    private void UpdateMaxPending(int pending)
+    {
+        while (true)
+        {
+            int current = Volatile.Read(ref maxPendingEvents);
+            if (pending <= current || Interlocked.CompareExchange(ref maxPendingEvents, pending, current) == current) return;
         }
     }
 

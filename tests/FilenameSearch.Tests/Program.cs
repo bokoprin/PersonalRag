@@ -12,6 +12,26 @@ void Check(bool condition, string name)
     if (!condition) throw new Exception("FAIL: " + name);
 }
 
+var unicodeVectors = new (string Target, string Query, string Name)[]
+{
+    ("Straße", "STRASSE", "full fold sharp s"),
+    ("ẞ", "ss", "full fold capital sharp s"),
+    ("oﬃce", "office", "full fold ligature ffi"),
+    ("ΟΣ", "ος", "full fold final sigma"),
+    ("Kelvin", "kelvin", "full fold Kelvin sign"),
+    ("İstanbul", "i\u0307stanbul", "full fold dotted I")
+};
+foreach (var vector in unicodeVectors)
+    Check(global::FilenameSearch.Core.FilenameSemantics.Matches(vector.Target, vector.Query, false), vector.Name);
+Check(global::FilenameSearch.Core.FilenameSemantics.Matches("my_report_2026.xlsx_backup", "report_*.xlsx", false),
+    "wildcard substring with suffix");
+Check(global::FilenameSearch.Core.FilenameSemantics.Matches("abcXYZdef", "X?Z", false),
+    "wildcard single scalar");
+Check(global::FilenameSearch.Core.FilenameSemantics.Matches("alpha", "*", false),
+    "wildcard zero or more scalars");
+Check(!global::FilenameSearch.Core.FilenameSemantics.Matches("Straße", "STRASSE", true),
+    "case-sensitive sharp s remains distinct");
+
 try
 {
     string nested = Path.Combine(root, "設計_2026", "deep");
@@ -62,8 +82,9 @@ try
         Check(cafeHits.All(r => File.Exists(r.FullPath)), "returned exact Unicode paths are openable");
         Check(catalog.Search(new SearchRequest("office")).Records.Count == 1,
             "Unicode full case folding maps ligature ffi");
-        Check(catalog.Search(new SearchRequest("\\", SearchScope.FullPath)).Records.Count == catalog.Records.Count,
-            "one-code-point path scan");
+        int pathHits = catalog.Search(new SearchRequest("\\", SearchScope.FullPath)).Records.Count;
+        Check(pathHits == catalog.Records.Count,
+            $"one-code-point path scan (hits={pathHits}, records={catalog.Records.Count})");
         Check(catalog.Search(new SearchRequest("absent_ASTRA_9f23c751")).Records.Count == 0, "zero hit");
         Check(catalog.Search(new SearchRequest("needle", Limit: 1, RequestId: 42)).RequestId == 42,
             "request id is preserved");
@@ -80,10 +101,17 @@ try
             "one live update does not force Route C immutable base into full scan");
 
         await Until(() => catalog.Generation > firstGeneration, "catalog generation advances");
+        await Until(() =>
+        {
+            lock (changeBatches)
+                return changeBatches.Any(batch => batch.Changes.Any(c => c.Kind == CatalogChangeKind.Added));
+        }, "typed change feed reports added record");
         lock (changeBatches)
         {
-            Check(changeBatches.Any(batch => batch.Changes.Any(c => c.Kind == CatalogChangeKind.Added)),
-                "typed change feed reports added record");
+            CatalogChangeBatch addedBatch = changeBatches.Single(batch =>
+                batch.Changes.Any(c => c.Kind == CatalogChangeKind.Added));
+            Check(addedBatch.SourceId is not null, "typed added event identifies its source");
+            Check(addedBatch.SourceGeneration > 0, "typed added event reports source generation");
         }
 
         string renamed = Path.Combine(root, "live-renamed.md");
@@ -91,6 +119,13 @@ try
         await Until(() => catalog.Search(new SearchRequest("live-renamed")).Records.Count == 1 &&
                           catalog.Search(new SearchRequest("unrelated-live")).Records.Count == 0,
             "rename convergence");
+        await Until(() =>
+        {
+            lock (changeBatches)
+                return changeBatches.Any(batch => batch.Changes.Any(change =>
+                    change.Kind == CatalogChangeKind.Renamed &&
+                    change.After?.FullPath.Equals(renamed, StringComparison.Ordinal) == true));
+        }, "typed rename event");
         int renamedId = catalog.Search(new SearchRequest("live-renamed")).Records.Single().FileId;
         FileKey renamedKey = catalog.Search(new SearchRequest("live-renamed")).Records.Single().Key;
 
@@ -101,6 +136,13 @@ try
         File.Move(renamed, moved);
         await Until(() => catalog.Search(new SearchRequest("live-renamed")).Records.SingleOrDefault()?.FullPath == moved,
             "move convergence");
+        await Until(() =>
+        {
+            lock (changeBatches)
+                return changeBatches.Any(batch => batch.Changes.Any(change =>
+                    change.Kind == CatalogChangeKind.Moved &&
+                    change.After?.FullPath.Equals(moved, StringComparison.Ordinal) == true));
+        }, "typed move event");
         FilenameRecord movedRecord = catalog.Search(new SearchRequest("live-renamed")).Records.Single();
         Check(movedRecord.FileId == renamedId, "rename and move preserve internal id");
         if (renamedKey.IsNative)

@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FilenameSearch.E2E", "tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FilenameSearch.Idle", "tests\FilenameSearch.Idle\FilenameSearch.Idle.csproj", "{94A69008-57F9-4FCA-9CE3-18A243D64353}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FilenameSearch.Formal", "tests\FilenameSearch.Formal\FilenameSearch.Formal.csproj", "{F8D0A6AF-7D3B-4F38-A2EE-6A8D73B6B9A1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -56,6 +58,10 @@ Global
 		{94A69008-57F9-4FCA-9CE3-18A243D64353}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{94A69008-57F9-4FCA-9CE3-18A243D64353}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{94A69008-57F9-4FCA-9CE3-18A243D64353}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F8D0A6AF-7D3B-4F38-A2EE-6A8D73B6B9A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F8D0A6AF-7D3B-4F38-A2EE-6A8D73B6B9A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F8D0A6AF-7D3B-4F38-A2EE-6A8D73B6B9A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F8D0A6AF-7D3B-4F38-A2EE-6A8D73B6B9A1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -122,6 +122,14 @@ internal static class LocalVolumeDiscovery
             try
             {
                 if (!drive.IsReady || drive.DriveType != DriveType.Fixed) continue;
+                // Cloud-backed virtual drives can report DriveType.Fixed even though they
+                // are not local filesystem volumes (for example, Google Drive). They must
+                // not be federated by the rootless GUI or counted as a second fixed local
+                // volume. Physical fixed disks keep their normal volume labels.
+                string label = drive.VolumeLabel;
+                if (label.Contains("google drive", StringComparison.OrdinalIgnoreCase) ||
+                    label.Contains("onedrive", StringComparison.OrdinalIgnoreCase) ||
+                    label.Contains("dropbox", StringComparison.OrdinalIgnoreCase)) continue;
                 string root = Path.GetFullPath(drive.RootDirectory.FullName);
                 result.Add(new VolumeDescriptor(root, VolumeIdentity.GetVolumeId(root), drive.DriveFormat));
             }

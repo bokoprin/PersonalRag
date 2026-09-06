@@ -254,7 +254,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
     private static bool Matches(FilenameRecord record, SearchRequest request)
     {
         string target = request.Scope == SearchScope.Filename ? record.Name : record.FullPath;
-        return FilenameSearch.Core.FilenameSemantics.Matches(target, request.Query, request.CaseSensitive);
+        return global::FilenameSearch.Core.FilenameSemantics.Matches(target, request.Query, request.CaseSensitive);
     }
 
     private static bool HasWildcard(string query) =>
@@ -326,8 +326,8 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         public void Upsert(FilenameRecord record)
         {
             Remove(record.FileId);
-            string nf = FilenameSearch.Core.FilenameSemantics.Normalize(record.Name, false);
-            string pf = FilenameSearch.Core.FilenameSemantics.Normalize(record.FullPath, false);
+            string nf = global::FilenameSearch.Core.FilenameSemantics.Normalize(record.Name, false);
+            string pf = global::FilenameSearch.Core.FilenameSemantics.Normalize(record.FullPath, false);
             string[] nk = Ngrams(nf).Distinct(StringComparer.Ordinal).ToArray();
             string[] pk = Ngrams(pf).Distinct(StringComparer.Ordinal).ToArray();
             AddKeys(name, nk, record.FileId);
@@ -343,7 +343,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             {
                 LastCandidateCount = 0; LastUsedScan = false; return [];
             }
-            string foldedQuery = FilenameSearch.Core.FilenameSemantics.Normalize(request.Query, false);
+            string foldedQuery = global::FilenameSearch.Core.FilenameSemantics.Normalize(request.Query, false);
             HashSet<int>? candidates = null;
             foreach (string token in foldedQuery.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
             {

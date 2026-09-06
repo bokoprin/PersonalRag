@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,6 +19,7 @@ public partial class MainWindow : Window
     private readonly string? startupProbePath;
     private readonly bool exitAfterProbe;
     private readonly string? startupProbeQuery;
+    private readonly string? startupProbeMode;
     private readonly Channel<SearchWork> searchQueue = Channel.CreateUnbounded<SearchWork>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly Task searchWorker;
@@ -27,6 +29,7 @@ public partial class MainWindow : Window
     private long searchVersion;
     private int statusUpdateQueued;
     private int startupProbeWritten;
+    private bool probeDrivingQuery;
     private bool ready;
     private bool closing;
 
@@ -35,13 +38,15 @@ public partial class MainWindow : Window
         string? store = null,
         string? startupProbePath = null,
         bool exitAfterProbe = false,
-        string? startupProbeQuery = null)
+        string? startupProbeQuery = null,
+        string? startupProbeMode = null)
     {
         rootOverride = string.IsNullOrWhiteSpace(root) ? null : root;
         storeOverride = string.IsNullOrWhiteSpace(store) ? null : store;
         this.startupProbePath = startupProbePath;
         this.exitAfterProbe = exitAfterProbe;
         this.startupProbeQuery = startupProbeQuery;
+        this.startupProbeMode = startupProbeMode ?? (startupProbePath is null ? null : "startup");
         InitializeComponent();
         Results.ItemsSource = rows;
         searchWorker = Task.Factory.StartNew(SearchLoop, CancellationToken.None,
@@ -118,7 +123,7 @@ public partial class MainWindow : Window
 
     private async void QueryChanged(object sender, RoutedEventArgs e)
     {
-        if (ready) await SearchAsync();
+        if (ready && !probeDrivingQuery) await SearchAsync();
     }
 
     private async Task SearchAsync()
@@ -165,6 +170,11 @@ public partial class MainWindow : Window
     {
         if (startupProbePath is null) return;
         if (Interlocked.Exchange(ref startupProbeWritten, 1) != 0) return;
+        if (error is null && startupProbeMode is "warm" or "live")
+        {
+            _ = startupProbeMode == "warm" ? RunWarmProbeAsync() : RunLiveProbeAsync();
+            return;
+        }
         try
         {
             using var process = Process.GetCurrentProcess();
@@ -189,6 +199,141 @@ public partial class MainWindow : Window
             if (exitAfterProbe)
                 _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(Close));
         }
+    }
+
+    private async Task RunWarmProbeAsync()
+    {
+        try
+        {
+            GuiProbeQuery[] queries =
+            [
+                new("fixture_", SearchScope.Filename),
+                new("Ω", SearchScope.Filename),
+                new("zz", SearchScope.Filename),
+                new("report_*.xlsx", SearchScope.Filename),
+                new("X?Z", SearchScope.Filename),
+                new("fixture_0000001", SearchScope.FullPath),
+                new("日本語", SearchScope.Filename),
+                new("absent_formal_query", SearchScope.Filename)
+            ];
+            Random random = new(123456);
+            GuiProbeQuery[] order = queries.OrderBy(_ => random.Next()).ToArray();
+            var warmup = new List<double>();
+            var measured = new List<double>();
+            for (int round = 0; round < 20; round++)
+            {
+                foreach (GuiProbeQuery query in order)
+                {
+                    Stopwatch watch = Stopwatch.StartNew();
+                    probeDrivingQuery = true;
+                    try
+                    {
+                        Scope.SelectedIndex = query.Scope == SearchScope.FullPath ? 1 : 0;
+                        FileQuery.Text = query.Query;
+                        await SearchAsync();
+                    }
+                    finally { probeDrivingQuery = false; }
+                    watch.Stop();
+                    (round < 2 ? warmup : measured).Add(watch.Elapsed.TotalMilliseconds);
+                }
+            }
+            using Process process = Process.GetCurrentProcess();
+            process.Refresh();
+            double p95 = Percentile(measured, .95), p99 = Percentile(measured, .99), max = measured.Count == 0 ? 0 : measured.Max();
+            WriteProbeJson(new
+            {
+                version = 1, mode = "warm-input", source_commit = SourceCommit(), benchmark_rounds = 20,
+                warmup_rounds = 2, measured_rounds = 18, query_shuffle_seed = 123456,
+                warmup_samples_ms = warmup, measured_samples_ms = measured,
+                p50_ms = Percentile(measured, .50), p95_ms = p95, p99_ms = p99, max_ms = max,
+                private_bytes = process.PrivateMemorySize64, entries = catalog?.RecordCount ?? 0,
+                pass = p95 <= 100 && max <= 200, utc = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex) { WriteProbeJson(new { version = 1, mode = "warm-input", source_commit = SourceCommit(), pass = false, error = ex.ToString(), utc = DateTime.UtcNow }); }
+        finally { CloseAfterProbe(); }
+    }
+
+    private async Task RunLiveProbeAsync()
+    {
+        string? fixture = null;
+        string? renamed = null;
+        try
+        {
+            string root = catalog is FileSystemCatalog one ? one.Root : rootOverride ?? throw new InvalidOperationException("live probe requires a single root catalog");
+            string directory = Path.Combine(root, ".formal-gui-live");
+            Directory.CreateDirectory(directory);
+            string stem = "gui_live_probe_" + Environment.ProcessId;
+            fixture = Path.Combine(directory, stem + ".txt");
+            renamed = Path.Combine(directory, stem + "_renamed.txt");
+            probeDrivingQuery = true;
+            Scope.SelectedIndex = 0;
+            FileQuery.Text = stem;
+            await SearchAsync();
+            probeDrivingQuery = false;
+            if (rows.Count != 0) throw new InvalidOperationException("live fixture query was not initially empty");
+            Stopwatch createWatch = Stopwatch.StartNew();
+            File.WriteAllText(fixture, "live");
+            await UntilUiAsync(() => rows.Any(row => row.FullPath.Equals(fixture, StringComparison.Ordinal)), "GUI live create");
+            createWatch.Stop();
+            Stopwatch renameWatch = Stopwatch.StartNew();
+            File.Move(fixture, renamed);
+            await UntilUiAsync(() => rows.Any(row => row.FullPath.Equals(renamed, StringComparison.Ordinal)), "GUI live rename");
+            renameWatch.Stop();
+            Stopwatch deleteWatch = Stopwatch.StartNew();
+            File.Delete(renamed);
+            await UntilUiAsync(() => rows.Count == 0, "GUI live delete");
+            deleteWatch.Stop();
+            WriteProbeJson(new { version = 1, mode = "live-refresh", source_commit = SourceCommit(), create_ms = createWatch.Elapsed.TotalMilliseconds, rename_ms = renameWatch.Elapsed.TotalMilliseconds, delete_ms = deleteWatch.Elapsed.TotalMilliseconds, pass = createWatch.Elapsed.TotalMilliseconds <= 1000 && renameWatch.Elapsed.TotalMilliseconds <= 1000 && deleteWatch.Elapsed.TotalMilliseconds <= 1000, utc = DateTime.UtcNow });
+        }
+        catch (Exception ex) { WriteProbeJson(new { version = 1, mode = "live-refresh", source_commit = SourceCommit(), pass = false, error = ex.ToString(), utc = DateTime.UtcNow }); }
+        finally
+        {
+            probeDrivingQuery = false;
+            if (fixture is not null) { try { if (File.Exists(fixture)) File.Delete(fixture); } catch { } }
+            if (renamed is not null) { try { if (File.Exists(renamed)) File.Delete(renamed); } catch { } }
+            CloseAfterProbe();
+        }
+    }
+
+    private void WriteProbeJson(object payload)
+    {
+        if (startupProbePath is null) return;
+        string full = Path.GetFullPath(startupProbePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+        File.WriteAllText(full, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private void CloseAfterProbe()
+    {
+        if (exitAfterProbe) _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(Close));
+    }
+
+    private async Task UntilUiAsync(Func<bool> condition, string name)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (!condition())
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            await Task.Delay(10, timeout.Token);
+        }
+    }
+
+    private static double Percentile(IReadOnlyList<double> values, double percentile)
+    {
+        if (values.Count == 0) return 0;
+        double[] sorted = values.OrderBy(value => value).ToArray();
+        return sorted[Math.Clamp((int)Math.Ceiling(sorted.Length * percentile) - 1, 0, sorted.Length - 1)];
+    }
+
+    private static string SourceCommit()
+    {
+        try
+        {
+            using Process process = Process.Start(new ProcessStartInfo("git", "rev-parse HEAD") { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true })!;
+            string value = process.StandardOutput.ReadToEnd().Trim(); process.WaitForExit(5000); return value;
+        }
+        catch { return "unknown"; }
     }
 
     private void ResultKey(object sender, KeyEventArgs e)
@@ -279,6 +424,8 @@ public partial class MainWindow : Window
         SearchRequest Request,
         CancellationToken Token,
         TaskCompletionSource<FilenameSearchResult> Completion);
+
+    private sealed record GuiProbeQuery(string Query, SearchScope Scope);
 }
 
 public sealed class ResultRow

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "normalization": "NFC then independent Unicode fixture fold for acceptance vectors",
+  "wildcard": "substring glob; ? consumes one Unicode scalar; * consumes zero or more",
+  "vectors": [
+    { "target": "Straße", "query": "STRASSE", "caseSensitive": false, "match": true },
+    { "target": "ẞ", "query": "ss", "caseSensitive": false, "match": true },
+    { "target": "oﬃce", "query": "office", "caseSensitive": false, "match": true },
+    { "target": "ΟΣ", "query": "ος", "caseSensitive": false, "match": true },
+    { "target": "Kelvin", "query": "kelvin", "caseSensitive": false, "match": true },
+    { "target": "İstanbul", "query": "i̇stanbul", "caseSensitive": false, "match": true },
+    { "target": "my_report_2026.xlsx_backup", "query": "report_*.xlsx", "caseSensitive": false, "match": true },
+    { "target": "abcXYZdef", "query": "X?Z", "caseSensitive": false, "match": true },
+    { "target": "alpha", "query": "*", "caseSensitive": false, "match": true },
+    { "target": "Straße", "query": "STRASSE", "caseSensitive": true, "match": false }
+  ]
+}

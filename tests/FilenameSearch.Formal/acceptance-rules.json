@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "benchmarkRounds": 20,
+  "warmupRounds": 2,
+  "measuredRounds": 18,
+  "queryShuffleSeed": 123456,
+  "acOverride": {
+    "AC_requirement_overridden": true,
+    "precedence": "this formal plan overrides AC-only requirements in CODEX_FILENAME_FORMAL_REMEASURE.md",
+    "scope": "AC connection requirement only",
+    "record": ["ACLineStatus", "battery", "charging", "powerScheme", "thermalThrottling"],
+    "otherGatesUnchanged": true
+  },
+  "hardThresholds": {
+    "correctnessFalsePositive": 0,
+    "correctnessFalseNegative": 0,
+    "queryP50Ms": 20,
+    "queryP95Ms": 50,
+    "queryP99Ms": 100,
+    "worstClassP95Ms": 50,
+    "readyCorePrivateBytes": 1073741824,
+    "persistentBytes": 1073741824,
+    "initialBuildSeconds": 60,
+    "existingLoadSeconds": 1.5,
+    "sustainedQueryCount": 10000,
+    "churnConvergenceP95Ms": 1000,
+    "churnPrivateBytes": 1610612736,
+    "guiFreshProcessCount": 10,
+    "guiStartupP95Ms": 2000,
+    "guiWarmP95Ms": 100,
+    "guiWarmMaxMs": 200,
+    "guiLiveRefreshMs": 1000,
+    "idleSeconds": 600,
+    "idleCpuPercent": 1
+  },
+  "requiredQueryClasses": ["rare", "common", "oneChar", "twoChar", "wildcard", "fullPath"],
+  "requiredUnicodeVectors": ["sharpS", "capitalSharpS", "ligatureFfi", "finalSigma", "kelvin", "dottedI", "nfcNfd"],
+  "requiredChurn": { "create": 10000, "modify": 10000, "rename": 10000, "move": 10000, "delete": 10000, "mixedSeconds": 1800, "stormEvents": 100000 },
+  "requiredRestartRootEntries": 4096,
+  "persistentAccounting": ["manifest", "dataRecursive", "writerLock", "dirtyMarker"],
+  "inaccessibleFixture": { "safeAclWhenPossible": true, "otherwise": "informational_limitation", "formalNotRun": false },
+  "remotePolicy": { "afterLock": ["noPull", "noMerge", "noRebase", "noForcePush"], "recordRemoteSha": true },
+  "immutableAcceptanceConditions": [
+    "hardThresholds", "filenameFullPathSemantics", "caseSemantics", "unicodeFullCasefold",
+    "wildcardSubstringSemantics", "requiredQueryClasses", "actualFilesystemEntryCount",
+    "logical100GiB", "corpusDifficulty", "independentOracle", "fpFnZero", "churnQuantity",
+    "churnDuration", "guiProcessCount", "corruptionFixtures", "postUpdateStates", "completionRules"
+  ],
+  "completion": { "allowedNotRun": ["NOT_RUN_NO_SECOND_FIXED_VOLUME"] }
+}

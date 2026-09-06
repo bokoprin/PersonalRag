@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "shuffleSeed": 123456,
+  "rounds": 20,
+  "warmupRounds": 2,
+  "measuredRounds": 18,
+  "queries": [
+    { "class": "rare", "query": "Straße", "scope": "Filename", "caseSensitive": false },
+    { "class": "common", "query": "fixture_000", "scope": "Filename", "caseSensitive": false },
+    { "class": "oneChar", "query": "Ω", "scope": "Filename", "caseSensitive": false },
+    { "class": "twoChar", "query": "zz", "scope": "Filename", "caseSensitive": false },
+    { "class": "wildcard", "query": "report_*.xlsx", "scope": "Filename", "caseSensitive": false },
+    { "class": "wildcardFullPath", "query": "report_*.xlsx", "scope": "FullPath", "caseSensitive": false },
+    { "class": "wildcardQuestion", "query": "X?Z", "scope": "Filename", "caseSensitive": false },
+    { "class": "fullPath", "query": "fixture_0000001", "scope": "FullPath", "caseSensitive": false },
+    { "class": "sharpS", "query": "STRASSE", "scope": "Filename", "caseSensitive": false },
+    { "class": "dottedI", "query": "i̇stanbul", "scope": "Filename", "caseSensitive": false }
+  ]
+}

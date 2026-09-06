@@ -75,6 +75,9 @@ public sealed class MultiVolumeCatalog : IFilenameCatalog
         return new MultiVolumeCatalog(catalogs, warnings.OrderBy(x => x, StringComparer.Ordinal).ToArray());
     }
 
+    internal static MultiVolumeCatalog CreateForFormal(IReadOnlyList<FileSystemCatalog> catalogs) =>
+        new(catalogs.ToArray(), []);
+
     public CatalogSnapshot GetSnapshot()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
