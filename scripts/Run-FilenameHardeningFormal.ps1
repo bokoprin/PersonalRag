@@ -188,10 +188,15 @@ $sourceSha = (& git -C $repo rev-parse HEAD).Trim()
 $initialRemoteSha = (& git -C $repo ls-remote origin refs/heads/codex/filename-hardening 2>$null).Trim().Split("`t")[0]
 if ([string]::IsNullOrWhiteSpace($initialRemoteSha)) { throw 'Unable to resolve origin/codex/filename-hardening.' }
 
+$ramBytes = $null
+try { $ramBytes = [System.GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes } catch {}
+if ($null -eq $ramBytes) {
+    try { $ramBytes = [int64](Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory } catch { $ramBytes = $null }
+}
 $machine = [ordered]@{
     os = [System.Environment]::OSVersion.VersionString
     cpu = [System.Environment]::GetEnvironmentVariable('PROCESSOR_IDENTIFIER')
-    ram_bytes = [System.GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes
+    ram_bytes = $ramBytes
     dotnet_sdk = (& dotnet --version).Trim()
     physical_disks = @()
 }
