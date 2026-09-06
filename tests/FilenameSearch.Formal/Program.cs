@@ -159,8 +159,11 @@ static async Task<object> RunCoreAsync(string root, string store, int count, int
     var buildWatch = Stopwatch.StartNew();
     await using var catalog = FileSystemCatalog.Open(root, store);
     await catalog.Ready.ConfigureAwait(false);
-    await catalog.WaitForIdleAsync(TimeSpan.FromMinutes(30)).ConfigureAwait(false);
     buildWatch.Stop();
+    // Ready is published after discovery, Route C base construction, and the atomic
+    // persistence publish. The watcher catch-up reconcile is awaited outside this timer
+    // so Initial Build measures the required build pipeline rather than a redundant scan.
+    await catalog.WaitForIdleAsync(TimeSpan.FromMinutes(30)).ConfigureAwait(false);
     CatalogSnapshot snapshot = catalog.GetSnapshot();
     List<QuerySpec> queries = BuildQueries(snapshot.Records, root);
     var correctness = new List<object>();
