@@ -35,6 +35,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
     private int nextId = 1;
     private int forceReconcile;
     private int pendingEvents;
+    private int pendingPersists;
     private string status = "準備中";
     private bool started;
     private bool disposed;
@@ -153,7 +154,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         timeoutCts.CancelAfter(timeout);
         while (!timeoutCts.IsCancellationRequested)
         {
-            if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0) return;
+            if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 && Volatile.Read(ref pendingPersists) == 0) return;
             await Task.Delay(20, timeoutCts.Token).ConfigureAwait(false);
         }
         timeoutCts.Token.ThrowIfCancellationRequested();
@@ -200,8 +201,8 @@ public sealed class FileSystemCatalog : IAsyncDisposable
                     bool changed = pending.Any(change => change.CatchUp) && !rebuild
                         ? CatchUpCore()
                         : rebuild ? RebuildCore() : ProcessEvents(pending);
-                    SetStatus("Ready");
                     if (changed) PersistSoon();
+                    SetStatus("Ready");
                 }
                 catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
                 {
@@ -594,7 +595,9 @@ public sealed class FileSystemCatalog : IAsyncDisposable
 
     private void PersistSoon()
     {
-        if (!disposed) persistRequests.Writer.TryWrite(true);
+        if (disposed) return;
+        Interlocked.Increment(ref pendingPersists);
+        persistRequests.Writer.TryWrite(true);
     }
 
     private async Task PersistLoop()
@@ -604,7 +607,7 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             while (await persistRequests.Reader.WaitToReadAsync(stop.Token).ConfigureAwait(false))
             {
                 await Task.Delay(250, stop.Token).ConfigureAwait(false);
-                while (persistRequests.Reader.TryRead(out _)) { }
+                while (persistRequests.Reader.TryRead(out _)) Interlocked.Decrement(ref pendingPersists);
                 try
                 {
                     SetStatus("保存中");

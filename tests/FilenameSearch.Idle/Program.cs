@@ -30,7 +30,8 @@ try
     await catalog.WaitForIdleAsync(TimeSpan.FromMinutes(2));
     if (catalog.Search(new SearchRequest("", Limit: 1)).Records.Count != 1)
         throw new InvalidOperationException("Existing index is not queryable before idle sampling");
-    await Task.Delay(TimeSpan.FromSeconds(3));
+    double settleSeconds = await WaitForStoreStableAsync(store, TimeSpan.FromSeconds(30));
+    output["initialization_settle_seconds"] = settleSeconds;
     var process = Process.GetCurrentProcess();
     process.Refresh();
     TimeSpan cpuBefore = process.TotalProcessorTime;
@@ -66,4 +67,29 @@ finally
     output["finished_utc"] = DateTime.UtcNow;
     Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
     File.WriteAllText(reportPath, JsonSerializer.Serialize(output, new JsonSerializerOptions { WriteIndented = true }));
+}
+
+static async Task<double> WaitForStoreStableAsync(string store, TimeSpan timeout)
+{
+    var watch = Stopwatch.StartNew();
+    FileInfo initial = new(store);
+    if (!initial.Exists) throw new FileNotFoundException("Store was not created before idle sampling", store);
+    long length = initial.Length;
+    DateTime writeTime = initial.LastWriteTimeUtc;
+    int stableSamples = 0;
+    while (watch.Elapsed < timeout)
+    {
+        await Task.Delay(250);
+        FileInfo current = new(store);
+        if (current.Exists && current.Length == length && current.LastWriteTimeUtc == writeTime)
+        {
+            if (++stableSamples >= 4) return watch.Elapsed.TotalSeconds;
+            continue;
+        }
+        if (!current.Exists) throw new FileNotFoundException("Store disappeared during initialization", store);
+        length = current.Length;
+        writeTime = current.LastWriteTimeUtc;
+        stableSamples = 0;
+    }
+    throw new TimeoutException("Store did not settle before idle sampling");
 }
