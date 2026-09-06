@@ -373,11 +373,22 @@ foreach ($name in $reportNames) {
 }
 $formalPass = $true
 foreach ($entry in $reportValues.GetEnumerator()) {
-    if ($entry.Key -eq 'MULTI_VOLUME.json' -and $entry.Value.status -eq 'NOT_RUN_NO_SECOND_FIXED_VOLUME') { continue }
-    if ($entry.Value.status -match 'NOT_RUN|BLOCKED|estimated') { $formalPass = $false }
-    if (-not [bool]$entry.Value.pass) { $formalPass = $false }
+    $properties = @($entry.Value.PSObject.Properties.Name)
+    $status = if ($properties -contains 'status') { [string]$entry.Value.status } else { '' }
+    $passValue = if ($properties -contains 'pass') { [bool]$entry.Value.pass } else { $false }
+    if ($entry.Key -eq 'MULTI_VOLUME.json' -and $status -eq 'NOT_RUN_NO_SECOND_FIXED_VOLUME') { continue }
+    if ($status -match 'NOT_RUN|BLOCKED|estimated') { $formalPass = $false }
+    if (-not $passValue) { $formalPass = $false }
 }
-$limitations = @($reportValues.GetEnumerator() | Where-Object { $_.Value.status -eq 'informational_limitation' -or $_.Value.informational_limitation } | ForEach-Object { [pscustomobject]@{ report = $_.Key; reason = if ($_.Value.informational_limitation) { $_.Value.informational_limitation } else { $_.Value.limitation } } })
+$limitations = @($reportValues.GetEnumerator() | ForEach-Object {
+    $properties = @($_.Value.PSObject.Properties.Name)
+    $status = if ($properties -contains 'status') { [string]$_.Value.status } else { '' }
+    $informational = if ($properties -contains 'informational_limitation') { $_.Value.informational_limitation } else { $null }
+    $limitation = if ($properties -contains 'limitation') { $_.Value.limitation } else { $null }
+    if ($status -eq 'informational_limitation' -or $informational) {
+        [pscustomobject]@{ report = $_.Key; reason = if ($informational) { $informational } else { $limitation } }
+    }
+})
 $finalPath = Join-Path $reports 'FINAL_FILENAME_HARDENING.json'
 $final = [ordered]@{ version = 1; series_id = $lock.series_id; evaluation_complete = $formalPass; pass = $formalPass; measured_source_commit_sha = $sourceSha; report_head_sha = $sourceSha; initial_remote_branch_sha = $initialRemoteSha; reports = $reportValues; allowed_not_run = @('NOT_RUN_NO_SECOND_FIXED_VOLUME'); informational_limitations = $limitations; AC_requirement_overridden = $true; ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; thermal_throttling = $power.ThermalThrottling; utc = [DateTime]::UtcNow }
 $final | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $finalPath -Encoding utf8
