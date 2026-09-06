@@ -42,6 +42,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private int recordCount;
     private FilenameSearchEngine engine;
     private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, reconcileQueued, compactionRunning, directoryReconcileScheduled;
+    private long lastEventTick = Environment.TickCount64;
     private long queueSaturationCount, reconcileCount, compactionCount;
     private long generation;
     private string status = "準備中";
@@ -61,7 +62,12 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         changeFeed = VolumeChangeFeedFactory.Create(this.root, this.store);
         changeFeed.Changed += Queue;
-        changeFeed.Overflow += () => { Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile(); };
+        changeFeed.Overflow += () =>
+        {
+            Volatile.Write(ref lastEventTick, Environment.TickCount64);
+            Interlocked.Exchange(ref forceReconcile, 1);
+            SignalReconcile();
+        };
         worker = Task.Run(UpdateLoop);
     }
 
@@ -200,6 +206,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         bool nowExcluded = IsExcluded(change.Path);
         bool oldExcluded = change.OldPath is not null && IsExcluded(change.OldPath);
         if (change.OldPath is null ? nowExcluded : nowExcluded && oldExcluded) return;
+        Volatile.Write(ref lastEventTick, Environment.TickCount64);
         if (change.Reconcile) Interlocked.Exchange(ref forceReconcile, 1);
         if (events.Writer.TryWrite(change))
         {
@@ -243,9 +250,19 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 {
                     SetStatus("変更を反映中");
                     bool reconcile = Interlocked.Exchange(ref forceReconcile, 0) != 0 || batch.Any(e => e.Reconcile || e.CatchUp);
-                    IReadOnlyList<CatalogChange> changes = reconcile ? ReconcileCore(stop.Token) : ProcessEvents(batch);
-                    if (Interlocked.Exchange(ref forceReconcile, 0) != 0)
-                        changes = changes.Concat(ReconcileCore(stop.Token)).ToArray();
+                    IReadOnlyList<CatalogChange> changes;
+                    if (reconcile)
+                    {
+                        // A saturated watcher queue already means the filesystem scan is
+                        // the authoritative event set. Drain markers/events and wait for a
+                        // short quiet window so one storm cannot retain a million-record
+                        // reconcile graph on every worker iteration.
+                        await WaitForReconcileQuietAsync(stop.Token).ConfigureAwait(false);
+                        Interlocked.Exchange(ref forceReconcile, 0);
+                        changes = ReconcileCore(stop.Token);
+                    }
+                    else changes = ProcessEvents(batch);
+                    if (Interlocked.Exchange(ref forceReconcile, 0) != 0) SignalReconcile();
                     Publish(changes, reconcile || batch.Any(e => e.Reconcile || e.CatchUp));
                     CompactIfNeeded();
                     SetStatus("Ready");
@@ -259,6 +276,19 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+    }
+
+    private async Task WaitForReconcileQuietAsync(CancellationToken cancellationToken)
+    {
+        const long quietMilliseconds = 250;
+        while (true)
+        {
+            while (events.Reader.TryRead(out _)) Interlocked.Decrement(ref pendingEvents);
+            long quietFor = Environment.TickCount64 - Volatile.Read(ref lastEventTick);
+            if (Volatile.Read(ref pendingEvents) == 0 && quietFor >= quietMilliseconds) return;
+            await Task.Delay((int)Math.Clamp(quietMilliseconds - quietFor, 10, quietMilliseconds), cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private IReadOnlyList<CatalogChange> ProcessEvents(IReadOnlyList<FileSystemEvent> pending)
