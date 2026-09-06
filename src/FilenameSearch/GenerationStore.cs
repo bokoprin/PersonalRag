@@ -242,14 +242,18 @@ internal sealed class GenerationStore : IDisposable
 
     private static void WriteMetadata(string path, IReadOnlyList<FilenameRecord> records)
     {
-        FilenameRecord[] ordered = records.OrderBy(r => r.FileId).ToArray();
+        // FileSystemCatalog publishes records in FileId order. Reuse that list during the
+        // initial publish instead of allocating another million-reference sort buffer.
+        IReadOnlyList<FilenameRecord> ordered = IsSortedByFileId(records)
+            ? records
+            : records.OrderBy(r => r.FileId).ToArray();
         var volumes = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (FilenameRecord record in ordered)
         {
             AddVolume(record.Key.VolumeId);
             if (record.ParentKey is FileKey parent) AddVolume(parent.VolumeId);
         }
-        int count = ordered.Length;
+        int count = ordered.Count;
         var encoding = new UTF8Encoding(false);
         var nameOffsets = new int[count]; var nameLengths = new int[count];
         var pathOffsets = new int[count]; var pathLengths = new int[count];
@@ -282,6 +286,18 @@ internal sealed class GenerationStore : IDisposable
         void AddVolume(string volume)
         {
             if (!volumes.ContainsKey(volume)) volumes[volume] = volumes.Count;
+        }
+
+        static bool IsSortedByFileId(IReadOnlyList<FilenameRecord> values)
+        {
+            int previous = int.MinValue;
+            for (int i = 0; i < values.Count; i++)
+            {
+                int current = values[i].FileId;
+                if (current <= previous) return false;
+                previous = current;
+            }
+            return true;
         }
     }
 

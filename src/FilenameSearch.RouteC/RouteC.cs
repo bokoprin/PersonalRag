@@ -95,15 +95,13 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         ArgumentNullException.ThrowIfNull(pathSelector);
         int[] idsCopy = fileIds.ToArray();
         ValidateSortedIds(idsCopy);
-        string[] names = new string[idsCopy.Length];
-        for (int i = 0; i < names.Length; i++) names[i] = FilenameSemantics.Normalize(nameSelector(i), false);
-        CompactIndex nextNames = BuildIndex(names, includeOneRune: true, includeShort: true, componentsOnly: false);
-        names = [];
+        CompactIndex nextNames = BuildIndex(idsCopy.Length,
+            i => FilenameSemantics.Normalize(nameSelector(i), false),
+            includeOneRune: true, includeShort: true, componentsOnly: false);
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: false);
-        string[] paths = new string[idsCopy.Length];
-        for (int i = 0; i < paths.Length; i++) paths[i] = FilenameSemantics.Normalize(pathSelector(i), false);
-        CompactIndex nextPaths = BuildIndex(paths, includeOneRune: false, includeShort: false, componentsOnly: true);
-        paths = [];
+        CompactIndex nextPaths = BuildIndex(idsCopy.Length,
+            i => FilenameSemantics.Normalize(pathSelector(i), false),
+            includeOneRune: false, includeShort: false, componentsOnly: true);
         lock (gate)
         {
             ThrowIfDisposed();
@@ -355,6 +353,64 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
                     if (delta != 0) next |= 0x80;
                     span[0] = next;
                     encoded.Advance(1);
+                } while (delta != 0);
+                previous = valuesFlat[p];
+            }
+            byteOffsets[i + 1] = encoded.WrittenCount;
+        }
+        return new CompactIndex(keys, byteOffsets, postingCounts, encoded.WrittenSpan.ToArray());
+    }
+
+    private static CompactIndex BuildIndex(int count, Func<int, string> valueSelector,
+        bool includeOneRune, bool includeShort, bool componentsOnly)
+    {
+        ArgumentNullException.ThrowIfNull(valueSelector);
+        // Adapter builds use the exact metadata table as the source. Normalize one value at
+        // a time in both passes instead of retaining one million normalized strings beside
+        // the immutable exact records and posting maps.
+        var counts = new Dictionary<ulong, int>();
+        const int mediumDivisor = 32;
+        int medium = Math.Max(4_096, Math.Max(1, count / mediumDivisor));
+        for (int i = 0; i < count; i++)
+        {
+            foreach (ulong key in KeysFor(valueSelector(i), includeOneRune, includeShort, componentsOnly))
+            {
+                if (counts.TryGetValue(key, out int current))
+                {
+                    if (current <= medium) counts[key] = current + 1;
+                }
+                else counts[key] = 1;
+            }
+        }
+        var selected = counts.Where(pair => pair.Value <= medium)
+            .Select(pair => (Key: pair.Key, Count: pair.Value))
+            .OrderBy(pair => pair.Key).ToArray();
+        var keys = new ulong[selected.Length]; var postingCounts = new int[selected.Length];
+        var offsets = new int[selected.Length + 1];
+        for (int i = 0; i < selected.Length; i++)
+        {
+            keys[i] = selected[i].Key; postingCounts[i] = selected[i].Count;
+            offsets[i + 1] = checked(offsets[i] + postingCounts[i]); counts[keys[i]] = i;
+        }
+        foreach (ulong key in counts.Keys.ToArray()) counts[key] = -1;
+        for (int i = 0; i < keys.Length; i++) counts[keys[i]] = i;
+        var valuesFlat = new int[offsets[^1]]; var cursors = offsets[..^1].ToArray();
+        for (int i = 0; i < count; i++)
+        {
+            foreach (ulong key in KeysFor(valueSelector(i), includeOneRune, includeShort, componentsOnly))
+                if (counts.TryGetValue(key, out int index) && index >= 0) valuesFlat[cursors[index]++] = i;
+        }
+        var encoded = new ArrayBufferWriter<byte>(); var byteOffsets = new int[keys.Length + 1];
+        for (int i = 0; i < keys.Length; i++)
+        {
+            int previous = 0;
+            for (int p = offsets[i]; p < offsets[i + 1]; p++)
+            {
+                uint delta = checked((uint)(valuesFlat[p] - previous));
+                do
+                {
+                    Span<byte> span = encoded.GetSpan(1); byte next = (byte)(delta & 0x7F);
+                    delta >>= 7; if (delta != 0) next |= 0x80; span[0] = next; encoded.Advance(1);
                 } while (delta != 0);
                 previous = valuesFlat[p];
             }

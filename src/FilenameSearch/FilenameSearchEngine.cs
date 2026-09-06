@@ -36,6 +36,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
     }
 
     public int OverlayCount { get { lock (gate) return delta.Count; } }
+    internal int BaseRecordCount { get { lock (gate) return baseCount; } }
 
     public bool ShouldCompact
     {
@@ -52,11 +53,17 @@ public sealed class FilenameSearchEngine : IFilenameSearch
     public void Build(IReadOnlyList<FilenameRecord> records)
     {
         ArgumentNullException.ThrowIfNull(records);
-        var exact = records.OrderBy(r => r.FileId).ToArray();
+        // The production catalog assigns monotonically increasing FileIds. Reusing that
+        // order avoids a second million-record reference array during the initial build;
+        // standalone callers that provide an unsorted list still receive the historical
+        // deterministic ordering.
+        IReadOnlyList<FilenameRecord> exact = IsSortedByFileId(records)
+            ? records
+            : records.OrderBy(r => r.FileId).ToArray();
         ValidateExact(exact);
         var next = new RouteCEngine();
-        int[] ids = new int[exact.Length];
-        for (int i = 0; i < exact.Length; i++)
+        int[] ids = new int[exact.Count];
+        for (int i = 0; i < exact.Count; i++)
             ids[i] = exact[i].FileId;
         next.Build(ids, i => exact[i].Name, i => exact[i].FullPath);
         lock (gate)
@@ -75,7 +82,9 @@ public sealed class FilenameSearchEngine : IFilenameSearch
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(indexPath);
         ArgumentNullException.ThrowIfNull(exactRecords);
-        var exact = exactRecords.OrderBy(r => r.FileId).ToArray();
+        IReadOnlyList<FilenameRecord> exact = IsSortedByFileId(exactRecords)
+            ? exactRecords
+            : exactRecords.OrderBy(r => r.FileId).ToArray();
         ValidateExact(exact);
         var next = new RouteCEngine();
         next.Load(Path.GetFullPath(indexPath));
@@ -391,30 +400,42 @@ public sealed class FilenameSearchEngine : IFilenameSearch
 
         public static ExactTable Create(IReadOnlyList<FilenameRecord> records, out int count)
         {
-            FilenameRecord[] ordered = records.OrderBy(r => r.FileId).ToArray();
-            count = ordered.Length;
-            int maxId = ordered.Length == 0 ? 0 : ordered[^1].FileId;
-            var ids = new int[ordered.Length]; var idToIndex = new int[checked(maxId + 1)];
-            var parentIds = new int[ordered.Length]; var hasParent = new bool[ordered.Length]; var hasParentKey = new bool[ordered.Length];
-            var keys = new FileKey[ordered.Length]; var parentKeys = new FileKey[ordered.Length]; var sizes = new ulong[ordered.Length];
-            var ticks = new long[ordered.Length]; var flags = new byte[ordered.Length];
-            var nameOffsets = new int[ordered.Length]; var nameLengths = new int[ordered.Length];
-            var pathOffsets = new int[ordered.Length]; var pathLengths = new int[ordered.Length];
-            var pathHashes = new ulong[ordered.Length];
-            var names = new ArrayBufferWriter<byte>(); var paths = new ArrayBufferWriter<byte>();
+            IReadOnlyList<FilenameRecord> ordered = IsSortedByFileId(records)
+                ? records
+                : records.OrderBy(r => r.FileId).ToArray();
+            count = ordered.Count;
+            int maxId = ordered.Count == 0 ? 0 : ordered[^1].FileId;
+            var ids = new int[ordered.Count]; var idToIndex = new int[checked(maxId + 1)];
+            var parentIds = new int[ordered.Count]; var hasParent = new bool[ordered.Count]; var hasParentKey = new bool[ordered.Count];
+            var keys = new FileKey[ordered.Count]; var parentKeys = new FileKey[ordered.Count]; var sizes = new ulong[ordered.Count];
+            var ticks = new long[ordered.Count]; var flags = new byte[ordered.Count];
+            var nameOffsets = new int[ordered.Count]; var nameLengths = new int[ordered.Count];
+            var pathOffsets = new int[ordered.Count]; var pathLengths = new int[ordered.Count];
+            var pathHashes = new ulong[ordered.Count];
             var encoding = new UTF8Encoding(false);
-            for (int i = 0; i < ordered.Length; i++)
+            int nameTotal = 0, pathTotal = 0;
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                FilenameRecord r = ordered[i];
+                nameOffsets[i] = nameTotal; nameLengths[i] = encoding.GetByteCount(r.Name);
+                pathOffsets[i] = pathTotal; pathLengths[i] = encoding.GetByteCount(r.FullPath);
+                nameTotal = checked(nameTotal + nameLengths[i]);
+                pathTotal = checked(pathTotal + pathLengths[i]);
+            }
+            var nameBytes = new byte[nameTotal];
+            var pathBytes = new byte[pathTotal];
+            for (int i = 0; i < ordered.Count; i++)
             {
                 FilenameRecord r = ordered[i]; ids[i] = r.FileId; idToIndex[r.FileId] = i + 1;
                 if (r.ParentId is int parent) { parentIds[i] = parent; hasParent[i] = true; }
                 if (r.ParentKey is FileKey parentKey) { parentKeys[i] = parentKey; hasParentKey[i] = true; }
                 keys[i] = r.Key; sizes[i] = r.SizeBytes; ticks[i] = r.ModifiedUtc.Ticks; flags[i] = r.Flags;
-                nameOffsets[i] = names.WrittenCount; nameLengths[i] = encoding.GetBytes(r.Name, names.GetSpan(encoding.GetByteCount(r.Name))); names.Advance(nameLengths[i]);
-                pathOffsets[i] = paths.WrittenCount; pathLengths[i] = encoding.GetBytes(r.FullPath, paths.GetSpan(encoding.GetByteCount(r.FullPath))); paths.Advance(pathLengths[i]);
+                encoding.GetBytes(r.Name, nameBytes.AsSpan(nameOffsets[i], nameLengths[i]));
+                encoding.GetBytes(r.FullPath, pathBytes.AsSpan(pathOffsets[i], pathLengths[i]));
                 pathHashes[i] = FileSystemCatalog.PathHash(r.FullPath);
             }
             return new ExactTable(ids, idToIndex, parentIds, hasParent, hasParentKey, keys, parentKeys, sizes, ticks, flags,
-                nameOffsets, nameLengths, pathOffsets, pathLengths, names.WrittenSpan.ToArray(), paths.WrittenSpan.ToArray(), pathHashes);
+                nameOffsets, nameLengths, pathOffsets, pathLengths, nameBytes, pathBytes, pathHashes);
         }
 
         public static ExactTable Load(string path, out int count)
@@ -633,10 +654,26 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         return string.Join(' ', literals);
     }
 
+    private static bool IsSortedByFileId(IReadOnlyList<FilenameRecord> records)
+    {
+        int previous = int.MinValue;
+        for (int i = 0; i < records.Count; i++)
+        {
+            int current = records[i].FileId;
+            if (current <= previous) return false;
+            previous = current;
+        }
+        return true;
+    }
+
     private static void ValidateExact(IReadOnlyList<FilenameRecord> records)
     {
-        if (records.Select(r => r.FileId).Distinct().Count() != records.Count)
-            throw new ArgumentException("FileId values must be unique", nameof(records));
+        // IsSortedByFileId also proves uniqueness for the production path. Keep a bounded
+        // fallback for unsorted external callers without allocating a LINQ iterator chain.
+        if (IsSortedByFileId(records)) return;
+        var seen = new HashSet<int>();
+        for (int i = 0; i < records.Count; i++)
+            if (!seen.Add(records[i].FileId)) throw new ArgumentException("FileId values must be unique", nameof(records));
         // FileKey identifies the underlying file object. Multiple hard-link directory entries
         // may legitimately share one native FileKey while retaining distinct exact paths/FileIds.
     }

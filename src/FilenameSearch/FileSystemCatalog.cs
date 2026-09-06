@@ -31,6 +31,10 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     // FilenameSearchEngine's UTF-8 metadata table and are materialized only for candidates.
     private readonly Dictionary<ulong, int> pathIds = [];
     private readonly Dictionary<ulong, List<int>> pathCollisions = [];
+    // The immutable base uses sorted flat arrays instead of a million-entry Dictionary.
+    // pathIds/pathCollisions are reserved for the small live overlay and tombstones.
+    private ulong[] basePathHashes = [];
+    private int[] basePathIds = [];
     private readonly Dictionary<int, FilenameRecord> mutableRecords = [];
     private int recordCount;
     private FilenameSearchEngine engine;
@@ -353,9 +357,13 @@ public sealed class FileSystemCatalog : IFilenameCatalog
 
     private void RebuildInitial()
     {
-        FilenameRecord[] records = DiscoverRecords([], CancellationToken.None);
+        IReadOnlyList<FilenameRecord> records = DiscoverRecords([], CancellationToken.None);
         engine.Build(records);
-        lock (gate) { ClearPathMapsLocked(); foreach (FilenameRecord r in records) AddPathLocked(r); }
+        lock (gate)
+        {
+            ClearPathMapsLocked();
+            BuildBasePathIndexLocked(records, records.Count);
+        }
         generation = 1; persistence.InitializeBase(engine, records, generation);
     }
 
@@ -375,7 +383,11 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 if (!prior.TryGetValue(current.FullPath, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
         }
         finally { engineGate.ExitReadLock(); }
-        lock (gate) { ClearPathMapsLocked(); foreach (FilenameRecord r in next.Values) AddPathLocked(r); }
+        lock (gate)
+        {
+            ClearPathMapsLocked();
+            BuildBasePathIndexLocked(next.Values, next.Count);
+        }
         return changes;
     }
 
@@ -482,9 +494,10 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private static FilenameRecord ToRecord(ReadMetadata read, int id) => new(
         id, null, read.Name, read.FullPath, read.SizeBytes, read.ModifiedUtc, read.Flags) { Key = read.Key };
 
-    private FilenameRecord[] DiscoverRecords(IEnumerable<FilenameRecord> priorRecords, CancellationToken token)
+    private IReadOnlyList<FilenameRecord> DiscoverRecords(IEnumerable<FilenameRecord> priorRecords, CancellationToken token)
     {
         var prior = priorRecords.ToArray();
+        if (prior.Length == 0) return DiscoverInitialRecords(token);
         var priorByPath = prior.ToDictionary(r => r.FullPath, StringComparer.Ordinal);
         var priorByKey = prior.GroupBy(r => r.Key).ToDictionary(g => g.Key, g => new Queue<FilenameRecord>(g.OrderBy(r => r.FileId)));
         var used = new HashSet<int>(); var reserved = prior.Select(r => r.FileId).ToHashSet();
@@ -523,6 +536,62 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             return parent is not null && idsByPath.TryGetValue(Path.GetFullPath(parent), out FilenameRecord? p)
                 ? r with { ParentId = p.FileId, ParentKey = p.Key } : r with { ParentId = null, ParentKey = null };
         }).OrderBy(r => r.FileId).ToArray();
+    }
+
+    /// <summary>
+    /// Initial build path. The previous implementation materialized the complete discovery
+    /// graph, a parallel read bag, a preliminary record list, and a second path dictionary at
+    /// the same time. On a million-entry corpus that transient graph exceeded the steady
+    /// memory gate before the compact indexes were even built. This path keeps enumeration
+    /// and metadata reads bounded while preserving exact spelling, native FileKeys, and
+    /// parent/FileId identity.
+    /// </summary>
+    private IReadOnlyList<FilenameRecord> DiscoverInitialRecords(CancellationToken token)
+    {
+        const int batchSize = 4_096;
+        var records = new List<FilenameRecord>();
+        var idsByPath = new Dictionary<string, int>(StringComparer.Ordinal);
+        var batch = new List<DiscoveredEntry>(batchSize);
+        int next = 1;
+
+        foreach (DiscoveredEntry entry in DiscoverStreaming(token))
+        {
+            batch.Add(entry);
+            if (batch.Count == batchSize) ProcessInitialBatch();
+        }
+        if (batch.Count != 0) ProcessInitialBatch();
+        idsByPath.Clear();
+        return records;
+
+        void ProcessInitialBatch()
+        {
+            var reads = new ReadMetadata?[batch.Count];
+            Parallel.For(0, batch.Count, new ParallelOptions
+            {
+                CancellationToken = token,
+                MaxDegreeOfParallelism = Math.Max(4, Environment.ProcessorCount)
+            }, i => reads[i] = TryReadMetadata(batch[i], null));
+            for (int i = 0; i < reads.Length; i++)
+            {
+                ReadMetadata? read = reads[i];
+                if (read is null) continue;
+                int? parentId = null;
+                FileKey? parentKey = null;
+                string? parentPath = Path.GetDirectoryName(read.Value.FullPath);
+                if (parentPath is not null && idsByPath.TryGetValue(Path.GetFullPath(parentPath), out int parent))
+                {
+                    parentId = parent;
+                    parentKey = records[parent - 1].Key;
+                }
+                int id = next++;
+                FilenameRecord record = new(id, parentId, read.Value.Name, read.Value.FullPath,
+                    read.Value.SizeBytes, read.Value.ModifiedUtc, read.Value.Flags)
+                { Key = read.Value.Key, ParentKey = parentKey };
+                records.Add(record);
+                idsByPath[record.FullPath] = id;
+            }
+            batch.Clear();
+        }
     }
 
     private IEnumerable<DiscoveredEntry> Discover(CancellationToken token)
@@ -580,6 +649,58 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 output.Add(new DiscoveredEntry(path, info.Name, size, modified, dirChild));
                 if (dirChild) childDirectories.Add(path);
             }
+        }
+    }
+
+    /// <summary>Single-pass initial enumeration. Parent directories are yielded before their
+    /// children, so the initial builder can assign parent identities without a second graph.
+    /// </summary>
+    private IEnumerable<DiscoveredEntry> DiscoverStreaming(CancellationToken token)
+    {
+        var stack = new Stack<string>();
+        DirectoryInfo rootInfo = new(root);
+        yield return new DiscoveredEntry(root, rootInfo.Name, 0, rootInfo.LastWriteTimeUtc, true);
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            token.ThrowIfCancellationRequested();
+            string directory = stack.Pop();
+            IEnumerable<FileSystemInfo> children;
+            try
+            {
+                children = new DirectoryInfo(directory).EnumerateFileSystemInfos("*", new EnumerationOptions
+                {
+                    IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint,
+                    ReturnSpecialDirectories = false
+                });
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+
+            var childDirectories = new List<string>();
+            foreach (FileSystemInfo info in children)
+            {
+                token.ThrowIfCancellationRequested();
+                string path = info.FullName;
+                if (IsExcluded(path)) continue;
+                FileAttributes attr;
+                try { attr = info.Attributes; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+                if (attr.HasFlag(FileAttributes.ReparsePoint)) continue;
+                bool isDirectory = attr.HasFlag(FileAttributes.Directory);
+                ulong size = 0;
+                DateTime modified;
+                try
+                {
+                    size = isDirectory ? 0 : checked((ulong)((FileInfo)info).Length);
+                    modified = info.LastWriteTimeUtc;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+                yield return new DiscoveredEntry(path, info.Name, size, modified, isDirectory);
+                if (isDirectory) childDirectories.Add(path);
+            }
+            // LIFO traversal still yields a directory before all descendants. Sorting is not
+            // required for FileIds because the parent map is keyed by exact path.
+            for (int i = childDirectories.Count - 1; i >= 0; i--) stack.Push(childDirectories[i]);
         }
     }
 
@@ -681,11 +802,26 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         lock (gate)
         {
             ClearPathMapsLocked();
+            int count = engine.BaseRecordCount;
+            basePathHashes = new ulong[count];
+            basePathIds = new int[count];
+            int index = 0;
             engine.ForEachPathHash((id, hash) =>
             {
-                AddPathHashValueLocked(hash, id);
+                if (index == basePathHashes.Length)
+                {
+                    Array.Resize(ref basePathHashes, checked(index * 2 + 1));
+                    Array.Resize(ref basePathIds, basePathHashes.Length);
+                }
+                basePathHashes[index] = hash; basePathIds[index++] = id;
                 nextId = Math.Max(nextId, id == int.MaxValue ? int.MaxValue : id + 1);
             });
+            if (index != basePathHashes.Length)
+            {
+                Array.Resize(ref basePathHashes, index); Array.Resize(ref basePathIds, index);
+            }
+            Array.Sort(basePathHashes, basePathIds);
+            recordCount = index;
             nextId = Math.Max(nextId, engine.MaxFileId == int.MaxValue ? int.MaxValue : engine.MaxFileId + 1);
         }
     }
@@ -693,15 +829,21 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private bool TryGetPathLocked(string path, out FilenameRecord? record)
     {
         ulong hash = PathHash(path);
-        if (pathIds.TryGetValue(hash, out int id) && id >= 0)
+        if (pathIds.TryGetValue(hash, out int id))
         {
-            if (TryGetIdLocked(id, out record) && record!.FullPath.Equals(path, StringComparison.Ordinal)) return true;
-            record = null;
+            if (id >= 0 && TryGetIdLocked(id, out record) && record!.FullPath.Equals(path, StringComparison.Ordinal)) return true;
+            if (pathCollisions.TryGetValue(hash, out List<int>? ids))
+                foreach (int candidate in ids)
+                    if (TryGetIdLocked(candidate, out record) && record!.FullPath.Equals(path, StringComparison.Ordinal)) return true;
+            record = null; return false;
         }
-        if (pathCollisions.TryGetValue(hash, out List<int>? ids))
+        if (TryGetBaseRange(hash, out int start, out int end))
         {
-            foreach (int candidate in ids)
+            for (int i = start; i < end; i++)
+            {
+                int candidate = basePathIds[i];
                 if (TryGetIdLocked(candidate, out record) && record!.FullPath.Equals(path, StringComparison.Ordinal)) return true;
+            }
         }
         record = null; return false;
     }
@@ -732,11 +874,20 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 pathIds[hash] = -1;
                 pathCollisions[hash] = [existing, fileId];
             }
-            else pathCollisions[hash].Add(fileId);
+            else if (pathCollisions.TryGetValue(hash, out List<int>? collisions)) collisions.Add(fileId);
+            else pathIds[hash] = fileId;
             recordCount++;
             return;
         }
-        pathIds[hash] = fileId; recordCount++;
+        if (!TryGetBaseRange(hash, out int start, out int end))
+        {
+            pathIds[hash] = fileId; recordCount++; return;
+        }
+        for (int i = start; i < end; i++) if (basePathIds[i] == fileId) return;
+        var baseIds = new List<int>(end - start + 1);
+        for (int i = start; i < end; i++) baseIds.Add(basePathIds[i]);
+        baseIds.Add(fileId);
+        pathIds[hash] = -1; pathCollisions[hash] = baseIds; recordCount++;
     }
 
     private void RemovePathLocked(string path, int fileId)
@@ -744,17 +895,69 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         ulong hash = PathHash(path);
         if (pathCollisions.TryGetValue(hash, out List<int>? ids))
         {
-            ids.Remove(fileId);
-            if (ids.Count == 1) { pathIds[hash] = ids[0]; pathCollisions.Remove(hash); }
-            else if (ids.Count == 0) { pathIds.Remove(hash); pathCollisions.Remove(hash); }
+            if (!ids.Remove(fileId)) return;
+            if (ids.Count == 0)
+            {
+                if (TryGetBaseRange(hash, out _, out _)) { pathIds[hash] = -1; pathCollisions[hash] = []; }
+                else { pathIds.Remove(hash); pathCollisions.Remove(hash); }
+            }
+            else if (ids.Count == 1 && !ContainsBaseId(hash, ids[0])) { pathIds[hash] = ids[0]; pathCollisions.Remove(hash); }
+            else pathIds[hash] = -1;
+            recordCount--;
         }
-        else if (pathIds.TryGetValue(hash, out int current) && current == fileId) pathIds.Remove(hash);
-        if (recordCount > 0) recordCount--;
+        else if (pathIds.TryGetValue(hash, out int current) && current == fileId)
+        {
+            if (ContainsBaseId(hash, fileId)) pathIds[hash] = -1;
+            else pathIds.Remove(hash);
+            if (recordCount > 0) recordCount--;
+        }
+        else if (!pathIds.ContainsKey(hash) && ContainsBaseId(hash, fileId))
+        {
+            pathIds[hash] = -1;
+            if (recordCount > 0) recordCount--;
+        }
     }
 
     private void ClearPathMapsLocked()
     {
-        pathIds.Clear(); pathCollisions.Clear(); mutableRecords.Clear(); recordCount = 0;
+        pathIds.Clear(); pathCollisions.Clear(); mutableRecords.Clear();
+        basePathHashes = []; basePathIds = []; recordCount = 0;
+    }
+
+    private void BuildBasePathIndexLocked(IEnumerable<FilenameRecord> source, int count)
+    {
+        basePathHashes = new ulong[count]; basePathIds = new int[count];
+        int index = 0;
+        foreach (FilenameRecord record in source)
+        {
+            if (index == basePathHashes.Length)
+            {
+                Array.Resize(ref basePathHashes, checked(index * 2 + 1));
+                Array.Resize(ref basePathIds, basePathHashes.Length);
+            }
+            basePathHashes[index] = PathHash(record.FullPath); basePathIds[index++] = record.FileId;
+        }
+        if (index != basePathHashes.Length)
+        {
+            Array.Resize(ref basePathHashes, index); Array.Resize(ref basePathIds, index);
+        }
+        Array.Sort(basePathHashes, basePathIds);
+        recordCount = index;
+    }
+
+    private bool TryGetBaseRange(ulong hash, out int start, out int end)
+    {
+        int first = Array.BinarySearch(basePathHashes, hash);
+        if (first < 0) { start = end = 0; return false; }
+        start = first; while (start > 0 && basePathHashes[start - 1] == hash) start--;
+        end = first + 1; while (end < basePathHashes.Length && basePathHashes[end] == hash) end++;
+        return true;
+    }
+
+    private bool ContainsBaseId(ulong hash, int id)
+    {
+        return TryGetBaseRange(hash, out int start, out int end) &&
+            Array.IndexOf(basePathIds, id, start, end - start) >= 0;
     }
 
     internal static ulong PathHash(string path)
