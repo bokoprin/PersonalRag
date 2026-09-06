@@ -38,7 +38,10 @@ function Invoke-Captured {
     $psi.CreateNoWindow = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
-    foreach ($argument in $ArgumentList) { $psi.ArgumentList.Add([string]$argument) }
+    # Windows PowerShell 5.1/.NET Framework does not expose ProcessStartInfo.ArgumentList.
+    # Quote every argument explicitly; all formal paths and probe values are ordinary
+    # command-line strings, and this keeps the captured command identical across hosts.
+    $psi.Arguments = (($ArgumentList | ForEach-Object { '"' + ([string]$_).Replace('"','\"') + '"' }) -join ' ')
     $command = $FilePath + ' ' + (($ArgumentList | ForEach-Object { [string]$_ }) -join ' ')
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $process = [System.Diagnostics.Process]::Start($psi)
