@@ -250,11 +250,11 @@ $generate = Invoke-Captured -FilePath $dotnet -ArgumentList @($formalDll,'genera
 if ($generate.exit_code -ne 0 -or -not (Test-Path -LiteralPath $corpusManifest)) { throw '1M corpus generation failed.' }
 
 $sourceHashes = [ordered]@{}
-Get-ChildItem -LiteralPath (Join-Path $repo 'src\FilenameSearch.Core'), (Join-Path $repo 'src\FilenameSearch.RouteC'), (Join-Path $repo 'src\FilenameSearch'), (Join-Path $repo 'src\FilenameSearch.Gui'), (Join-Path $repo 'tests\FilenameSearch.Formal') -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json') } | Sort-Object FullName | ForEach-Object { $relative = [System.IO.Path]::GetRelativePath($repo,$_.FullName); $sourceHashes[$relative] = Get-Sha256 $_.FullName }
+Get-ChildItem -LiteralPath (Join-Path $repo 'src\FilenameSearch.Core'), (Join-Path $repo 'src\FilenameSearch.RouteC'), (Join-Path $repo 'src\FilenameSearch'), (Join-Path $repo 'src\FilenameSearch.Gui'), (Join-Path $repo 'tests\FilenameSearch.Formal') -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json') } | Sort-Object FullName | ForEach-Object { $relative = $_.FullName.Substring($repo.Length).TrimStart('\'); $sourceHashes[$relative] = Get-Sha256 $_.FullName }
 $lockPath = Join-Path $reports 'FORMAL_SERIES_LOCK.json'
 $measurementScriptHashes = [ordered]@{}
 Get-ChildItem -LiteralPath (Join-Path $repo 'scripts') -Filter '*.ps1' -File | Sort-Object FullName | ForEach-Object {
-    $measurementScriptHashes[[System.IO.Path]::GetRelativePath($repo,$_.FullName)] = Get-Sha256 $_.FullName
+    $measurementScriptHashes[$_.FullName.Substring($repo.Length).TrimStart('\')] = Get-Sha256 $_.FullName
 }
 $lock = [ordered]@{
     version = 1
