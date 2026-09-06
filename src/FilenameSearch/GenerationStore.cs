@@ -77,7 +77,10 @@ internal sealed class GenerationStore : IDisposable
         VerifyFile(index, current.BaseIndexSha256);
         VerifyFile(meta, current.BaseMetadataSha256);
         if (!File.Exists(delta)) throw new InvalidDataException("Filename delta journal is missing");
-        engine.LoadBase(index, ReadMetadata(meta));
+        // Load the persisted metadata directly into the engine's compact exact table. An
+        // intermediate million-record object graph would needlessly raise the process
+        // Private Bytes gate during a quiet restart.
+        engine.LoadBase(index, meta);
         generation = current.BaseGeneration;
         long replayed = 0;
         foreach (CatalogChangeBatch batch in ReadDelta(delta))
@@ -146,7 +149,10 @@ internal sealed class GenerationStore : IDisposable
         return total;
     }
 
-    public void Dispose() => lease.Dispose();
+    public void Dispose()
+    {
+        lease.Dispose();
+    }
 
     private void PublishBase(FilenameSearchEngine compacted, IReadOnlyList<FilenameRecord> records, long generation)
     {
@@ -236,37 +242,47 @@ internal sealed class GenerationStore : IDisposable
 
     private static void WriteMetadata(string path, IReadOnlyList<FilenameRecord> records)
     {
-        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
-        using var writer = new BinaryWriter(stream, new UTF8Encoding(false), leaveOpen: true);
-        writer.Write("PRFMETA3"); writer.Write(records.Count);
-        foreach (FilenameRecord r in records.OrderBy(r => r.FileId))
+        FilenameRecord[] ordered = records.OrderBy(r => r.FileId).ToArray();
+        var volumes = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (FilenameRecord record in ordered)
         {
-            writer.Write(r.FileId); writer.Write(r.ParentId ?? 0); writer.Write(r.ParentId.HasValue);
-            WriteKey(writer, r.Key); writer.Write(r.ParentKey.HasValue); if (r.ParentKey is FileKey pk) WriteKey(writer, pk);
-            writer.Write(r.SizeBytes); writer.Write(r.ModifiedUtc.Ticks); writer.Write(r.Flags); writer.Write(r.Name); writer.Write(r.FullPath);
+            AddVolume(record.Key.VolumeId);
+            if (record.ParentKey is FileKey parent) AddVolume(parent.VolumeId);
         }
-        writer.Flush(); stream.Flush(true);
-    }
-
-    private static FilenameRecord[] ReadMetadata(string path)
-    {
-        using var stream = File.OpenRead(path);
-        using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
-        if (reader.ReadString() != "PRFMETA3") throw new InvalidDataException("Filename metadata header mismatch");
-        int count = reader.ReadInt32();
-        if (count < 0 || count > 20_000_000) throw new InvalidDataException("Filename metadata count invalid");
-        var result = new FilenameRecord[count];
+        int count = ordered.Length;
+        var encoding = new UTF8Encoding(false);
+        var nameOffsets = new int[count]; var nameLengths = new int[count];
+        var pathOffsets = new int[count]; var pathLengths = new int[count];
+        int nameTotal = 0, pathTotal = 0;
         for (int i = 0; i < count; i++)
         {
-            int id = reader.ReadInt32(), parent = reader.ReadInt32(); bool hasParent = reader.ReadBoolean();
-            FileKey key = ReadKey(reader); FileKey? parentKey = reader.ReadBoolean() ? ReadKey(reader) : null;
-            ulong size = reader.ReadUInt64(); long ticks = reader.ReadInt64(); byte flags = reader.ReadByte();
-            string name = reader.ReadString(), fullPath = reader.ReadString();
-            result[i] = new FilenameRecord(id, hasParent ? parent : null, name, fullPath, size,
-                new DateTime(ticks, DateTimeKind.Utc), flags) { Key = key, ParentKey = parentKey };
+            nameOffsets[i] = nameTotal; nameLengths[i] = encoding.GetByteCount(ordered[i].Name); nameTotal = checked(nameTotal + nameLengths[i]);
+            pathOffsets[i] = pathTotal; pathLengths[i] = encoding.GetByteCount(ordered[i].FullPath); pathTotal = checked(pathTotal + pathLengths[i]);
         }
-        if (stream.Position != stream.Length) throw new InvalidDataException("Filename metadata trailing bytes");
-        return result;
+        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+        using var writer = new BinaryWriter(stream, new UTF8Encoding(false), leaveOpen: true);
+        writer.Write("PRFMETA5"); writer.Write(count); writer.Write(volumes.Count);
+        foreach (string volume in volumes.OrderBy(pair => pair.Value).Select(pair => pair.Key)) writer.Write(volume);
+        for (int i = 0; i < count; i++)
+        {
+            FilenameRecord r = ordered[i];
+            writer.Write(r.FileId); writer.Write(r.ParentId ?? 0); writer.Write(r.ParentId.HasValue);
+            writer.Write(volumes[r.Key.VolumeId]); writer.Write(r.Key.NativeId); writer.Write(r.Key.IsNative);
+            writer.Write(r.ParentKey.HasValue);
+            if (r.ParentKey is FileKey pk) { writer.Write(volumes[pk.VolumeId]); writer.Write(pk.NativeId); writer.Write(pk.IsNative); }
+            writer.Write(r.SizeBytes); writer.Write(r.ModifiedUtc.Ticks); writer.Write(r.Flags);
+            writer.Write(FileSystemCatalog.PathHash(r.FullPath));
+            writer.Write(nameOffsets[i]); writer.Write(nameLengths[i]); writer.Write(pathOffsets[i]); writer.Write(pathLengths[i]);
+        }
+        writer.Write(nameTotal); writer.Write(pathTotal); writer.Flush();
+        for (int i = 0; i < count; i++) stream.Write(encoding.GetBytes(ordered[i].Name));
+        for (int i = 0; i < count; i++) stream.Write(encoding.GetBytes(ordered[i].FullPath));
+        writer.Flush(); stream.Flush(true);
+
+        void AddVolume(string volume)
+        {
+            if (!volumes.ContainsKey(volume)) volumes[volume] = volumes.Count;
+        }
     }
 
     private static void WriteKey(BinaryWriter w, FileKey k) { w.Write(k.VolumeId); w.Write(k.NativeId); w.Write(k.IsNative); }

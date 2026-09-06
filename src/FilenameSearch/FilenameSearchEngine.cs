@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Buffers;
 using System.Text;
 using CoreFileRecord = FilenameSearch.Core.FileRecord;
 using CoreQuery = FilenameSearch.Core.FilenameQuery;
@@ -16,7 +17,8 @@ public sealed class FilenameSearchEngine : IFilenameSearch
 {
     private readonly object gate = new();
     private RouteCEngine baseEngine = new();
-    private Dictionary<int, FilenameRecord> baseExact = [];
+    private ExactTable? baseTable;
+    private int baseCount;
     private readonly Dictionary<int, FilenameRecord?> delta = [];
     private readonly DeltaIndex deltaIndex = new();
     private bool disposed;
@@ -41,7 +43,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         {
             lock (gate)
             {
-                int threshold = Math.Max(4_096, Math.Max(1, baseExact.Count / 100));
+                int threshold = Math.Max(4_096, Math.Max(1, baseCount / 100));
                 return delta.Count >= threshold;
             }
         }
@@ -53,13 +55,17 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         var exact = records.OrderBy(r => r.FileId).ToArray();
         ValidateExact(exact);
         var next = new RouteCEngine();
-        next.Build(exact.Select(ToCore).ToArray());
+        int[] ids = new int[exact.Length];
+        for (int i = 0; i < exact.Length; i++)
+            ids[i] = exact[i].FileId;
+        next.Build(ids, i => exact[i].Name, i => exact[i].FullPath);
         lock (gate)
         {
             ThrowIfDisposed();
             baseEngine.Dispose();
             baseEngine = next;
-            baseExact = exact.ToDictionary(r => r.FileId);
+            baseTable?.Dispose();
+            baseTable = ExactTable.Create(exact, out baseCount);
             delta.Clear();
             deltaIndex.Clear();
         }
@@ -85,7 +91,8 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             ThrowIfDisposed();
             baseEngine.Dispose();
             baseEngine = next;
-            baseExact = exact.ToDictionary(r => r.FileId);
+            baseTable?.Dispose();
+            baseTable = ExactTable.Create(exact, out baseCount);
             delta.Clear();
             deltaIndex.Clear();
         }
@@ -153,7 +160,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             foreach (CoreFileRecord hit in route.Records)
             {
                 if (delta.ContainsKey(hit.FileId)) continue;
-                if (!baseExact.TryGetValue(hit.FileId, out FilenameRecord? exact)) continue;
+                if (!TryGetBase(hit.FileId, out FilenameRecord? exact) || exact is null) continue;
                 // Route C is intentionally a conservative candidate engine. Search semantics
                 // are owned here so exact path spelling, full Unicode case folding, and
                 // substring wildcard behavior have one authoritative implementation.
@@ -198,7 +205,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         lock (gate)
         {
             ThrowIfDisposed();
-            bool existed = baseExact.ContainsKey(fileId) ||
+            bool existed = TryGetBase(fileId, out _) ||
                 (delta.TryGetValue(fileId, out FilenameRecord? current) && current is not null);
             if (!existed) return false;
             delta[fileId] = null;
@@ -226,6 +233,11 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         {
             if (disposed) return;
             baseEngine.Dispose();
+            baseTable?.Dispose();
+            baseTable = null;
+            baseCount = 0;
+            delta.Clear();
+            deltaIndex.Clear();
             disposed = true;
         }
         GC.SuppressFinalize(this);
@@ -233,7 +245,9 @@ public sealed class FilenameSearchEngine : IFilenameSearch
 
     private FilenameRecord[] SnapshotRecords()
     {
-        var result = new Dictionary<int, FilenameRecord>(baseExact);
+        var result = new Dictionary<int, FilenameRecord>(baseCount + delta.Count);
+        if (baseTable is not null)
+            foreach (FilenameRecord record in baseTable.Records()) result[record.FileId] = record;
         foreach ((int id, FilenameRecord? record) in delta)
         {
             if (record is null) result.Remove(id);
@@ -250,6 +264,335 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         record.SizeBytes,
         record.ModifiedUtc.Ticks,
         record.Flags);
+
+    private bool TryGetBase(int id, out FilenameRecord? record)
+    {
+        if (baseTable is not null && baseTable.TryGet(id, out record)) return true;
+        record = null;
+        return false;
+    }
+
+    internal void LoadBase(string indexPath, string metadataPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(indexPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(metadataPath);
+        RouteCEngine? next = new RouteCEngine();
+        ExactTable? table = null;
+        try
+        {
+            next.Load(Path.GetFullPath(indexPath));
+            table = ExactTable.Load(Path.GetFullPath(metadataPath), out _);
+            int[] routeIds = next.FileIds.ToArray();
+            if (!table.Ids.AsSpan().SequenceEqual(routeIds))
+                throw new InvalidDataException("Route C base/index metadata identity mismatch");
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                baseEngine.Dispose();
+                baseEngine = next;
+                baseTable?.Dispose();
+                baseTable = table;
+                baseCount = table.Ids.Length;
+                delta.Clear();
+                deltaIndex.Clear();
+            }
+            next = null;
+            table = null;
+        }
+        finally
+        {
+            next?.Dispose();
+            table?.Dispose();
+        }
+    }
+
+    internal bool TryGetRecord(int id, out FilenameRecord? record)
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (delta.TryGetValue(id, out record)) return record is not null;
+            return baseTable is not null && baseTable.TryGet(id, out record);
+        }
+    }
+
+    internal int MaxFileId
+    {
+        get
+        {
+            lock (gate)
+            {
+                ThrowIfDisposed();
+                int max = baseTable?.MaxId ?? 0;
+                foreach (int id in delta.Keys) max = Math.Max(max, id);
+                return max;
+            }
+        }
+    }
+
+    internal void ForEachRecord(Action<FilenameRecord> visitor)
+    {
+        ArgumentNullException.ThrowIfNull(visitor);
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            HashSet<int> overridden = delta.Keys.ToHashSet();
+            if (baseTable is not null)
+                foreach (FilenameRecord record in baseTable.Records())
+                    if (!overridden.Contains(record.FileId)) visitor(record);
+            foreach (FilenameRecord? record in delta.Values)
+                if (record is not null) visitor(record);
+        }
+    }
+
+    internal void ForEachPath(Action<int, string> visitor)
+    {
+        ArgumentNullException.ThrowIfNull(visitor);
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (baseTable is not null) baseTable.ForEachPath(visitor);
+        }
+    }
+
+    internal void ForEachPathHash(Action<int, ulong> visitor)
+    {
+        ArgumentNullException.ThrowIfNull(visitor);
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (baseTable is not null) baseTable.ForEachPathHash(visitor);
+        }
+    }
+
+    private sealed class ExactTable : IDisposable
+    {
+        private readonly int[] ids, idToIndex, parentIds;
+        private readonly bool[] hasParent, hasParentKey;
+        private readonly FileKey[] keys, parentKeys;
+        private readonly ulong[] sizes;
+        private readonly long[] modifiedTicks;
+        private readonly byte[] flags;
+        private readonly int[] nameOffsets, nameLengths, pathOffsets, pathLengths;
+        private readonly ulong[] pathHashes;
+        private readonly byte[] nameBytes, pathBytes;
+        private readonly Encoding utf8 = new UTF8Encoding(false);
+
+        private ExactTable(int[] ids, int[] idToIndex, int[] parentIds, bool[] hasParent, bool[] hasParentKey,
+            FileKey[] keys, FileKey[] parentKeys, ulong[] sizes, long[] modifiedTicks, byte[] flags,
+            int[] nameOffsets, int[] nameLengths, int[] pathOffsets, int[] pathLengths,
+            byte[] nameBytes, byte[] pathBytes, ulong[] pathHashes)
+        {
+            this.ids = ids; this.idToIndex = idToIndex; this.parentIds = parentIds; this.hasParent = hasParent;
+            this.hasParentKey = hasParentKey; this.keys = keys; this.parentKeys = parentKeys; this.sizes = sizes;
+            this.modifiedTicks = modifiedTicks; this.flags = flags; this.nameOffsets = nameOffsets; this.nameLengths = nameLengths;
+            this.pathOffsets = pathOffsets; this.pathLengths = pathLengths; this.nameBytes = nameBytes; this.pathBytes = pathBytes; this.pathHashes = pathHashes;
+        }
+
+        public static ExactTable Create(IReadOnlyList<FilenameRecord> records, out int count)
+        {
+            FilenameRecord[] ordered = records.OrderBy(r => r.FileId).ToArray();
+            count = ordered.Length;
+            int maxId = ordered.Length == 0 ? 0 : ordered[^1].FileId;
+            var ids = new int[ordered.Length]; var idToIndex = new int[checked(maxId + 1)];
+            var parentIds = new int[ordered.Length]; var hasParent = new bool[ordered.Length]; var hasParentKey = new bool[ordered.Length];
+            var keys = new FileKey[ordered.Length]; var parentKeys = new FileKey[ordered.Length]; var sizes = new ulong[ordered.Length];
+            var ticks = new long[ordered.Length]; var flags = new byte[ordered.Length];
+            var nameOffsets = new int[ordered.Length]; var nameLengths = new int[ordered.Length];
+            var pathOffsets = new int[ordered.Length]; var pathLengths = new int[ordered.Length];
+            var pathHashes = new ulong[ordered.Length];
+            var names = new ArrayBufferWriter<byte>(); var paths = new ArrayBufferWriter<byte>();
+            var encoding = new UTF8Encoding(false);
+            for (int i = 0; i < ordered.Length; i++)
+            {
+                FilenameRecord r = ordered[i]; ids[i] = r.FileId; idToIndex[r.FileId] = i + 1;
+                if (r.ParentId is int parent) { parentIds[i] = parent; hasParent[i] = true; }
+                if (r.ParentKey is FileKey parentKey) { parentKeys[i] = parentKey; hasParentKey[i] = true; }
+                keys[i] = r.Key; sizes[i] = r.SizeBytes; ticks[i] = r.ModifiedUtc.Ticks; flags[i] = r.Flags;
+                nameOffsets[i] = names.WrittenCount; nameLengths[i] = encoding.GetBytes(r.Name, names.GetSpan(encoding.GetByteCount(r.Name))); names.Advance(nameLengths[i]);
+                pathOffsets[i] = paths.WrittenCount; pathLengths[i] = encoding.GetBytes(r.FullPath, paths.GetSpan(encoding.GetByteCount(r.FullPath))); paths.Advance(pathLengths[i]);
+                pathHashes[i] = FileSystemCatalog.PathHash(r.FullPath);
+            }
+            return new ExactTable(ids, idToIndex, parentIds, hasParent, hasParentKey, keys, parentKeys, sizes, ticks, flags,
+                nameOffsets, nameLengths, pathOffsets, pathLengths, names.WrittenSpan.ToArray(), paths.WrittenSpan.ToArray(), pathHashes);
+        }
+
+        public static ExactTable Load(string path, out int count)
+        {
+            using var stream = File.OpenRead(path);
+            using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+            string magic = reader.ReadString();
+            if (magic == "PRFMETA5") return LoadCompact(reader, stream, out count);
+            if (magic is not ("PRFMETA3" or "PRFMETA4")) throw new InvalidDataException("Filename metadata header mismatch");
+            bool hasPathHashes = magic == "PRFMETA4";
+            count = reader.ReadInt32();
+            if (count < 0 || count > 20_000_000) throw new InvalidDataException("Filename metadata count invalid");
+            var ids = new int[count];
+            int maxId = 0, previousId = int.MinValue;
+            var parentIds = new int[count]; var hasParent = new bool[count]; var hasParentKey = new bool[count];
+            var keys = new FileKey[count]; var parentKeys = new FileKey[count]; var sizes = new ulong[count];
+            var ticks = new long[count]; var flags = new byte[count];
+            var nameOffsets = new int[count]; var nameLengths = new int[count];
+            var pathOffsets = new int[count]; var pathLengths = new int[count];
+            var pathHashes = new ulong[count];
+            var names = new ArrayBufferWriter<byte>(); var paths = new ArrayBufferWriter<byte>();
+            var encoding = new UTF8Encoding(false);
+            var volumeIds = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (int i = 0; i < count; i++)
+            {
+                int id = reader.ReadInt32();
+                if (id <= previousId) throw new InvalidDataException("Filename metadata ids are not strictly increasing");
+                previousId = id; ids[i] = id; maxId = Math.Max(maxId, id);
+                int parent = reader.ReadInt32(); hasParent[i] = reader.ReadBoolean(); parentIds[i] = parent;
+                keys[i] = ReadKey(reader, volumeIds); hasParentKey[i] = reader.ReadBoolean();
+                if (hasParentKey[i]) parentKeys[i] = ReadKey(reader, volumeIds);
+                sizes[i] = reader.ReadUInt64(); ticks[i] = reader.ReadInt64(); flags[i] = reader.ReadByte();
+                if (hasPathHashes)
+                {
+                    byte[] nameBytes = ReadUtf8(reader), pathBytes = ReadUtf8(reader);
+                    nameOffsets[i] = names.WrittenCount; nameLengths[i] = nameBytes.Length;
+                    nameBytes.AsSpan().CopyTo(names.GetSpan(nameBytes.Length)); names.Advance(nameBytes.Length);
+                    pathOffsets[i] = paths.WrittenCount; pathLengths[i] = pathBytes.Length;
+                    pathBytes.AsSpan().CopyTo(paths.GetSpan(pathBytes.Length)); paths.Advance(pathBytes.Length);
+                    pathHashes[i] = reader.ReadUInt64();
+                }
+                else
+                {
+                    string name = reader.ReadString(), fullPath = reader.ReadString();
+                    nameOffsets[i] = names.WrittenCount;
+                    nameLengths[i] = encoding.GetBytes(name, names.GetSpan(encoding.GetByteCount(name)));
+                    names.Advance(nameLengths[i]);
+                    pathOffsets[i] = paths.WrittenCount;
+                    pathLengths[i] = encoding.GetBytes(fullPath, paths.GetSpan(encoding.GetByteCount(fullPath)));
+                    paths.Advance(pathLengths[i]);
+                    pathHashes[i] = FileSystemCatalog.PathHash(fullPath);
+                }
+            }
+            if (stream.Position != stream.Length) throw new InvalidDataException("Filename metadata trailing bytes");
+            var idToIndex = new int[checked(maxId + 1)];
+            for (int i = 0; i < ids.Length; i++) idToIndex[ids[i]] = i + 1;
+            return new ExactTable(ids, idToIndex, parentIds, hasParent, hasParentKey, keys, parentKeys, sizes, ticks, flags,
+                nameOffsets, nameLengths, pathOffsets, pathLengths, names.WrittenSpan.ToArray(), paths.WrittenSpan.ToArray(), pathHashes);
+
+            static FileKey ReadKey(BinaryReader reader, Dictionary<string, string> volumeIds)
+            {
+                string volume = reader.ReadString();
+                if (!volumeIds.TryGetValue(volume, out string? shared))
+                    volumeIds[volume] = shared = volume;
+                return new FileKey(shared, reader.ReadUInt64(), reader.ReadBoolean());
+            }
+
+            static byte[] ReadUtf8(BinaryReader reader)
+            {
+                int length = Read7BitInt(reader);
+                if (length < 0 || length > 1_000_000) throw new InvalidDataException("Filename metadata string length invalid");
+                byte[] value = reader.ReadBytes(length);
+                if (value.Length != length) throw new EndOfStreamException();
+                return value;
+            }
+
+            static int Read7BitInt(BinaryReader reader)
+            {
+                int value = 0, shift = 0;
+                while (shift < 35)
+                {
+                    byte next = reader.ReadByte();
+                    value |= (next & 0x7F) << shift;
+                    if ((next & 0x80) == 0) return value;
+                    shift += 7;
+                }
+                throw new InvalidDataException("Filename metadata string length encoding invalid");
+            }
+
+            static ExactTable LoadCompact(BinaryReader reader, Stream stream, out int count)
+            {
+                count = reader.ReadInt32();
+                if (count < 0 || count > 20_000_000) throw new InvalidDataException("Filename metadata count invalid");
+                int volumeCount = reader.ReadInt32();
+                if (volumeCount < 0 || volumeCount > 256) throw new InvalidDataException("Filename metadata volume count invalid");
+                var volumes = new string[volumeCount];
+                for (int i = 0; i < volumes.Length; i++) volumes[i] = reader.ReadString();
+                var ids = new int[count]; int maxId = 0, previousId = int.MinValue;
+                var parentIds = new int[count]; var hasParent = new bool[count]; var hasParentKey = new bool[count];
+                var keys = new FileKey[count]; var parentKeys = new FileKey[count]; var sizes = new ulong[count];
+                var ticks = new long[count]; var flags = new byte[count]; var pathHashes = new ulong[count];
+                var nameOffsets = new int[count]; var nameLengths = new int[count];
+                var pathOffsets = new int[count]; var pathLengths = new int[count];
+                for (int i = 0; i < count; i++)
+                {
+                    int id = reader.ReadInt32();
+                    if (id <= previousId) throw new InvalidDataException("Filename metadata ids are not strictly increasing");
+                    previousId = id; ids[i] = id; maxId = Math.Max(maxId, id);
+                    parentIds[i] = reader.ReadInt32(); hasParent[i] = reader.ReadBoolean();
+                    keys[i] = ReadCompactKey(reader, volumes);
+                    hasParentKey[i] = reader.ReadBoolean();
+                    if (hasParentKey[i]) parentKeys[i] = ReadCompactKey(reader, volumes);
+                    sizes[i] = reader.ReadUInt64(); ticks[i] = reader.ReadInt64(); flags[i] = reader.ReadByte();
+                    pathHashes[i] = reader.ReadUInt64();
+                    nameOffsets[i] = reader.ReadInt32(); nameLengths[i] = reader.ReadInt32();
+                    pathOffsets[i] = reader.ReadInt32(); pathLengths[i] = reader.ReadInt32();
+                }
+                int nameBytesLength = reader.ReadInt32(), pathBytesLength = reader.ReadInt32();
+                if (nameBytesLength < 0 || pathBytesLength < 0 || nameBytesLength > 2_000_000_000 || pathBytesLength > 2_000_000_000)
+                    throw new InvalidDataException("Filename metadata blob length invalid");
+                byte[] nameBytes = reader.ReadBytes(nameBytesLength), pathBytes = reader.ReadBytes(pathBytesLength);
+                if (nameBytes.Length != nameBytesLength || pathBytes.Length != pathBytesLength || stream.Position != stream.Length)
+                    throw new InvalidDataException("Filename metadata blob is truncated");
+                for (int i = 0; i < count; i++)
+                {
+                    if (nameOffsets[i] < 0 || nameLengths[i] < 0 || pathOffsets[i] < 0 || pathLengths[i] < 0 ||
+                        nameOffsets[i] > nameBytesLength - nameLengths[i] || pathOffsets[i] > pathBytesLength - pathLengths[i])
+                        throw new InvalidDataException("Filename metadata string bounds invalid");
+                }
+                var idToIndex = new int[checked(maxId + 1)];
+                for (int i = 0; i < ids.Length; i++) idToIndex[ids[i]] = i + 1;
+                return new ExactTable(ids, idToIndex, parentIds, hasParent, hasParentKey, keys, parentKeys, sizes, ticks, flags,
+                    nameOffsets, nameLengths, pathOffsets, pathLengths, nameBytes, pathBytes, pathHashes);
+            }
+
+            static FileKey ReadCompactKey(BinaryReader reader, IReadOnlyList<string> volumes)
+            {
+                int volume = reader.ReadInt32();
+                if ((uint)volume >= (uint)volumes.Count) throw new InvalidDataException("Filename metadata volume index invalid");
+                return new FileKey(volumes[volume], reader.ReadUInt64(), reader.ReadBoolean());
+            }
+        }
+
+        public int MaxId => ids.Length == 0 ? 0 : ids[^1];
+        public int[] Ids => ids;
+
+        public bool TryGet(int id, out FilenameRecord? record)
+        {
+            if ((uint)id >= (uint)idToIndex.Length || idToIndex[id] == 0) { record = null; return false; }
+            record = Get(idToIndex[id] - 1); return true;
+        }
+
+        public IEnumerable<FilenameRecord> Records()
+        {
+            for (int i = 0; i < ids.Length; i++) yield return Get(i);
+        }
+
+        public void ForEachPath(Action<int, string> visitor)
+        {
+            for (int i = 0; i < ids.Length; i++)
+                visitor(ids[i], utf8.GetString(pathBytes, pathOffsets[i], pathLengths[i]));
+        }
+
+        public void ForEachPathHash(Action<int, ulong> visitor)
+        {
+            for (int i = 0; i < ids.Length; i++) visitor(ids[i], pathHashes[i]);
+        }
+
+        private FilenameRecord Get(int i)
+        {
+            string name = utf8.GetString(nameBytes, nameOffsets[i], nameLengths[i]);
+            string path = utf8.GetString(pathBytes, pathOffsets[i], pathLengths[i]);
+            return new FilenameRecord(ids[i], hasParent[i] ? parentIds[i] : null, name, path, sizes[i],
+                new DateTime(modifiedTicks[i], DateTimeKind.Utc), flags[i]) { Key = keys[i], ParentKey = hasParentKey[i] ? parentKeys[i] : null };
+        }
+
+        public void Dispose() { }
+    }
 
     private static bool Matches(FilenameRecord record, SearchRequest request)
     {

@@ -13,12 +13,12 @@ namespace FilenameSearch.RouteC;
 /// </summary>
 public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
 {
-    private const string Magic = "PRFRC003";
-    private const int Version = 3;
+    private const string Magic = "PRFRC005";
+    private const int Version = 5;
     private readonly object gate = new();
     private int[] ids = [];
-    private Dictionary<string, Posting> nameIndex = new(StringComparer.Ordinal);
-    private Dictionary<string, Posting> pathIndex = new(StringComparer.Ordinal);
+    private CompactIndex nameIndex = CompactIndex.Empty;
+    private CompactIndex pathIndex = CompactIndex.Empty;
     private readonly Dictionary<int, FileRecord?> overlay = [];
     private bool disposed;
 
@@ -58,24 +58,76 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         ValidateIds(ordered);
         string[] names = new string[ordered.Length];
         string[] paths = new string[ordered.Length];
+        int[] fileIds = new int[ordered.Length];
         for (int i = 0; i < ordered.Length; i++)
         {
+            fileIds[i] = ordered[i].FileId;
             names[i] = FilenameSemantics.Normalize(ordered[i].Name, false);
             paths[i] = FilenameSemantics.Normalize(ordered[i].FullPath, false);
         }
+        BuildIndexes(fileIds, names, paths);
+    }
 
-        Dictionary<string, Posting>? nextNames = null;
-        Dictionary<string, Posting>? nextPaths = null;
-        Parallel.Invoke(
-            () => nextNames = BuildIndex(names, includeOneRune: true),
-            () => nextPaths = BuildIndex(paths, includeOneRune: true));
+    /// <summary>Builds the immutable indexes from the exact adapter without allocating a parallel
+    /// million-record Core FileRecord graph. The public Core engine overload remains available
+    /// for standalone callers and tests.</summary>
+    public void Build(IReadOnlyList<int> fileIds, IReadOnlyList<string> normalizedNames,
+        IReadOnlyList<string> normalizedPaths)
+    {
+        ArgumentNullException.ThrowIfNull(fileIds);
+        ArgumentNullException.ThrowIfNull(normalizedNames);
+        ArgumentNullException.ThrowIfNull(normalizedPaths);
+        if (fileIds.Count != normalizedNames.Count || fileIds.Count != normalizedPaths.Count)
+            throw new ArgumentException("Route C build arrays must have equal lengths");
+        int[] idsCopy = fileIds.ToArray();
+        ValidateSortedIds(idsCopy);
+        BuildIndexes(idsCopy, normalizedNames, normalizedPaths);
+    }
 
+    /// <summary>Adapter-friendly build that keeps only one normalization array at a time.
+    /// Selectors are evaluated during the two sequential index passes, avoiding both the
+    /// Core FileRecord graph and simultaneous normalized name/path arrays.</summary>
+    public void Build(IReadOnlyList<int> fileIds, Func<int, string> nameSelector,
+        Func<int, string> pathSelector)
+    {
+        ArgumentNullException.ThrowIfNull(fileIds);
+        ArgumentNullException.ThrowIfNull(nameSelector);
+        ArgumentNullException.ThrowIfNull(pathSelector);
+        int[] idsCopy = fileIds.ToArray();
+        ValidateSortedIds(idsCopy);
+        string[] names = new string[idsCopy.Length];
+        for (int i = 0; i < names.Length; i++) names[i] = FilenameSemantics.Normalize(nameSelector(i), false);
+        CompactIndex nextNames = BuildIndex(names, includeOneRune: true, includeShort: true, componentsOnly: false);
+        names = [];
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: false);
+        string[] paths = new string[idsCopy.Length];
+        for (int i = 0; i < paths.Length; i++) paths[i] = FilenameSemantics.Normalize(pathSelector(i), false);
+        CompactIndex nextPaths = BuildIndex(paths, includeOneRune: false, includeShort: false, componentsOnly: true);
+        paths = [];
         lock (gate)
         {
             ThrowIfDisposed();
-            ids = ordered.Select(r => r.FileId).ToArray();
-            nameIndex = nextNames!;
-            pathIndex = nextPaths!;
+            ids = idsCopy;
+            nameIndex = nextNames;
+            pathIndex = nextPaths;
+            overlay.Clear();
+        }
+    }
+
+    private void BuildIndexes(IReadOnlyList<int> fileIds, IReadOnlyList<string> names, IReadOnlyList<string> paths)
+    {
+        CompactIndex nextNames = BuildIndex(names, includeOneRune: true, includeShort: true, componentsOnly: false);
+        // Build the two indexes sequentially. The immutable index owns compact flat posting
+        // arrays; retaining two normalization arrays and two temporary count maps at once
+        // would otherwise dominate the 1M ready-memory gate.
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: false);
+        CompactIndex nextPaths = BuildIndex(paths, includeOneRune: false, includeShort: false, componentsOnly: true);
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            ids = fileIds.ToArray();
+            nameIndex = nextNames;
+            pathIndex = nextPaths;
             overlay.Clear();
         }
     }
@@ -86,8 +138,8 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         string full = Path.GetFullPath(store);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
         int[] idSnapshot;
-        Dictionary<string, Posting> nameSnapshot;
-        Dictionary<string, Posting> pathSnapshot;
+        CompactIndex nameSnapshot;
+        CompactIndex pathSnapshot;
         lock (gate)
         {
             ThrowIfDisposed();
@@ -123,8 +175,8 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         var nextIds = new int[count];
         for (int i = 0; i < count; i++) nextIds[i] = reader.ReadInt32();
         ValidateSortedIds(nextIds);
-        Dictionary<string, Posting> nextNames = ReadIndex(reader);
-        Dictionary<string, Posting> nextPaths = ReadIndex(reader);
+        CompactIndex nextNames = ReadIndex(reader);
+        CompactIndex nextPaths = ReadIndex(reader);
         if (stream.Position != stream.Length) throw new InvalidDataException("Route C store has trailing bytes");
         // The immutable base file is verified by GenerationStore's SHA-256 before this
         // method is called. Decoding every posting list here made restart/load scale with
@@ -154,8 +206,14 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
                 .Select(t => FilenameSemantics.Normalize(t, false))
                 .ToArray();
 
-            Dictionary<string, Posting> index = request.Scope == FilenameScope.Filename ? nameIndex : pathIndex;
-            int[]? candidates = CandidateIndexes(tokens, index);
+            CompactIndex index = request.Scope == FilenameScope.Filename ? nameIndex : pathIndex;
+            // The path index is component-based to keep a million-entry store compact. A
+            // query containing a separator may span the boundary between two components;
+            // use the conservative full candidate set for that uncommon direct form.
+            int[]? candidates = request.Scope == FilenameScope.FullPath &&
+                tokens.Any(t => t.Contains('\\') || t.Contains('/'))
+                ? null
+                : CandidateIndexes(tokens, index);
             bool usedScan = candidates is null;
             int candidateCount = candidates?.Length ?? ids.Length;
 
@@ -220,75 +278,128 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
             if (disposed) return;
             disposed = true;
             ids = [];
-            nameIndex.Clear();
-            pathIndex.Clear();
+            nameIndex = CompactIndex.Empty;
+            pathIndex = CompactIndex.Empty;
             overlay.Clear();
         }
         GC.SuppressFinalize(this);
     }
 
-    private static Dictionary<string, Posting> BuildIndex(IReadOnlyList<string> values, bool includeOneRune)
+    private static CompactIndex BuildIndex(IReadOnlyList<string> values, bool includeOneRune, bool includeShort, bool componentsOnly)
     {
-        // Complete one/two-rune postings are the correctness backbone. Selective trigrams
-        // are added only when their document frequency is small enough to be useful.
-        var shortLists = new Dictionary<string, List<int>>(StringComparer.Ordinal);
-        var trigramCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        // Count retained n-grams first, then materialize every posting in one flat int array.
+        // The old Dictionary<key,List<int>> representation allocated one object and one
+        // backing array per key; for a million-entry corpus those object headers exceeded
+        // the ready-memory gate even though the postings themselves were small.
+        var counts = new Dictionary<ulong, int>();
         const int mediumDivisor = 32;
         int medium = Math.Max(4_096, Math.Max(1, values.Count / mediumDivisor));
-
         for (int i = 0; i < values.Count; i++)
         {
-            Rune[] runes = values[i].EnumerateRunes().ToArray();
-            var seenShort = new HashSet<string>(StringComparer.Ordinal);
-            if (includeOneRune)
+            foreach (ulong key in KeysFor(values[i], includeOneRune, includeShort, componentsOnly))
             {
-                for (int p = 0; p < runes.Length; p++) seenShort.Add(ToString(runes, p, 1));
-            }
-            for (int p = 0; p + 2 <= runes.Length; p++) seenShort.Add(ToString(runes, p, 2));
-            foreach (string key in seenShort)
-            {
-                if (!shortLists.TryGetValue(key, out List<int>? list)) shortLists[key] = list = [];
-                list.Add(i);
-            }
-
-            var seenTri = new HashSet<string>(StringComparer.Ordinal);
-            for (int p = 0; p + 3 <= runes.Length; p++) seenTri.Add(ToString(runes, p, 3));
-            foreach (string key in seenTri)
-            {
-                if (trigramCounts.TryGetValue(key, out int count)) trigramCounts[key] = count + 1;
-                else trigramCounts[key] = 1;
+                if (counts.TryGetValue(key, out int count)) counts[key] = count + 1;
+                else counts[key] = 1;
             }
         }
 
-        var result = new Dictionary<string, Posting>(shortLists.Count + trigramCounts.Count / 2, StringComparer.Ordinal);
-        foreach ((string key, List<int> list) in shortLists)
-            result[key] = new Posting(list.Count, EncodePosting(list));
-
-        HashSet<string> selective = trigramCounts
-            .Where(p => p.Value <= medium)
-            .Select(p => p.Key)
-            .ToHashSet(StringComparer.Ordinal);
-        if (selective.Count != 0)
+        var selected = counts.Where(pair => pair.Value <= medium)
+            .Select(pair => (Key: pair.Key, Count: pair.Value))
+            .OrderBy(pair => pair.Key)
+            .ToArray();
+        var keys = new ulong[selected.Length];
+        var postingCounts = new int[selected.Length];
+        var offsets = new int[selected.Length + 1];
+        for (int i = 0; i < selected.Length; i++)
         {
-            var triLists = selective.ToDictionary(k => k, _ => new List<int>(), StringComparer.Ordinal);
-            for (int i = 0; i < values.Count; i++)
-            {
-                Rune[] runes = values[i].EnumerateRunes().ToArray();
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                for (int p = 0; p + 3 <= runes.Length; p++)
-                {
-                    string key = ToString(runes, p, 3);
-                    if (selective.Contains(key)) seen.Add(key);
-                }
-                foreach (string key in seen) triLists[key].Add(i);
-            }
-            foreach ((string key, List<int> list) in triLists)
-                result[key] = new Posting(list.Count, EncodePosting(list));
+            keys[i] = selected[i].Key;
+            postingCounts[i] = selected[i].Count;
+            offsets[i + 1] = checked(offsets[i] + postingCounts[i]);
+            // Reuse the count map as a compact lookup map. A negative value marks an
+            // intentionally omitted high-frequency key during the second pass.
+            counts[keys[i]] = i;
         }
-        return result;
+        // Mark non-selected keys without retaining a second key set. Selected values are
+        // their non-negative posting index; every other original count becomes -1.
+        ulong[] allKeys = counts.Keys.ToArray();
+        foreach (ulong key in allKeys) counts[key] = -1;
+        for (int i = 0; i < keys.Length; i++) counts[keys[i]] = i;
+
+        var valuesFlat = new int[offsets[^1]];
+        var cursors = offsets[..^1].ToArray();
+        for (int i = 0; i < values.Count; i++)
+        {
+            foreach (ulong key in KeysFor(values[i], includeOneRune, includeShort, componentsOnly))
+            {
+                if (!counts.TryGetValue(key, out int index) || index < 0) continue;
+                valuesFlat[cursors[index]++] = i;
+            }
+        }
+        // Encode delta postings once into one shared byte array. The ready-state index keeps
+        // this compact representation instead of a four-byte int for every posting.
+        var encoded = new ArrayBufferWriter<byte>();
+        var byteOffsets = new int[keys.Length + 1];
+        for (int i = 0; i < keys.Length; i++)
+        {
+            int previous = 0;
+            int start = offsets[i];
+            int end = offsets[i + 1];
+            for (int p = start; p < end; p++)
+            {
+                uint delta = checked((uint)(valuesFlat[p] - previous));
+                do
+                {
+                    Span<byte> span = encoded.GetSpan(1);
+                    byte next = (byte)(delta & 0x7F);
+                    delta >>= 7;
+                    if (delta != 0) next |= 0x80;
+                    span[0] = next;
+                    encoded.Advance(1);
+                } while (delta != 0);
+                previous = valuesFlat[p];
+            }
+            byteOffsets[i + 1] = encoded.WrittenCount;
+        }
+        return new CompactIndex(keys, byteOffsets, postingCounts, encoded.WrittenSpan.ToArray());
     }
 
-    private static int[]? CandidateIndexes(string[] tokens, IReadOnlyDictionary<string, Posting> index)
+    private static IEnumerable<ulong> KeysFor(string value, bool includeOneRune, bool includeShort, bool componentsOnly)
+    {
+        var seen = new HashSet<ulong>();
+        IEnumerable<string> parts = componentsOnly
+            ? value.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries)
+            : [value];
+        foreach (string part in parts)
+        {
+            Rune[] runes = part.EnumerateRunes().ToArray();
+            if (includeShort && includeOneRune)
+                for (int p = 0; p < runes.Length; p++) seen.Add(Pack(runes, p, 1));
+            if (includeShort)
+                for (int p = 0; p + 2 <= runes.Length; p++) seen.Add(Pack(runes, p, 2));
+            for (int p = 0; p + 3 <= runes.Length; p++)
+            {
+                ulong key = Pack(runes, p, 3);
+                if (TrackTrigram(runes, p)) seen.Add(key);
+            }
+        }
+        return seen;
+    }
+
+    private static bool TrackTrigram(IReadOnlyList<Rune> runes, int start)
+    {
+        // Keep every trigram that carries a Unicode or path separator signal. Plain
+        // alphanumeric keys may be omitted and therefore become an unconstrained candidate
+        // that falls back to exact verification; this bounds index cardinality without
+        // changing search correctness.
+        for (int i = start; i < start + 3; i++)
+        {
+            int value = runes[i].Value;
+            if (value > 0x7F || value is '_' or '.' or '-' or '(' or ')') return true;
+        }
+        return false;
+    }
+
+    private static int[]? CandidateIndexes(string[] tokens, CompactIndex index)
     {
         if (tokens.Length == 0) return null;
         int[]? intersection = null;
@@ -308,32 +419,38 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
             {
                 for (int i = 0; i + 3 <= runes.Length; i++)
                 {
-                    string key = ToString(runes, i, 3);
-                    if (index.TryGetValue(key, out Posting? posting)) postings.Add(posting);
+                    ulong key = Pack(runes, i, 3);
+                    if (index.TryGet(key, out Posting posting)) postings.Add(posting);
                 }
             }
             if (postings.Count == 0 && runes.Length >= 2)
             {
                 for (int i = 0; i + 2 <= runes.Length; i++)
                 {
-                    string key = ToString(runes, i, 2);
-                    if (!index.TryGetValue(key, out Posting? posting)) return [];
-                    postings.Add(posting);
+                    ulong key = Pack(runes, i, 2);
+                    if (index.TryGet(key, out Posting posting)) postings.Add(posting);
                 }
             }
             if (postings.Count == 0)
             {
-                string key = ToString(runes, 0, 1);
-                if (!index.TryGetValue(key, out Posting? posting)) return [];
-                postings.Add(posting);
+                for (int i = 0; i < runes.Length; i++)
+                {
+                    ulong key = Pack(runes, i, 1);
+                    if (index.TryGet(key, out Posting posting)) postings.Add(posting);
+                }
             }
-
-            postings.Sort(static (a, b) => a.Count.CompareTo(b.Count));
-            int[] tokenCandidates = postings[0].ToArray();
-            for (int i = 1; i < postings.Count && tokenCandidates.Length > 0; i++)
-                tokenCandidates = Intersect(tokenCandidates, postings[i].ToArray());
-            intersection = intersection is null ? tokenCandidates : Intersect(intersection, tokenCandidates);
-            if (intersection.Length == 0) return [];
+            // A token with no retained selective posting is an unconstrained token. A
+            // complete scan is conservative and avoids false negatives for high-frequency
+            // keys intentionally omitted from the compact index.
+            if (postings.Count == 0) continue;
+            {
+                postings.Sort(static (a, b) => a.Count.CompareTo(b.Count));
+                int[] tokenCandidates = postings[0].ToArray();
+                for (int i = 1; i < postings.Count && tokenCandidates.Length > 0; i++)
+                    tokenCandidates = Intersect(tokenCandidates, postings[i].ToArray());
+                intersection = intersection is null ? tokenCandidates : Intersect(intersection, tokenCandidates);
+                if (intersection.Length == 0) return [];
+            }
         }
         return intersection;
     }
@@ -351,94 +468,63 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         return count == buffer.Length ? buffer : buffer[..count];
     }
 
-    private static string ToString(IReadOnlyList<Rune> runes, int start, int length)
+    private static ulong Pack(IReadOnlyList<Rune> runes, int start, int length)
     {
-        var builder = new StringBuilder(length * 2);
-        for (int i = start; i < start + length; i++) builder.Append(runes[i].ToString());
-        return builder.ToString();
+        ulong key = 1;
+        for (int i = start; i < start + length; i++)
+            key = checked((key << 21) | (uint)runes[i].Value);
+        return key;
     }
 
-    private static byte[] EncodePosting(IReadOnlyList<int> values)
-    {
-        var output = new ArrayBufferWriter<byte>();
-        int previous = 0;
-        foreach (int value in values)
-        {
-            uint delta = checked((uint)(value - previous));
-            do
-            {
-                Span<byte> span = output.GetSpan(1);
-                byte next = (byte)(delta & 0x7F);
-                delta >>= 7;
-                if (delta != 0) next |= 0x80;
-                span[0] = next;
-                output.Advance(1);
-            } while (delta != 0);
-            previous = value;
-        }
-        return output.WrittenSpan.ToArray();
-    }
-
-    private static uint ReadVarUInt(ReadOnlySpan<byte> data, ref int offset)
-    {
-        uint value = 0;
-        int shift = 0;
-        while (offset < data.Length)
-        {
-            byte b = data[offset++];
-            value |= (uint)(b & 0x7F) << shift;
-            if ((b & 0x80) == 0) return value;
-            shift += 7;
-            if (shift > 28) throw new InvalidDataException("Route C varint too long");
-        }
-        throw new EndOfStreamException();
-    }
-
-    private static void WriteIndex(BinaryWriter writer, IReadOnlyDictionary<string, Posting> index)
+    private static void WriteIndex(BinaryWriter writer, CompactIndex index)
     {
         writer.Write(index.Count);
-        foreach ((string key, Posting posting) in index.OrderBy(p => p.Key, StringComparer.Ordinal))
+        for (int i = 0; i < index.Count; i++)
         {
-            writer.Write(key);
-            writer.Write(posting.Count);
-            writer.Write(posting.Data.Length);
-            writer.Write(posting.Data);
+            writer.Write(index.Keys[i]);
+            int count = index.Counts[i];
+            writer.Write(count);
+            int offset = index.Offsets[i];
+            int byteCount = index.Offsets[i + 1] - offset;
+            writer.Write(byteCount);
+            writer.Write(index.Data, offset, byteCount);
         }
     }
 
-    private static Dictionary<string, Posting> ReadIndex(BinaryReader reader)
+    private static CompactIndex ReadIndex(BinaryReader reader)
     {
         int count = reader.ReadInt32();
         if (count < 0 || count > 20_000_000) throw new InvalidDataException("Route C index count invalid");
-        var result = new Dictionary<string, Posting>(Math.Min(count, 4_000_000), StringComparer.Ordinal);
+        var keys = new ulong[count];
+        var counts = new int[count];
+        var offsets = new int[count + 1];
+        var encoded = new ArrayBufferWriter<byte>();
+        byte[] transfer = new byte[64 * 1024];
         for (int i = 0; i < count; i++)
         {
-            string key = reader.ReadString();
+            ulong key = reader.ReadUInt64();
+            if (i > 0 && key <= keys[i - 1]) throw new InvalidDataException("Route C index keys are not strictly increasing");
             int postingCount = reader.ReadInt32();
-            int byteCount = reader.ReadInt32();
-            if (postingCount < 0 || byteCount < 0 || byteCount > 1_000_000_000)
+            if (postingCount < 0 || postingCount > 20_000_000)
                 throw new InvalidDataException("Route C posting header invalid");
-            byte[] data = reader.ReadBytes(byteCount);
-            if (data.Length != byteCount) throw new EndOfStreamException();
-            if (!result.TryAdd(key, new Posting(postingCount, data)))
-                throw new InvalidDataException("Route C duplicate index key");
-        }
-        return result;
-    }
-
-    private static void ValidatePostingBounds(IReadOnlyDictionary<string, Posting> index, int recordCount)
-    {
-        foreach (Posting posting in index.Values)
-        {
-            int[] values = posting.ToArray();
-            int previous = -1;
-            foreach (int value in values)
+            keys[i] = key;
+            counts[i] = postingCount;
+            int byteCount = reader.ReadInt32();
+            if (byteCount < 0 || byteCount > 1_000_000_000)
+                throw new InvalidDataException("Route C encoded posting length invalid");
+            int remaining = byteCount;
+            while (remaining > 0)
             {
-                if ((uint)value >= (uint)recordCount || value <= previous)
-                    throw new InvalidDataException("Route C posting index is out of bounds or unsorted");
-                previous = value;
+                int chunk = Math.Min(remaining, transfer.Length);
+                int read = reader.Read(transfer, 0, chunk);
+                if (read != chunk) throw new EndOfStreamException();
+                transfer.AsSpan(0, read).CopyTo(encoded.GetSpan(read));
+                encoded.Advance(read);
+                remaining -= read;
             }
+            offsets[i + 1] = encoded.WrittenCount;
         }
+        return new CompactIndex(keys, offsets, counts, encoded.WrittenSpan.ToArray());
     }
 
     private static void ValidateIds(IReadOnlyList<FileRecord> source)
@@ -497,23 +583,77 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
-    private sealed class Posting
+    private sealed class CompactIndex
     {
-        public Posting(int count, byte[] data) { Count = count; Data = data; }
-        public int Count { get; }
+        public static CompactIndex Empty { get; } = new([], [0], [], []);
+
+        public CompactIndex(ulong[] keys, int[] offsets, int[] counts, byte[] data)
+        {
+            Keys = keys; Offsets = offsets; Counts = counts; Data = data;
+        }
+
+        public ulong[] Keys { get; }
+        public int[] Offsets { get; }
+        public int[] Counts { get; }
         public byte[] Data { get; }
+        public int Count => Keys.Length;
+
+        public bool TryGet(ulong key, out Posting posting)
+        {
+            int low = 0, high = Keys.Length - 1;
+            while (low <= high)
+            {
+                int middle = low + ((high - low) >> 1);
+                ulong current = Keys[middle];
+                if (current == key)
+                {
+                    posting = new Posting(Data, Offsets[middle], Offsets[middle + 1] - Offsets[middle], Counts[middle]);
+                    return true;
+                }
+                if (current < key) low = middle + 1; else high = middle - 1;
+            }
+            posting = default;
+            return false;
+        }
+    }
+
+    private readonly struct Posting
+    {
+        private readonly byte[] data;
+        private readonly int offset;
+        private readonly int byteCount;
+
+        public Posting(byte[] data, int offset, int byteCount, int count)
+        {
+            this.data = data; this.offset = offset; this.byteCount = byteCount; Count = count;
+        }
+
+        public int Count { get; }
 
         public int[] ToArray()
         {
+            if (Count == 0) return [];
             var result = new int[Count];
-            int cursor = 0;
+            int cursor = offset;
+            int end = checked(offset + byteCount);
             int previous = 0;
             for (int i = 0; i < result.Length; i++)
             {
-                previous = checked(previous + (int)ReadVarUInt(Data, ref cursor));
+                uint value = 0;
+                int shift = 0;
+                while (cursor < end)
+                {
+                    byte next = data[cursor++];
+                    value |= (uint)(next & 0x7F) << shift;
+                    if ((next & 0x80) == 0) break;
+                    shift += 7;
+                    if (shift > 28) throw new InvalidDataException("Route C varint too long");
+                }
+                if (cursor > end) throw new EndOfStreamException();
+                previous = checked(previous + (int)value);
                 result[i] = previous;
             }
-            if (cursor != Data.Length) throw new InvalidDataException("Route C posting has trailing bytes");
+            if (cursor != end) throw new InvalidDataException("Route C posting has trailing bytes");
             return result;
         }
     }
