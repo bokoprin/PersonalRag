@@ -475,13 +475,14 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private IReadOnlyList<CatalogChange> ReconcileCore(CancellationToken token)
     {
         Interlocked.Increment(ref reconcileCount);
-        Dictionary<string, FilenameRecord> prior = engine.SnapshotByPath();
         // A quiet restart usually has the same path set and only a small number of
-        // metadata changes.  Avoid rebuilding a million-entry next dictionary and
-        // diff graph in that case; the full reconcile remains the fallback whenever
-        // a path is added, removed, renamed, or moved.
-        if (TryApplyStableMetadataUpdates(prior, token, out IReadOnlyList<CatalogChange> stableChanges))
+        // metadata changes.  Check the compact path index directly so a saturated
+        // watcher queue does not materialize a million-entry prior dictionary merely
+        // to discover that every path is still present.  The full reconcile remains
+        // the fallback whenever a path is added, removed, renamed, or moved.
+        if (TryApplyStableMetadataUpdates(token, out IReadOnlyList<CatalogChange> stableChanges))
             return stableChanges;
+        Dictionary<string, FilenameRecord> prior = engine.SnapshotByPath();
         (Dictionary<string, FilenameRecord> next, bool changed) = ScanReconcile(prior, token);
         IReadOnlyList<CatalogChange> changes = changed ? Diff(prior, next) : [];
         if (changes.Count == 0) return changes;
@@ -542,23 +543,29 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         });
     }
 
-    private bool TryApplyStableMetadataUpdates(
-        IReadOnlyDictionary<string, FilenameRecord> prior,
-        CancellationToken token,
-        out IReadOnlyList<CatalogChange> changes)
+    private bool TryApplyStableMetadataUpdates(CancellationToken token, out IReadOnlyList<CatalogChange> changes)
     {
         var changeList = new List<CatalogChange>();
         changes = changeList;
-        if (prior.Count == 0) return true;
+        int currentCount;
+        lock (gate) currentCount = recordCount;
 
-        int maxId = 0;
-        foreach (FilenameRecord record in prior.Values) maxId = Math.Max(maxId, record.FileId);
+        // FileIds are stable but may contain holes after deletes/moves.  A compact
+        // bitset keyed by the highest live id lets us detect missing entries without
+        // allocating a path dictionary.  The normal production corpus has dense ids,
+        // and the fallback below still handles pathological/sparse stores safely.
+        int maxId = engine.MaxFileId;
+        if (maxId == int.MaxValue) return false;
         var seen = new bool[checked(maxId + 1)];
-        var updates = new List<FilenameRecord>();
+        var updates = new List<(FilenameRecord Old, FilenameRecord Current)>();
         int seenCount = 0;
         foreach (DiscoveredEntry entry in Discover(token))
         {
-            if (!prior.TryGetValue(entry.FullPath, out FilenameRecord? old)) return false;
+            FilenameRecord? old;
+            lock (gate)
+            {
+                if (!TryGetPathLocked(entry.FullPath, out old) || old is null) return false;
+            }
             if (old.FileId >= seen.Length) return false;
             if (!seen[old.FileId]) { seen[old.FileId] = true; seenCount++; }
 
@@ -568,14 +575,14 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 continue;
 
             ReadMetadata? read = TryReadMetadata(entry, old);
-            if (read is null) continue;
+            if (read is null) return false;
             FilenameRecord current = new(old.FileId, old.ParentId, read.Value.Name, read.Value.FullPath,
                 read.Value.SizeBytes, read.Value.ModifiedUtc, read.Value.Flags)
             { Key = read.Value.Key, ParentKey = old.ParentKey };
-            if (!Equivalent(old, current)) updates.Add(current);
+            if (!Equivalent(old, current)) updates.Add((old, current));
         }
 
-        if (seenCount != prior.Count) return false;
+        if (seenCount != currentCount) return false;
         if (updates.Count == 0) return true;
 
         engineGate.EnterWriteLock();
@@ -583,9 +590,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         {
             lock (gate)
             {
-                foreach (FilenameRecord current in updates)
+                foreach ((FilenameRecord old, FilenameRecord current) in updates)
                 {
-                    if (!prior.TryGetValue(current.FullPath, out FilenameRecord? old)) continue;
                     engine.Upsert(current);
                     mutableRecords[current.FileId] = current;
                     changeList.Add(new(CatalogChangeKind.Updated, current.Key, old, current));
