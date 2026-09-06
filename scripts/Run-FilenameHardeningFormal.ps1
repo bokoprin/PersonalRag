@@ -223,7 +223,8 @@ $suppIdleReport = Join-Path $logs 'supplemental-idle.json'
 $suppStore = Join-Path $suppRoot '.personalrag-store\index.routec'
 $gate.Add((Invoke-Captured -FilePath $dotnet -ArgumentList @('run','--project','tests\FilenameSearch.Idle','-c','Release','--no-build','--',$suppRoot,$suppStore,$suppIdleReport,$SupplementalIdleSeconds) -Name 'supplemental-idle' -WorkingDirectory $worktree))
 $regressionPath = Join-Path $reports 'REGRESSION.json'
-$regression = [ordered]@{ version = 1; source_commit_sha = $sourceSha; report_head_sha = $sourceSha; command = 'isolated worktree: dotnet --info; dotnet restore PersonalRag.sln; dotnet build PersonalRag.sln -c Release --no-restore; FilenameSearch.Tests; FilenameSearch.Gui.Tests; supplemental E2E/Idle'; operations = $gate; pass = (($gate | Where-Object { $_.exit_code -ne 0 }).Count -eq 0); ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; ac_requirement_overridden = $true }
+$gateFailures = @($gate | Where-Object { $_.exit_code -ne 0 }).Count
+$regression = [ordered]@{ version = 1; source_commit_sha = $sourceSha; report_head_sha = $sourceSha; command = 'isolated worktree: dotnet --info; dotnet restore PersonalRag.sln; dotnet build PersonalRag.sln -c Release --no-restore; FilenameSearch.Tests; FilenameSearch.Gui.Tests; supplemental E2E/Idle'; operations = $gate; failed_operation_count = $gateFailures; pass = ($gateFailures -eq 0); ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; ac_requirement_overridden = $true }
 $regression | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $regressionPath -Encoding utf8
 if (-not $regression.pass) { throw 'Gate 0 regression failed; formal measurement is not started.' }
 
