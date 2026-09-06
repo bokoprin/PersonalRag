@@ -559,7 +559,12 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         var seen = new bool[checked(maxId + 1)];
         var updates = new List<(FilenameRecord Old, FilenameRecord Current)>();
         int seenCount = 0;
-        foreach (DiscoveredEntry entry in Discover(token))
+        // Use the single-pass enumerator here as well as during initial build.  The
+        // parallel Discover implementation retains every entry in a ConcurrentBag
+        // until enumeration completes, which is unnecessary for a path-presence check
+        // and makes the post-storm memory sample include that transient million-entry
+        // graph.
+        foreach (DiscoveredEntry entry in DiscoverStreaming(token))
         {
             FilenameRecord? old;
             lock (gate)
