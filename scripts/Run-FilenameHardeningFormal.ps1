@@ -73,7 +73,9 @@ function Get-Sha256([string]$Path) {
 function Get-CanonicalJsonHash([object]$Value) {
     $canonical = $Value | ConvertTo-Json -Depth 100 -Compress
     $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($canonical)
-    return ([Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes))).ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return (([BitConverter]::ToString($sha.ComputeHash($bytes))) -replace '-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
 }
 
 function Get-Percentile([double[]]$Values, [double]$P) {
