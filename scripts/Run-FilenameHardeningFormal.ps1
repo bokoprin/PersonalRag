@@ -279,9 +279,17 @@ $lock = [ordered]@{
     thermal_throttling = $power.ThermalThrottling
     source_hashes = $sourceHashes
 }
+$previousLock = $null
+if (Test-Path -LiteralPath $lockPath) {
+    try { $previousLock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json } catch { $previousLock = $null }
+}
 $lock | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $lockPath -Encoding utf8
 $invalidationsPath = Join-Path $reports 'FORMAL_SERIES_INVALIDATIONS.json'
-[ordered]@{ version = 1; series_id = $lock.series_id; invalidated = @(); note = 'No formal series invalidation recorded.' } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $invalidationsPath -Encoding utf8
+$invalidated = @()
+if ($previousLock -and $previousLock.series_id -and $previousLock.series_id -ne $lock.series_id) {
+    $invalidated += [ordered]@{ series_id = $previousLock.series_id; source_commit_sha = $previousLock.formal_source_commit_sha; reason = 'New production/runner/source lock supersedes the earlier series; prior measurements cannot be reused.' }
+}
+[ordered]@{ version = 1; series_id = $lock.series_id; invalidated = $invalidated; note = 'Any series listed here is excluded from the aggregate; all current results use this lock.' } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $invalidationsPath -Encoding utf8
 
 $environmentRaw = Join-Path $logs 'environment-raw.json'
 $environmentOp = Invoke-Captured -FilePath $dotnet -ArgumentList @($formalDll,'environment',$environmentRaw) -Name 'formal-environment' -WorkingDirectory $worktree
