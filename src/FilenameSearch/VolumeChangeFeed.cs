@@ -16,7 +16,7 @@ internal interface IVolumeChangeFeed : IDisposable
     event Action? Overflow;
     bool FastCatchUpAvailable { get; }
     bool RequiresSnapshot { get; }
-    void SetSnapshot(IReadOnlyList<FilenameRecord> records);
+    void SetSnapshot(Action<Action<FileKey, string>> enumerateNativePaths);
     void Start();
     void Stop();
 }
@@ -58,7 +58,7 @@ internal sealed class WatcherVolumeChangeFeed : IVolumeChangeFeed
     public bool FastCatchUpAvailable => false;
     public bool RequiresSnapshot => false;
 
-    public void SetSnapshot(IReadOnlyList<FilenameRecord> records) { }
+    public void SetSnapshot(Action<Action<FileKey, string>> enumerateNativePaths) { }
 
     public void Start() => watcher.EnableRaisingEvents = true;
     public void Stop() => watcher.EnableRaisingEvents = false;
@@ -126,15 +126,15 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
     public bool FastCatchUpAvailable => fastCatchUpAvailable;
     public bool RequiresSnapshot => true;
 
-    public void SetSnapshot(IReadOnlyList<FilenameRecord> records)
+    public void SetSnapshot(Action<Action<FileKey, string>> enumerateNativePaths)
     {
         pathsById.Clear();
-        foreach (FilenameRecord record in records)
+        enumerateNativePaths((key, path) =>
         {
-            if (!record.Key.IsNative || !PathIdentity.IsSameOrChild(root, record.FullPath)) continue;
-            pathsById.TryGetValue(record.Key.NativeId, out List<string>? paths);
-            (paths ??= []).Add(record.FullPath);
-        }
+            if (!key.IsNative || !PathIdentity.IsSameOrChild(root, path)) return;
+            pathsById.TryGetValue(key.NativeId, out List<string>? paths);
+            (paths ??= []).Add(path);
+        });
     }
 
     public void Start()

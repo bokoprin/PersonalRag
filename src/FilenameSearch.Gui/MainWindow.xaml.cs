@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly bool exitAfterProbe;
     private readonly string? startupProbeQuery;
     private readonly string? startupProbeMode;
+    private readonly Task<IFilenameCatalog> catalogOpenTask;
     private readonly Channel<SearchWork> searchQueue = Channel.CreateUnbounded<SearchWork>(
         new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly Task searchWorker;
@@ -47,6 +48,7 @@ public partial class MainWindow : Window
         this.exitAfterProbe = exitAfterProbe;
         this.startupProbeQuery = startupProbeQuery;
         this.startupProbeMode = startupProbeMode ?? (startupProbePath is null ? null : "startup");
+        catalogOpenTask = OpenCatalogAsync();
         InitializeComponent();
         Results.ItemsSource = rows;
         searchWorker = Task.Factory.StartNew(SearchLoop, CancellationToken.None,
@@ -59,16 +61,7 @@ public partial class MainWindow : Window
         try
         {
             SetStatus("ファイルシステムを読み込み中");
-            if (rootOverride is not null)
-            {
-                string root = Path.GetFullPath(rootOverride);
-                string store = storeOverride is null ? DefaultSingleStore(root) : Path.GetFullPath(storeOverride);
-                catalog = await Task.Run(() => FileSystemCatalog.Open(root, store));
-            }
-            else
-            {
-                catalog = await MultiVolumeCatalog.OpenLocalFixedVolumesAsync(DefaultVolumeStoreRoot());
-            }
+            catalog = await catalogOpenTask.ConfigureAwait(true);
 
             catalog.Changed += CatalogChanged;
             await catalog.Ready.ConfigureAwait(true);
@@ -199,6 +192,23 @@ public partial class MainWindow : Window
             if (exitAfterProbe)
                 _ = Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(Close));
         }
+    }
+
+    private Task<IFilenameCatalog> OpenCatalogAsync()
+    {
+        if (rootOverride is not null)
+        {
+            string root = Path.GetFullPath(rootOverride);
+            string store = storeOverride is null ? DefaultSingleStore(root) : Path.GetFullPath(storeOverride);
+            return Task.Factory.StartNew<IFilenameCatalog>(
+                () => FileSystemCatalog.Open(root, store),
+                CancellationToken.None,
+                TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
+        }
+        return MultiVolumeCatalog.OpenLocalFixedVolumesAsync(DefaultVolumeStoreRoot())
+            .ContinueWith<IFilenameCatalog>(task => task.GetAwaiter().GetResult(),
+                CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     private async Task RunWarmProbeAsync()

@@ -18,13 +18,16 @@ if (Test-Path -LiteralPath $report) { Remove-Item -LiteralPath $report -Force }
 $dir = [System.IO.Path]::GetDirectoryName($report)
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
-$psi = [System.Diagnostics.ProcessStartInfo]::new($gui)
+$psi = [System.Diagnostics.ProcessStartInfo]::new()
+$psi.FileName = $gui
 $psi.UseShellExecute = $false
-$psi.ArgumentList.Add('--startup-probe')
-$psi.ArgumentList.Add($report)
-$psi.ArgumentList.Add($root)
-$psi.ArgumentList.Add($store)
-$psi.ArgumentList.Add($Query)
+# Use the string Arguments property for compatibility with both PowerShell 5.1
+# and PowerShell 7. The formal probe is a local child process, so quoting each
+# argument as a Windows command-line token is sufficient and deterministic.
+$probeArguments = @('--startup-probe', $report, $root, $store, $Query)
+$psi.Arguments = (($probeArguments | ForEach-Object {
+    '"' + ([string]$_).Replace('"', '\"') + '"'
+}) -join ' ')
 
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
 $process = [System.Diagnostics.Process]::Start($psi)

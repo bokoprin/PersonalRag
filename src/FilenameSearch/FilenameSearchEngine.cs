@@ -393,7 +393,31 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         lock (gate)
         {
             ThrowIfDisposed();
-            if (baseTable is not null) baseTable.ForEachPathHash(visitor);
+            HashSet<int>? overridden = delta.Count == 0 ? null : delta.Keys.ToHashSet();
+            if (baseTable is not null)
+                baseTable.ForEachPathHash((id, hash) =>
+                {
+                    if (overridden is null || !overridden.Contains(id)) visitor(id, hash);
+                });
+            foreach ((int id, FilenameRecord? record) in delta)
+                if (record is not null) visitor(id, FileSystemCatalog.PathHash(record.FullPath));
+        }
+    }
+
+    internal void ForEachNativePath(Action<FileKey, string> visitor)
+    {
+        ArgumentNullException.ThrowIfNull(visitor);
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            HashSet<int>? overridden = delta.Count == 0 ? null : delta.Keys.ToHashSet();
+            if (baseTable is not null)
+                baseTable.ForEachNativePath((key, path, id) =>
+                {
+                    if (overridden is null || !overridden.Contains(id)) visitor(key, path);
+                });
+            foreach (FilenameRecord? record in delta.Values)
+                if (record is { Key.IsNative: true }) visitor(record.Key, record.FullPath);
         }
     }
 
@@ -625,6 +649,18 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         public void ForEachPathHash(Action<int, ulong> visitor)
         {
             for (int i = 0; i < ids.Length; i++) visitor(ids[i], pathHashes[i]);
+        }
+
+        public void ForEachNativePath(Action<FileKey, string> visitor)
+        {
+            for (int i = 0; i < ids.Length; i++)
+                if (keys[i].IsNative) visitor(keys[i], utf8.GetString(pathBytes, pathOffsets[i], pathLengths[i]));
+        }
+
+        public void ForEachNativePath(Action<FileKey, string, int> visitor)
+        {
+            for (int i = 0; i < ids.Length; i++)
+                if (keys[i].IsNative) visitor(keys[i], utf8.GetString(pathBytes, pathOffsets[i], pathLengths[i]), ids[i]);
         }
 
         private FilenameRecord Get(int i)

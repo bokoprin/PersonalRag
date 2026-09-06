@@ -38,6 +38,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private ulong[] basePathHashes = [];
     private int[] basePathIds = [];
     private readonly Dictionary<int, FilenameRecord> mutableRecords = [];
+    private Task basePathIndexReady = Task.CompletedTask;
     private int recordCount;
     private FilenameSearchEngine engine;
     private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, compactionRunning, directoryReconcileScheduled;
@@ -187,7 +188,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         // The watcher backend does not need a catalog snapshot. Avoid materializing a
         // million-record graph merely to pass it to its no-op SetSnapshot implementation;
         // the USN backend opts in because it resolves native identities during catch-up.
-        if (changeFeed.RequiresSnapshot) changeFeed.SetSnapshot(Records);
+        if (changeFeed.RequiresSnapshot)
+            changeFeed.SetSnapshot(visitor => engine.ForEachNativePath(visitor));
         changeFeed.Start();
         if (!changeFeed.FastCatchUpAvailable) Queue(new FileSystemEvent(root, CatchUp: true));
     }
@@ -225,6 +227,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     {
         try
         {
+            await basePathIndexReady.ConfigureAwait(false);
             while (await events.Reader.WaitToReadAsync(stop.Token).ConfigureAwait(false))
             {
                 await Task.Delay(50, stop.Token).ConfigureAwait(false);
@@ -977,26 +980,42 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         {
             ClearPathMapsLocked();
             int count = engine.BaseRecordCount;
-            basePathHashes = new ulong[count];
-            basePathIds = new int[count];
-            int index = 0;
-            engine.ForEachPathHash((id, hash) =>
-            {
-                if (index == basePathHashes.Length)
-                {
-                    Array.Resize(ref basePathHashes, checked(index * 2 + 1));
-                    Array.Resize(ref basePathIds, basePathHashes.Length);
-                }
-                basePathHashes[index] = hash; basePathIds[index++] = id;
-                nextId = Math.Max(nextId, id == int.MaxValue ? int.MaxValue : id + 1);
-            });
-            if (index != basePathHashes.Length)
-            {
-                Array.Resize(ref basePathHashes, index); Array.Resize(ref basePathIds, index);
-            }
-            Array.Sort(basePathHashes, basePathIds);
-            recordCount = index;
             nextId = Math.Max(nextId, engine.MaxFileId == int.MaxValue ? int.MaxValue : engine.MaxFileId + 1);
+            recordCount = count;
+        }
+        basePathIndexReady = Task.Factory.StartNew(
+            BuildLoadedBasePathIndex,
+            CancellationToken.None,
+            TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+    }
+
+    private void BuildLoadedBasePathIndex()
+    {
+        int count = engine.BaseRecordCount;
+        var hashes = new ulong[count];
+        var ids = new int[count];
+        int index = 0;
+        engine.ForEachPathHash((id, hash) =>
+        {
+            if (index == hashes.Length)
+            {
+                Array.Resize(ref hashes, checked(index * 2 + 1));
+                Array.Resize(ref ids, hashes.Length);
+            }
+            hashes[index] = hash; ids[index++] = id;
+        });
+        if (index != hashes.Length)
+        {
+            Array.Resize(ref hashes, index); Array.Resize(ref ids, index);
+        }
+        Array.Sort(hashes, ids);
+        lock (gate)
+        {
+            if (disposed) return;
+            basePathHashes = hashes;
+            basePathIds = ids;
+            recordCount = index;
         }
     }
 
@@ -1175,6 +1194,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         try { changeFeed.Stop(); } catch { } changeFeed.Dispose();
         stop.Cancel(); events.Writer.TryComplete();
         try { await worker.ConfigureAwait(false); } catch (OperationCanceledException) { }
+        try { await basePathIndexReady.ConfigureAwait(false); } catch (OperationCanceledException) { }
         persistence.MarkClean(); persistence.Dispose();
         engineGate.EnterWriteLock(); try { engine.Dispose(); } finally { engineGate.ExitWriteLock(); engineGate.Dispose(); }
         lock (gate) ClearPathMapsLocked();
