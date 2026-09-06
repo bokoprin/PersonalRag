@@ -630,9 +630,12 @@ static async Task<object> RunRestartAsync(string root, string store)
     Stopwatch watch = Stopwatch.StartNew();
     await using var second = FileSystemCatalog.Open(root, store);
     await second.Ready.ConfigureAwait(false);
-    await UntilAsync(() => second.Records.FirstOrDefault(r => r.FullPath.Equals(path, StringComparison.Ordinal)) is { SizeBytes: var size, ModifiedUtc: var modified } && size == (ulong)expectedSize && modified == expectedTime, "restart same-name metadata", TimeSpan.FromSeconds(30));
+    bool IsUpdated() => second.TryGetRecordAtPath(path, out FilenameRecord? current) &&
+        current!.SizeBytes == (ulong)expectedSize && current.ModifiedUtc == expectedTime;
+    await UntilAsync(IsUpdated, "restart same-name metadata", TimeSpan.FromSeconds(30));
     watch.Stop();
-    FilenameRecord refreshed = second.Records.Single(r => r.FullPath.Equals(path, StringComparison.Ordinal));
+    if (!second.TryGetRecordAtPath(path, out FilenameRecord? refreshed) || refreshed is null)
+        throw new InvalidDataException("restart same-name record disappeared");
     return new { version = 1, mode = "restart", source_commit = SourceCommit(), root_entries = second.RecordCount, path, expected_size = expectedSize, actual_size = refreshed.SizeBytes, expected_modified = expectedTime, actual_modified = refreshed.ModifiedUtc, catchup_ms = watch.Elapsed.TotalMilliseconds, pass = second.RecordCount >= 4096 && refreshed.SizeBytes == (ulong)expectedSize && refreshed.ModifiedUtc == expectedTime && watch.Elapsed.TotalMilliseconds <= 5000 };
 }
 

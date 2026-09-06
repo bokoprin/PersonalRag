@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO.Enumeration;
 using System.Threading.Channels;
 
 namespace PersonalRag.FilenameSearch;
@@ -31,6 +32,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     // FilenameSearchEngine's UTF-8 metadata table and are materialized only for candidates.
     private readonly Dictionary<ulong, int> pathIds = [];
     private readonly Dictionary<ulong, List<int>> pathCollisions = [];
+    private readonly Dictionary<FileKey, (FilenameRecord Record, DateTime ExpiresUtc)> pendingDeletes = [];
     // The immutable base uses sorted flat arrays instead of a million-entry Dictionary.
     // pathIds/pathCollisions are reserved for the small live overlay and tombstones.
     private ulong[] basePathHashes = [];
@@ -38,7 +40,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private readonly Dictionary<int, FilenameRecord> mutableRecords = [];
     private int recordCount;
     private FilenameSearchEngine engine;
-    private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, compactionRunning;
+    private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, compactionRunning, directoryReconcileScheduled;
     private long queueSaturationCount, reconcileCount, compactionCount;
     private long generation;
     private string status = "準備中";
@@ -92,6 +94,12 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     {
         string full = Path.GetFullPath(path);
         lock (gate) return TryGetPathLocked(full, out _);
+    }
+
+    internal bool TryGetRecordAtPath(string path, out FilenameRecord? record)
+    {
+        string full = Path.GetFullPath(path);
+        lock (gate) return TryGetPathLocked(full, out record);
     }
 
     public static FileSystemCatalog Open(string root, string store, IEnumerable<string>? excludedRoots = null)
@@ -247,8 +255,44 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private IReadOnlyList<CatalogChange> ProcessEvents(IReadOnlyList<FileSystemEvent> pending)
     {
         var changes = new List<CatalogChange>();
-        foreach (FileSystemEvent e in pending)
+        var deletedByKey = new Dictionary<FileKey, Queue<(int Index, FilenameRecord Record)>>();
+        for (int i = 0; i < pending.Count; i++)
         {
+            FileSystemEvent e = pending[i];
+            if (e.Kind != FileSystemEventKind.Deleted || e.OldPath is not null) continue;
+            lock (gate)
+            {
+                if (TryGetPathLocked(e.Path, out FilenameRecord? old) && old!.Key.IsNative)
+                {
+                    if (!deletedByKey.TryGetValue(old.Key, out Queue<(int, FilenameRecord)>? queue))
+                        deletedByKey[old.Key] = queue = new();
+                    queue.Enqueue((i, old));
+                }
+            }
+        }
+        var pairedDeletes = new HashSet<int>();
+        var pairedCreates = new Dictionary<int, FilenameRecord>();
+        for (int i = 0; i < pending.Count; i++)
+        {
+            FileSystemEvent e = pending[i];
+            if (e.Kind != FileSystemEventKind.Created || e.OldPath is not null) continue;
+            FilenameRecord? next = TryReadRecord(e.Path, 0);
+            if (next is null || !next.Key.IsNative || !deletedByKey.TryGetValue(next.Key, out Queue<(int, FilenameRecord)>? queue) || queue.Count == 0)
+                continue;
+            (int deletedIndex, FilenameRecord old) = queue.Dequeue();
+            pairedDeletes.Add(deletedIndex);
+            pairedCreates[i] = old;
+        }
+
+        for (int i = 0; i < pending.Count; i++)
+        {
+            if (pairedDeletes.Contains(i)) continue;
+            FileSystemEvent e = pending[i];
+            if (pairedCreates.TryGetValue(i, out FilenameRecord? old))
+            {
+                changes.AddRange(ProcessRename(old.FullPath, e.Path));
+                continue;
+            }
             if (e.OldPath is not null) changes.AddRange(ProcessRename(e.OldPath, e.Path));
             else changes.AddRange(ProcessPath(e.Path, e.Kind));
         }
@@ -289,7 +333,11 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         path = Path.GetFullPath(path);
         var changes = new List<CatalogChange>();
         if (IsExcluded(path)) return changes;
-        if (Directory.Exists(path)) { if (kind != FileSystemEventKind.Changed) Interlocked.Exchange(ref forceReconcile, 1); return changes; }
+        if (Directory.Exists(path))
+        {
+            if (kind != FileSystemEventKind.Changed) ScheduleDirectoryReconcile();
+            return changes;
+        }
         lock (gate)
         {
             if (File.Exists(path))
@@ -297,6 +345,13 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 TryGetPathLocked(path, out FilenameRecord? old);
                 FilenameRecord? next = TryReadRecord(path, old?.FileId ?? AllocateId());
                 if (next is null) { Interlocked.Exchange(ref forceReconcile, 1); return changes; }
+                if (old is null && next.Key.IsNative && TryTakePendingDelete(next.Key, out FilenameRecord? movedFrom))
+                {
+                    next = AttachParent(next with { FileId = movedFrom!.FileId });
+                    AddPathLocked(next); mutableRecords[next.FileId] = next; engine.Upsert(next);
+                    changes.Add(new(CatalogChangeKind.Moved, next.Key, movedFrom, next));
+                    return changes;
+                }
                 if (old is not null && old.Key.IsNative && next.Key.IsNative && old.Key != next.Key)
                 {
                     engine.Remove(old.FileId); next = AttachParent(next with { FileId = AllocateId() });
@@ -312,8 +367,17 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             }
             else if (TryGetPathLocked(path, out FilenameRecord? removed))
             {
-                RemovePathLocked(path, removed!.FileId); mutableRecords.Remove(removed.FileId); engine.Remove(removed.FileId); changes.Add(new(CatalogChangeKind.Removed, removed.Key, removed, null));
+                if (removed!.Key.IsNative) pendingDeletes[removed.Key] = (removed, DateTime.UtcNow.AddSeconds(2));
+                RemovePathLocked(path, removed.FileId); mutableRecords.Remove(removed.FileId); engine.Remove(removed.FileId); changes.Add(new(CatalogChangeKind.Removed, removed.Key, removed, null));
                 if (removed.IsDirectory) Interlocked.Exchange(ref forceReconcile, 1);
+            }
+            else if (kind == FileSystemEventKind.Created)
+            {
+                // A cross-directory move can surface as Deleted + Created, and
+                // the Created notification may arrive before the destination is
+                // openable.  Do not drop that event; bounded reconcile pairs the
+                // native FileKey and publishes the move once the entry settles.
+                Interlocked.Exchange(ref forceReconcile, 1);
             }
         }
         return changes;
@@ -363,6 +427,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         {
             ClearPathMapsLocked();
             BuildBasePathIndexLocked(records, records.Count);
+            nextId = records.Count == 0 ? 1 : records.Max(record =>
+                record.FileId == int.MaxValue ? int.MaxValue : record.FileId + 1);
         }
         generation = 1; persistence.InitializeBase(engine, records, generation);
     }
@@ -370,11 +436,17 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private IReadOnlyList<CatalogChange> ReconcileCore(CancellationToken token)
     {
         Interlocked.Increment(ref reconcileCount);
-        Dictionary<string, FilenameRecord> prior = engine.Records.ToDictionary(r => r.FullPath, StringComparer.Ordinal);
+        Dictionary<string, FilenameRecord> prior = engine.SnapshotByPath();
+        // A quiet restart usually has the same path set and only a small number of
+        // metadata changes.  Avoid rebuilding a million-entry next dictionary and
+        // diff graph in that case; the full reconcile remains the fallback whenever
+        // a path is added, removed, renamed, or moved.
+        if (TryApplyStableMetadataUpdates(prior, token, out IReadOnlyList<CatalogChange> stableChanges))
+            return stableChanges;
         (Dictionary<string, FilenameRecord> next, bool changed) = ScanReconcile(prior, token);
         IReadOnlyList<CatalogChange> changes = changed ? Diff(prior, next) : [];
         if (changes.Count == 0) return changes;
-        engineGate.EnterReadLock();
+        engineGate.EnterWriteLock();
         try
         {
             var ids = next.Values.Select(r => r.FileId).ToHashSet();
@@ -382,13 +454,107 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             foreach (FilenameRecord current in next.Values)
                 if (!prior.TryGetValue(current.FullPath, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
         }
-        finally { engineGate.ExitReadLock(); }
+        finally { engineGate.ExitWriteLock(); }
         lock (gate)
         {
             ClearPathMapsLocked();
             BuildBasePathIndexLocked(next.Values, next.Count);
         }
         return changes;
+    }
+
+    private bool TryTakePendingDelete(FileKey key, out FilenameRecord? record)
+    {
+        DateTime now = DateTime.UtcNow;
+        if (!pendingDeletes.TryGetValue(key, out (FilenameRecord Record, DateTime ExpiresUtc) pending))
+        {
+            record = null;
+            return false;
+        }
+        if (pending.ExpiresUtc <= now)
+        {
+            pendingDeletes.Remove(key);
+            record = null;
+            return false;
+        }
+        pendingDeletes.Remove(key);
+        record = pending.Record;
+        return true;
+    }
+
+    private void ScheduleDirectoryReconcile()
+    {
+        if (Interlocked.Exchange(ref directoryReconcileScheduled, 1) != 0) return;
+        Schedule(2_000);
+
+        void Schedule(int delayMs) => _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(delayMs, stop.Token).ConfigureAwait(false);
+                Interlocked.Exchange(ref directoryReconcileScheduled, 0);
+                if (!disposed)
+                {
+                    Interlocked.Exchange(ref forceReconcile, 1);
+                    SignalReconcile();
+                }
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        });
+    }
+
+    private bool TryApplyStableMetadataUpdates(
+        IReadOnlyDictionary<string, FilenameRecord> prior,
+        CancellationToken token,
+        out IReadOnlyList<CatalogChange> changes)
+    {
+        var changeList = new List<CatalogChange>();
+        changes = changeList;
+        if (prior.Count == 0) return true;
+
+        int maxId = 0;
+        foreach (FilenameRecord record in prior.Values) maxId = Math.Max(maxId, record.FileId);
+        var seen = new bool[checked(maxId + 1)];
+        var updates = new List<FilenameRecord>();
+        int seenCount = 0;
+        foreach (DiscoveredEntry entry in Discover(token))
+        {
+            if (!prior.TryGetValue(entry.FullPath, out FilenameRecord? old)) return false;
+            if (old.FileId >= seen.Length) return false;
+            if (!seen[old.FileId]) { seen[old.FileId] = true; seenCount++; }
+
+            byte flags = entry.IsDirectory ? (byte)2 : (byte)1;
+            if (old.Name == entry.Name && old.FullPath == entry.FullPath &&
+                old.SizeBytes == entry.SizeBytes && old.ModifiedUtc == entry.ModifiedUtc && old.Flags == flags)
+                continue;
+
+            ReadMetadata? read = TryReadMetadata(entry, old);
+            if (read is null) continue;
+            FilenameRecord current = new(old.FileId, old.ParentId, read.Value.Name, read.Value.FullPath,
+                read.Value.SizeBytes, read.Value.ModifiedUtc, read.Value.Flags)
+            { Key = read.Value.Key, ParentKey = old.ParentKey };
+            if (!Equivalent(old, current)) updates.Add(current);
+        }
+
+        if (seenCount != prior.Count) return false;
+        if (updates.Count == 0) return true;
+
+        engineGate.EnterWriteLock();
+        try
+        {
+            lock (gate)
+            {
+                foreach (FilenameRecord current in updates)
+                {
+                    if (!prior.TryGetValue(current.FullPath, out FilenameRecord? old)) continue;
+                    engine.Upsert(current);
+                    mutableRecords[current.FileId] = current;
+                    changeList.Add(new(CatalogChangeKind.Updated, current.Key, old, current));
+                }
+            }
+        }
+        finally { engineGate.ExitWriteLock(); }
+        return true;
     }
 
     private (Dictionary<string, FilenameRecord> Next, bool Changed) ScanReconcile(
@@ -622,32 +788,40 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         void EnumerateChildren(string directory, ICollection<string> childDirectories,
             ConcurrentBag<DiscoveredEntry> output, CancellationToken cancellation)
         {
-            IEnumerable<FileSystemInfo> children;
+            IEnumerable<DiscoveredEntry?> children;
             try
             {
-                children = new DirectoryInfo(directory).EnumerateFileSystemInfos("*", new EnumerationOptions
+                var options = new EnumerationOptions
                 {
                     IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint,
                     ReturnSpecialDirectories = false
-                });
+                };
+                var fast = new FileSystemEnumerable<DiscoveredEntry?>(directory,
+                    (ref FileSystemEntry entry) =>
+                    {
+                        try
+                        {
+                            string path = entry.ToFullPath();
+                            if (IsExcluded(path)) return null;
+                            bool dir = entry.IsDirectory;
+                            ulong size = dir ? 0 : checked((ulong)entry.Length);
+                            return new DiscoveredEntry(path, entry.FileName.ToString(), size,
+                                entry.LastWriteTimeUtc.UtcDateTime, dir);
+                        }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                        {
+                            return null;
+                        }
+                    }, options);
+                children = fast;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
-            foreach (FileSystemInfo info in children)
+            foreach (DiscoveredEntry? entry in children)
             {
                 cancellation.ThrowIfCancellationRequested();
-                string path = info.FullName; if (IsExcluded(path)) continue;
-                FileAttributes attr; try { attr = info.Attributes; } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
-                if (attr.HasFlag(FileAttributes.ReparsePoint)) continue;
-                bool dirChild = attr.HasFlag(FileAttributes.Directory);
-                ulong size = 0; DateTime modified;
-                try
-                {
-                    size = dirChild ? 0 : checked((ulong)((FileInfo)info).Length);
-                    modified = info.LastWriteTimeUtc;
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
-                output.Add(new DiscoveredEntry(path, info.Name, size, modified, dirChild));
-                if (dirChild) childDirectories.Add(path);
+                if (entry is not DiscoveredEntry value) continue;
+                output.Add(value);
+                if (value.IsDirectory) childDirectories.Add(value.FullPath);
             }
         }
     }

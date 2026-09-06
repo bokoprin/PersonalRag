@@ -38,6 +38,29 @@ public sealed class FilenameSearchEngine : IFilenameSearch
     public int OverlayCount { get { lock (gate) return delta.Count; } }
     internal int BaseRecordCount { get { lock (gate) return baseCount; } }
 
+    internal Dictionary<string, FilenameRecord> SnapshotByPath()
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            var result = new Dictionary<string, FilenameRecord>(baseCount + delta.Count, StringComparer.Ordinal);
+            HashSet<int>? removedIds = delta.Count == 0
+                ? null
+                : delta.Where(pair => pair.Value is null).Select(pair => pair.Key).ToHashSet();
+            if (baseTable is not null)
+                foreach (FilenameRecord record in baseTable.Records())
+                {
+                    if (removedIds is null || !removedIds.Contains(record.FileId))
+                        result[record.FullPath] = record;
+                }
+            foreach ((int id, FilenameRecord? record) in delta)
+            {
+                if (record is not null) result[record.FullPath] = record;
+            }
+            return result;
+        }
+    }
+
     public bool ShouldCompact
     {
         get
@@ -760,7 +783,6 @@ public sealed class FilenameSearchEngine : IFilenameSearch
                 idsToCheck = candidates;
                 LastCandidateCount = candidates.Count;
             }
-
             var result = new List<FilenameRecord>();
             foreach (int id in idsToCheck)
             {

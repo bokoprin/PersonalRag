@@ -79,6 +79,7 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
     private readonly string root;
     private readonly string cursorPath;
     private readonly string volumeRoot;
+    private readonly FileSystemWatcher watcher;
     private readonly Dictionary<ulong, List<string>> pathsById = [];
     private readonly Dictionary<ulong, PendingRename> pendingRenames = [];
     private SafeFileHandle? volume;
@@ -94,6 +95,30 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
         this.root = Path.GetFullPath(root);
         this.cursorPath = Path.GetFullPath(cursorPath);
         volumeRoot = Path.GetPathRoot(this.root) ?? throw new ArgumentException("Root has no volume", nameof(root));
+        watcher = new FileSystemWatcher(this.root)
+        {
+            IncludeSubdirectories = true,
+            InternalBufferSize = 64 * 1024,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                           NotifyFilters.LastWrite | NotifyFilters.Size,
+            Filter = "*"
+        };
+        watcher.Created += (_, args) => Changed?.Invoke(new FileSystemEvent(
+            args.FullPath,
+            Kind: FileSystemEventKind.Created,
+            Reconcile: Directory.Exists(args.FullPath)));
+        watcher.Changed += (_, args) => Changed?.Invoke(new FileSystemEvent(
+            args.FullPath,
+            Kind: FileSystemEventKind.Changed));
+        watcher.Deleted += (_, args) => Changed?.Invoke(new FileSystemEvent(
+            args.FullPath,
+            Kind: FileSystemEventKind.Deleted));
+        watcher.Renamed += (_, args) => Changed?.Invoke(new FileSystemEvent(
+            args.FullPath,
+            args.OldFullPath,
+            FileSystemEventKind.Renamed,
+            Directory.Exists(args.FullPath)));
+        watcher.Error += (_, _) => Overflow?.Invoke();
     }
 
     public event Action<FileSystemEvent>? Changed;
@@ -116,6 +141,9 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
     {
         if (started) return;
         started = true;
+        // USN covers the interval while the process was stopped; the watcher
+        // remains the live event source while this instance is running.
+        watcher.EnableRaisingEvents = true;
         if (!TryOpenVolume(out SafeFileHandle? handle) || !TryQueryJournal(handle!, out JournalState state))
         {
             fastCatchUpAvailable = false;
@@ -153,6 +181,7 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
     {
         if (stopped) return;
         stopped = true;
+        watcher.EnableRaisingEvents = false;
         try
         {
             if (volume is not null && !volume.IsInvalid && TryQueryJournal(volume, out JournalState state))
@@ -162,13 +191,40 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
         volume?.Dispose(); volume = null;
     }
 
-    public void Dispose() => Stop();
+    public void Dispose() { Stop(); watcher.Dispose(); }
 
     internal bool Probe()
     {
         if (!TryOpenVolume(out SafeFileHandle? handle) || handle is null) return false;
-        try { return TryQueryJournal(handle, out _); }
+        try
+        {
+            if (!TryQueryJournal(handle, out JournalState state)) return false;
+            return CanReadJournal(handle, state);
+        }
         finally { handle.Dispose(); }
+    }
+
+    private static bool CanReadJournal(SafeFileHandle handle, JournalState state)
+    {
+        byte[] input = new byte[Marshal.SizeOf<ReadUsnJournalData>()];
+        BinaryPrimitives.WriteInt64LittleEndian(input.AsSpan(0, 8), state.NextUsn);
+        BinaryPrimitives.WriteUInt32LittleEndian(input.AsSpan(8, 4), 0xFFFFFFFF);
+        BinaryPrimitives.WriteUInt32LittleEndian(input.AsSpan(12, 4), 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(input.AsSpan(16, 8), 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(input.AsSpan(24, 8), 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(input.AsSpan(32, 8), state.JournalId);
+        BinaryPrimitives.WriteUInt16LittleEndian(input.AsSpan(40, 2), 2);
+        BinaryPrimitives.WriteUInt16LittleEndian(input.AsSpan(42, 2), 2);
+        IntPtr inputPtr = Marshal.AllocHGlobal(input.Length);
+        IntPtr outputPtr = Marshal.AllocHGlobal(1 << 16);
+        try
+        {
+            Marshal.Copy(input, 0, inputPtr, input.Length);
+            if (DeviceIoControl(handle, FsctlReadUsnJournal, inputPtr, input.Length, outputPtr, 1 << 16,
+                    out _, IntPtr.Zero)) return true;
+            return (uint)Marshal.GetLastWin32Error() == ErrorHandleEof;
+        }
+        finally { Marshal.FreeHGlobal(inputPtr); Marshal.FreeHGlobal(outputPtr); }
     }
 
     private bool ReadSince(long startUsn, JournalState state)
@@ -259,14 +315,15 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
             }
             return;
         }
-        if ((reason & 0x00000100) != 0) // FILE_DELETE
+        if ((reason & 0x00000200) != 0) // FILE_DELETE
         {
             if (pathsById.TryGetValue(fileId, out List<string>? paths))
                 foreach (string path in paths.ToArray()) Emit(new FileSystemEvent(path, Kind: FileSystemEventKind.Deleted));
             pathsById.Remove(fileId);
             return;
         }
-        if ((reason & 0x00000001) != 0 || (reason & 0x00000002) != 0 || (reason & 0x00000004) != 0 ||
+        if ((reason & 0x00000100) != 0 || // FILE_CREATE
+            (reason & 0x00000001) != 0 || (reason & 0x00000002) != 0 || (reason & 0x00000004) != 0 ||
             (reason & 0x00000010) != 0 || (reason & 0x00000020) != 0)
         {
             if (pathsById.TryGetValue(fileId, out List<string>? paths))
@@ -293,7 +350,13 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
         handle = null;
         try
         {
-            handle = CreateFileW("\\\\.\\" + volumeRoot.TrimEnd('\\'), 0,
+            // FSCTL_QUERY_USN_JOURNAL requires a traversable volume handle even
+            // when the caller only reads journal metadata.  Opening with desired
+            // access 0 makes DeviceIoControl fail with ERROR_INVALID_FUNCTION on
+            // a standard medium-integrity Windows process and silently forces the
+            // expensive full reconcile fallback.
+            const uint GenericExecute = 0x20000000;
+            handle = CreateFileW("\\\\.\\" + volumeRoot.TrimEnd('\\'), GenericExecute,
                 FileShareRead | FileShareWrite | FileShareDelete, IntPtr.Zero, 3, 0, IntPtr.Zero);
             return !handle.IsInvalid;
         }
