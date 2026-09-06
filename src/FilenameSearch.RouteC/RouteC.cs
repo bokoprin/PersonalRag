@@ -450,7 +450,8 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         for (int i = start; i < start + 3; i++)
         {
             int value = runes[i].Value;
-            if (value > 0x7F || value is '_' or '.' or '-' or '(' or ')') return true;
+            if (value > 0x7F || value is '_' or '.' or '-' or '(' or ')' ||
+                value is >= '0' and <= '9') return true;
         }
         return false;
     }
