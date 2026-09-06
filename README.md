@@ -1,79 +1,108 @@
-# PersonalRag Astra
+# PersonalRag
 
-Windows向けローカル deterministic search。正本は [仕様書](specification/PersonalRag_ASTRA_SPEC_v1.md) と [Frozen GUI](specification/PersonalRag_GUI_FROZEN_v1.html)。
+PersonalRag は Windows 向けローカル検索アプリです。
 
-このツリーは Gate 1 と Gate 2 の実装を含むが、**正式完成判定は official Windows benchmark machine 上で acceptance runner が全PASSした場合のみ**行う。
-未実行のテストや他マシンの推定値を PASS と扱わない。
+## 現在の正本
 
-## 実装済み範囲
+Filename/Path Search の production 正本は次です。
 
-- ファイル名 / フルパス substring・AND・wildcard・case切替
-- Literal / Regex / Wildcard 内容検索
-- 1ファイル1行、遅延Hit列挙、50,000 hitでも有界GUI展開
-- UTF-8 / UTF-16LE / UTF-16BE / ASCII text
-- DOCX / XLSX / PPTX / PDF text extraction
-- DOCX paragraph、XLSX sheet/cell、PPTX slide、PDF page location
-- 2/3文字signatureによる保守的候補絞り込み + 元ファイル最終照合
-- ASTRA003 block persistence、SHA256検証、writer排他、crash temp回収
-- FileSystemWatcherによる継続更新 + overflow/restart時reconcile
-- Office/PDFの有界RAM LRU extraction cache（永続容量には含めない）
-- 将来自然文query plannerから呼べる `IDeterministicSearch` 境界
+- Solution: `PersonalRag.sln`
+- App: `src/FilenameSearch.Gui`
+- Catalog: `src/FilenameSearch`
+- Search core: `src/FilenameSearch.Core`
+- Champion engine: `src/FilenameSearch.RouteC`
 
-PDF extractionのみ実用的なPDF text layer対応のため `PdfPig 0.1.16` を使用する。OCRはv1対象外。
+`PersonalRag.Astra.sln` / `src/Astra.*` は過去の内容検索研究実装として残していますが、
+**Filename/Path production path ではありません**。次の Content Search フェーズでも、まず
+`docs/CONTENT_ENGINE_BOUNDARY.md` の境界から追加し、Filename Engine を置き換えないこと。
 
-## ビルド
+## Filename Search architecture
 
-Official環境は Windows 11 / .NET SDK 8.0.424。
+Route A/B/C の bake-off で選ばれた Route C を immutable base として維持し、その上に:
 
-```powershell
-dotnet restore PersonalRag.Astra.sln
-dotnet build PersonalRag.Astra.sln -c Release --no-restore
-dotnet run --project tests/Astra.Tests -c Release --no-build
-dotnet run --project tests/Astra.Gui.Tests -c Release --no-build -- artifacts/gui-tests
-```
+- exact filesystem path identity
+- `FileKey = VolumeId + native file id`
+- indexed mutable delta
+- tombstone
+- background compaction
+- generation based persistence
+- checksum
+- writer lease
+- dirty-shutdown marker
+- typed catalog change feed
+- fixed local volume federation
 
-GUIは既存indexがあれば即loadする。初回のみ検索root選択ダイアログを表示し、その後のメイン画面はFrozen GUIに合わせる。
-`PERSONALRAG_ROOT` 環境変数を指定すれば初回ダイアログを省略できる。
-保存先は `%LOCALAPPDATA%\PersonalRagAstra\index`。
+を追加しています。
 
-## 正式受け入れ
+1件の更新後に1M件の全scanへ落ちたり、1変更ごとに全indexを永続化し直したりしないことが
+production invariant です。
 
-Gate 1:
+## 検索 semantics
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/Run-Gate1.ps1 -Generate
-```
+- Filename / FullPath
+- substring
+- 空白区切り AND
+- `*` / `?` wildcard
+- wildcard は **substring pattern**
+- case-sensitive ON/OFF
+- Unicode NFC search key
+- case-insensitive は Unicode full case folding + NFC
 
-Gate 1がPASSした後、Gate 2:
+ファイルシステムから得た `Name` / `FullPath` は検索用に正規化して保存しません。
+NFC/NFD が異なる実パスを同じパスへ書き換えないこと。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/Run-Gate2.ps1 -Generate
-```
+## 起動
 
-`-Generate` は 10GiB / 100GiB / 1,000,000 files / mixed 10GiB の固定コーパスを初回だけ生成するため、大きな空き容量が必要。
-既存コーパスを再利用する場合は `-DataRoot` を指定して `-Generate` を外す。
+通常起動では固定ローカルドライブを自動検出して統合検索します。
 
-正式結果:
-
-- `reports/formal-gate1/GATE1_SUMMARY.json`
-- `reports/formal-gate2/GATE2_SUMMARY.json`
-
-どちらも `pass: true` になったときのみ `PERSONALRAG V1 COMPLETE` と宣言できる。
-一括実行は次を使う。
+特定rootだけで開発/テストする場合:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/Run-All-Formal.ps1 -Generate
+dotnet run --project src/FilenameSearch.Gui -c Release -- C:\SomeRoot
 ```
 
-formal runner は Windows 11 / Core Ultra 9 285H / 32GB / AC接続に加え、`DataRoot` が実際に載っている物理ディスクの `BusType=NVMe` を確認する。GUI startup は実WPFプロセスで first filename/content batch と private memory を測る。
-
-## CLI
+Canonical build:
 
 ```powershell
-dotnet run --project src/Astra.Cli -c Release -- index C:\Corpus C:\AstraIndex
-dotnet run --project src/Astra.Cli -c Release -- search C:\AstraIndex '*.txt' '日本語'
-dotnet run --project src/Astra.Cli -c Release -- inspect C:\AstraIndex
-dotnet run --project src/Astra.Cli -c Release -- ratio C:\AstraIndex
+dotnet restore PersonalRag.sln
+dotnet build PersonalRag.sln -c Release --no-restore
+dotnet run --project tests/FilenameSearch.Tests -c Release --no-build
+dotnet run --project tests/FilenameSearch.Gui.Tests -c Release --no-build
 ```
 
-[受け入れ台帳](docs/ACCEPTANCE.md) / [構造と将来拡張境界](docs/ARCHITECTURE.md) / [進捗](docs/PROGRESS.md)
+## Actual process startup probe
+
+WPF test process内の `new MainWindow()` ではなく、実際の `.exe` process 起動から Ready まで測るため:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/Run-FilenameActualGuiProbe.ps1 `
+  -GuiExe <FilenameSearch.Gui.exe> `
+  -Root <root> `
+  -Store <index.manifest> `
+  -Report reports/actual-gui-startup.json `
+  -Query fixture_
+```
+
+## 正式再測定
+
+hardening 後の Filename phase は旧レポートをそのまま PASS とみなしません。
+
+`docs/CODEX_FILENAME_FORMAL_REMEASURE.md`
+
+を Codex に渡し、1M GUI / post-update / sustained churn / all-volume / restart /
+actual process startup を再測定し、全HARD条件を満たしてから再び
+
+`PERSONALRAG_FILENAME_PHASE_COMPLETE`
+
+を宣言します。
+
+## 将来の Content Search
+
+Content Engine は `IFilenameCatalog.GetSnapshot()` で初期状態を取得し、`FileKey` と typed `CatalogChangeBatch`（`SourceId` / `SourceGeneration` 付き）を購読します。
+Content Engine が独自の FileSystemWatcher を持たないこと。
+
+詳細:
+
+- `docs/FILENAME_ENGINE_ARCHITECTURE.md`
+- `docs/CONTENT_ENGINE_BOUNDARY.md`
+- `docs/NTFS_USN_DECISION.md`

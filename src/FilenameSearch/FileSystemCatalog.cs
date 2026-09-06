@@ -1,135 +1,106 @@
-using System.Collections.Concurrent;
 using System.Threading.Channels;
 
 namespace PersonalRag.FilenameSearch;
 
-/// <summary>Filesystem event kind kept outside the search engine.</summary>
 internal enum FileSystemEventKind { Created, Changed, Deleted, Renamed }
+internal sealed record FileSystemEvent(
+    string Path, string? OldPath = null, FileSystemEventKind Kind = FileSystemEventKind.Changed,
+    bool Reconcile = false, bool CatchUp = false);
 
-internal sealed record FileSystemEvent(string Path, string? OldPath = null, FileSystemEventKind Kind = FileSystemEventKind.Changed, bool Reconcile = false, bool CatchUp = false);
-
-/// <summary>
-/// Collects local files and directories and keeps the selected filename engine current.
-/// Enumeration is deliberately conservative: inaccessible and reparse-point entries are
-/// skipped, while one bad entry never aborts the rest of a scan.
-/// </summary>
-public sealed class FileSystemCatalog : IAsyncDisposable
+/// <summary>One-volume exact-metadata catalog with bounded change ingestion and durable generation deltas.</summary>
+public sealed class FileSystemCatalog : IFilenameCatalog
 {
     private readonly object gate = new();
-    private readonly object topologyGate = new();
-    private readonly ReaderWriterLockSlim engineGate = new(LockRecursionPolicy.NoRecursion);
-    private readonly string root;
-    private readonly string store;
-    private readonly string storeDirectory;
-    private FilenameSearchEngine engine;
-    private readonly Dictionary<string, FilenameRecord> byPath = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Channel<FileSystemEvent> events = Channel.CreateUnbounded<FileSystemEvent>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
-    private readonly Channel<bool> persistRequests = Channel.CreateUnbounded<bool>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+    private readonly ReaderWriterLockSlim engineGate = new();
+    private readonly string root, store, rootIdentity, volumeId;
+    private readonly string[] excludedRoots;
+    private readonly GenerationStore persistence;
+    private readonly IVolumeChangeFeed changeFeed;
+    private readonly Channel<FileSystemEvent> events = Channel.CreateBounded<FileSystemEvent>(
+        new BoundedChannelOptions(8192) { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait });
     private readonly CancellationTokenSource stop = new();
     private readonly Task worker;
-    private readonly Task persister;
-    private readonly FileSystemWatcher watcher;
     private readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private int nextId = 1;
-    private int forceReconcile;
-    private int pendingEvents;
-    private int pendingPersists;
+    private readonly Dictionary<string, FilenameRecord> byPath = new(StringComparer.Ordinal);
+    private FilenameSearchEngine engine;
+    private int nextId = 1, pendingEvents, forceReconcile, compactionRunning;
+    private long generation;
     private string status = "準備中";
     private bool started;
-    private bool disposed;
+    private volatile bool disposed;
 
-    private FileSystemCatalog(string root, string store, FilenameSearchEngine engine)
+    private FileSystemCatalog(string root, string store, string rootIdentity, string volumeId,
+        GenerationStore persistence, FilenameSearchEngine engine, IEnumerable<string>? excludedRoots)
     {
-        this.root = NormalizePath(root);
+        this.root = Path.GetFullPath(root);
         this.store = Path.GetFullPath(store);
-        storeDirectory = Path.GetDirectoryName(this.store) ?? throw new ArgumentException("Store path has no directory", nameof(store));
+        this.rootIdentity = rootIdentity;
+        this.volumeId = volumeId;
+        this.persistence = persistence;
         this.engine = engine;
-        watcher = new FileSystemWatcher(this.root)
-        {
-            IncludeSubdirectories = true,
-            InternalBufferSize = 64 * 1024,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size,
-            Filter = "*"
-        };
-        watcher.Created += (_, args) => Queue(new FileSystemEvent(args.FullPath, Kind: FileSystemEventKind.Created, Reconcile: Directory.Exists(args.FullPath)));
-        watcher.Changed += (_, args) => Queue(new FileSystemEvent(args.FullPath, Kind: FileSystemEventKind.Changed));
-        watcher.Deleted += (_, args) => Queue(new FileSystemEvent(args.FullPath, Kind: FileSystemEventKind.Deleted));
-        watcher.Renamed += (_, args) => Queue(new FileSystemEvent(args.FullPath, args.OldFullPath, FileSystemEventKind.Renamed, Directory.Exists(args.FullPath)));
-        watcher.Error += (_, _) =>
-        {
-            Interlocked.Exchange(ref forceReconcile, 1);
-            Queue(new FileSystemEvent(this.root, Reconcile: true));
-        };
+        this.excludedRoots = (excludedRoots ?? []).Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        changeFeed = VolumeChangeFeedFactory.Create(this.root);
+        changeFeed.Changed += Queue;
+        changeFeed.Overflow += () => { Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile(); };
         worker = Task.Run(UpdateLoop);
-        persister = Task.Run(PersistLoop);
     }
 
     public string Root => root;
     public string Store => store;
+    public string RootIdentity => rootIdentity;
+    public string VolumeId => volumeId;
     public string Status => Volatile.Read(ref status);
+    public long Generation => Interlocked.Read(ref generation);
+    public int RecordCount { get { lock (gate) return byPath.Count; } }
     public bool IsReady => ready.Task.IsCompletedSuccessfully;
     public Task Ready => ready.Task;
-    public event Action? Changed;
+    public bool WasDirtyShutdown => persistence.WasDirtyShutdown;
+    public event Action<CatalogChangeBatch>? Changed;
+    public IReadOnlyList<FilenameRecord> Records { get { lock (gate) return byPath.Values.OrderBy(r => r.FileId).ToArray(); } }
 
-    /// <summary>Opens an existing store immediately, then catches up with the filesystem.</summary>
-    public static FileSystemCatalog Open(string root, string store)
+    public static FileSystemCatalog Open(string root, string store, IEnumerable<string>? excludedRoots = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
         ArgumentException.ThrowIfNullOrWhiteSpace(store);
-        string fullRoot = NormalizePath(root);
+        string fullRoot = Path.GetFullPath(root);
         if (!Directory.Exists(fullRoot)) throw new DirectoryNotFoundException(fullRoot);
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(store))!);
+        string volumeId = VolumeIdentity.GetVolumeId(fullRoot);
+        FileKey rootKey = VolumeIdentity.GetFileKey(fullRoot, true, volumeId);
+        string identity = "root|" + rootKey;
+        var persistence = new GenerationStore(identity, store);
         var engine = new FilenameSearchEngine();
-        var catalog = new FileSystemCatalog(fullRoot, store, engine);
-        bool loaded = false;
+        var catalog = new FileSystemCatalog(fullRoot, store, identity, volumeId, persistence, engine, excludedRoots);
         try
         {
-            if (File.Exists(catalog.store))
+            bool loaded = false;
+            try
             {
-                engine.Load(catalog.store);
-                catalog.LoadExistingRecords();
-                engine.WarmUp();
-                loaded = catalog.byPath.Keys.Any(path => catalog.IsWithinRoot(path));
+                loaded = persistence.TryLoad(engine, out long persisted);
+                if (loaded) { catalog.generation = persisted; catalog.LoadExistingRecords(); }
             }
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
-        {
-            catalog.SetStatus("保存済みインデックスを検証できません: " + ex.Message);
-            loaded = false;
-        }
-
-        if (loaded)
-        {
-            catalog.SetStatus("差分を確認中");
+            catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
+            {
+                catalog.SetStatus("保存済みインデックスを破棄して再構築します: " + ex.Message);
+                persistence.ResetCorruptStore();
+                engine.Build([]);
+            }
+            if (!loaded) catalog.RebuildInitial();
+            catalog.SetStatus(loaded && persistence.WasDirtyShutdown ? "異常終了後の差分を確認中" : loaded ? "差分を確認中" : "Ready");
             catalog.ready.TrySetResult();
+            catalog.Start();
+            return catalog;
         }
-        else
-        {
-            catalog.RebuildCore();
-            catalog.SetStatus("Ready");
-            catalog.ready.TrySetResult();
-            catalog.PersistSoon();
-        }
-        catalog.Start();
-        return catalog;
+        catch { catalog.DisposeFailedOpen(); throw; }
     }
 
-    public IReadOnlyList<FilenameRecord> Records
+    public CatalogSnapshot GetSnapshot()
     {
-        get
-        {
-            lock (gate) return byPath.Values.OrderBy(record => record.FileId).ToArray();
-        }
-    }
-
-    public int RecordCount
-    {
-        get
-        {
-            lock (gate) return byPath.Count;
-        }
+        ThrowIfDisposed();
+        FilenameRecord[] records;
+        lock (gate) records = byPath.Values.OrderBy(r => r.FileId).ToArray();
+        long g = Generation;
+        return new CatalogSnapshot(g, records, new Dictionary<string, long>(StringComparer.Ordinal) { [volumeId] = g });
     }
 
     public FilenameSearchResult Search(SearchRequest request)
@@ -140,45 +111,48 @@ public sealed class FileSystemCatalog : IAsyncDisposable
         finally { engineGate.ExitReadLock(); }
     }
 
-    /// <summary>Performs a complete safe catch-up and persists the resulting snapshot.</summary>
-    public Task ReconcileAsync()
+    public Task ReconcileAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return Task.Run(() => RebuildCore(), stop.Token);
+        Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile();
+        return WaitForIdleAsync(TimeSpan.FromMinutes(10), cancellationToken);
     }
 
     public async Task WaitForIdleAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
-        if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(stop.Token, cancellationToken);
-        timeoutCts.CancelAfter(timeout);
-        while (!timeoutCts.IsCancellationRequested)
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(timeout);
+        while (true)
         {
-            if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 && Volatile.Read(ref pendingPersists) == 0) return;
-            await Task.Delay(20, timeoutCts.Token).ConfigureAwait(false);
+            cts.Token.ThrowIfCancellationRequested();
+            if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 &&
+                Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0) return;
+            await Task.Delay(20, cts.Token).ConfigureAwait(false);
         }
-        timeoutCts.Token.ThrowIfCancellationRequested();
     }
+
+    public static long PersistentBytes(string store) => GenerationStore.GetPersistentBytes(store);
 
     private void Start()
     {
         if (started) return;
-        started = true;
-        try { watcher.EnableRaisingEvents = true; }
-        catch
-        {
-            watcher.Dispose();
-            throw;
-        }
-        Queue(new FileSystemEvent(root, CatchUp: true));
+        started = true; changeFeed.Start(); Queue(new FileSystemEvent(root, CatchUp: true));
     }
 
     private void Queue(FileSystemEvent change)
     {
-        if (disposed || IsExcluded(change.Path)) return;
+        if (disposed) return;
+        bool nowExcluded = IsExcluded(change.Path);
+        bool oldExcluded = change.OldPath is not null && IsExcluded(change.OldPath);
+        if (change.OldPath is null ? nowExcluded : nowExcluded && oldExcluded) return;
         if (change.Reconcile) Interlocked.Exchange(ref forceReconcile, 1);
         if (events.Writer.TryWrite(change)) Interlocked.Increment(ref pendingEvents);
-        else Interlocked.Exchange(ref forceReconcile, 1);
+        else { Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile(); }
+    }
+
+    private void SignalReconcile()
+    {
+        if (events.Writer.TryWrite(new FileSystemEvent(root, Reconcile: true))) Interlocked.Increment(ref pendingEvents);
     }
 
     private async Task UpdateLoop()
@@ -188,487 +162,301 @@ public sealed class FileSystemCatalog : IAsyncDisposable
             while (await events.Reader.WaitToReadAsync(stop.Token).ConfigureAwait(false))
             {
                 await Task.Delay(50, stop.Token).ConfigureAwait(false);
-                var pending = new List<FileSystemEvent>();
-                while (events.Reader.TryRead(out FileSystemEvent? change))
-                {
-                    Interlocked.Decrement(ref pendingEvents);
-                    pending.Add(change);
-                }
-                bool rebuild = Interlocked.Exchange(ref forceReconcile, 0) != 0 || pending.Any(change => change.Reconcile);
+                var batch = new List<FileSystemEvent>();
+                while (events.Reader.TryRead(out FileSystemEvent? e)) { Interlocked.Decrement(ref pendingEvents); batch.Add(e); }
                 try
                 {
                     SetStatus("変更を反映中");
-                    bool changed = pending.Any(change => change.CatchUp) && !rebuild
-                        ? CatchUpCore()
-                        : rebuild ? RebuildCore() : ProcessEvents(pending);
-                    if (changed) PersistSoon();
+                    bool reconcile = Interlocked.Exchange(ref forceReconcile, 0) != 0 || batch.Any(e => e.Reconcile || e.CatchUp);
+                    IReadOnlyList<CatalogChange> changes = reconcile ? ReconcileCore(stop.Token) : ProcessEvents(batch);
+                    if (Interlocked.Exchange(ref forceReconcile, 0) != 0)
+                        changes = changes.Concat(ReconcileCore(stop.Token)).ToArray();
+                    Publish(changes, reconcile || batch.Any(e => e.Reconcile || e.CatchUp));
+                    CompactIfNeeded();
                     SetStatus("Ready");
                 }
-                catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
+                catch (OperationCanceledException) when (stop.IsCancellationRequested) { break; }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
                 {
-                    Interlocked.Exchange(ref forceReconcile, 1);
                     SetStatus("変更反映エラー: " + ex.Message);
-                    Queue(new FileSystemEvent(root, Reconcile: true));
+                    Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile();
                 }
             }
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
     }
 
-    private bool ProcessEvents(IReadOnlyList<FileSystemEvent> pending)
+    private IReadOnlyList<CatalogChange> ProcessEvents(IReadOnlyList<FileSystemEvent> pending)
     {
-        engineGate.EnterReadLock();
-        try
+        var changes = new List<CatalogChange>();
+        foreach (FileSystemEvent e in pending)
         {
-        // Deduplicate by path while preserving a rename pair. FileSystemWatcher can raise
-        // several Change events for one write.
-        var unique = new Dictionary<string, FileSystemEvent>(StringComparer.OrdinalIgnoreCase);
-        bool changed = false;
-        foreach (FileSystemEvent change in pending)
-        {
-            if (change.OldPath is not null) changed |= ProcessRename(change.OldPath, change.Path);
-            else unique[NormalizePath(change.Path)] = change;
+            if (e.OldPath is not null) changes.AddRange(ProcessRename(e.OldPath, e.Path));
+            else changes.AddRange(ProcessPath(e.Path, e.Kind));
         }
-        foreach (FileSystemEvent change in unique.Values) changed |= ProcessPath(change.Path, change.Kind);
-        return changed;
-        }
-        finally { engineGate.ExitReadLock(); }
+        return changes;
     }
 
-    private bool ProcessRename(string oldPath, string newPath)
+    private IReadOnlyList<CatalogChange> ProcessRename(string oldPath, string newPath)
     {
-        oldPath = NormalizePath(oldPath);
-        newPath = NormalizePath(newPath);
-        if (IsExcluded(oldPath) && IsExcluded(newPath)) return false;
+        oldPath = Path.GetFullPath(oldPath); newPath = Path.GetFullPath(newPath);
+        var changes = new List<CatalogChange>();
         lock (gate)
         {
-            if (!byPath.TryGetValue(oldPath, out FilenameRecord? oldRecord))
+            if (!byPath.TryGetValue(oldPath, out FilenameRecord? old)) { Interlocked.Exchange(ref forceReconcile, 1); return changes; }
+            if (old.IsDirectory || Directory.Exists(newPath)) { Interlocked.Exchange(ref forceReconcile, 1); return changes; }
+            byPath.Remove(oldPath); engine.Remove(old.FileId);
+            if (IsExcluded(newPath)) { changes.Add(new(CatalogChangeKind.Removed, old.Key, old, null)); return changes; }
+            FilenameRecord? next = TryReadRecord(newPath, old.FileId);
+            if (next is null) { changes.Add(new(CatalogChangeKind.Removed, old.Key, old, null)); Interlocked.Exchange(ref forceReconcile, 1); return changes; }
+            if (old.Key.IsNative && next.Key.IsNative && old.Key != next.Key)
             {
-                Interlocked.Exchange(ref forceReconcile, 1);
-                return false;
+                next = AttachParent(next with { FileId = AllocateId() });
+                byPath[newPath] = next; engine.Upsert(next);
+                changes.Add(new(CatalogChangeKind.Removed, old.Key, old, null));
+                changes.Add(new(CatalogChangeKind.Added, next.Key, null, next));
+                return changes;
             }
-            byPath.Remove(oldPath);
-            engine.Remove(oldRecord.FileId);
-            if (Directory.Exists(newPath))
-            {
-                Interlocked.Exchange(ref forceReconcile, 1);
-                return true;
-            }
-            if (File.Exists(newPath))
-            {
-                FilenameRecord replacement = ReadRecord(newPath, oldRecord.FileId);
-                byPath[newPath] = replacement;
-                engine.Upsert(replacement);
-            }
-            return true;
+            if (old.Key.IsNative && !next.Key.IsNative) next = next with { Key = old.Key };
+            next = AttachParent(next); byPath[newPath] = next; engine.Upsert(next);
+            CatalogChangeKind kind = string.Equals(Path.GetDirectoryName(oldPath), Path.GetDirectoryName(newPath), StringComparison.OrdinalIgnoreCase)
+                ? CatalogChangeKind.Renamed : CatalogChangeKind.Moved;
+            changes.Add(new(kind, next.Key, old, next));
         }
+        return changes;
     }
 
-    private bool ProcessPath(string path, FileSystemEventKind kind)
+    private IReadOnlyList<CatalogChange> ProcessPath(string path, FileSystemEventKind kind)
     {
-        path = NormalizePath(path);
-        if (IsExcluded(path)) return false;
-        if (Directory.Exists(path))
-        {
-            if (kind == FileSystemEventKind.Changed) return false;
-            Interlocked.Exchange(ref forceReconcile, 1);
-            return false;
-        }
+        path = Path.GetFullPath(path);
+        var changes = new List<CatalogChange>();
+        if (IsExcluded(path)) return changes;
+        if (Directory.Exists(path)) { if (kind != FileSystemEventKind.Changed) Interlocked.Exchange(ref forceReconcile, 1); return changes; }
         lock (gate)
         {
             if (File.Exists(path))
             {
-                int id = byPath.TryGetValue(path, out FilenameRecord? current) ? current.FileId : AllocateId();
-                FilenameRecord next = ReadRecord(path, id);
-                if (current is not null && Equivalent(current, next)) return false;
-                byPath[path] = next;
-                engine.Upsert(next);
-                return true;
+                byPath.TryGetValue(path, out FilenameRecord? old);
+                FilenameRecord? next = TryReadRecord(path, old?.FileId ?? AllocateId());
+                if (next is null) { Interlocked.Exchange(ref forceReconcile, 1); return changes; }
+                if (old is not null && old.Key.IsNative && next.Key.IsNative && old.Key != next.Key)
+                {
+                    engine.Remove(old.FileId); next = AttachParent(next with { FileId = AllocateId() });
+                    byPath[path] = next; engine.Upsert(next);
+                    changes.Add(new(CatalogChangeKind.Removed, old.Key, old, null)); changes.Add(new(CatalogChangeKind.Added, next.Key, null, next));
+                    return changes;
+                }
+                if (old is not null && old.Key.IsNative && !next.Key.IsNative) next = next with { Key = old.Key };
+                next = AttachParent(next);
+                if (old is not null && Equivalent(old, next)) return changes;
+                byPath[path] = next; engine.Upsert(next);
+                changes.Add(new(old is null ? CatalogChangeKind.Added : CatalogChangeKind.Updated, next.Key, old, next));
             }
             else if (byPath.Remove(path, out FilenameRecord? removed))
             {
-                engine.Remove(removed.FileId);
+                engine.Remove(removed.FileId); changes.Add(new(CatalogChangeKind.Removed, removed.Key, removed, null));
                 if (removed.IsDirectory) Interlocked.Exchange(ref forceReconcile, 1);
-                return true;
             }
-            return false;
+        }
+        return changes;
+    }
+
+    private void Publish(IReadOnlyList<CatalogChange> changes, bool reconciled)
+    {
+        if (changes.Count > 0)
+        {
+            long g = Interlocked.Increment(ref generation);
+            var durable = new CatalogChangeBatch(g, changes, reconciled, volumeId, g);
+            persistence.Append(durable);
+            SafeRaise(durable);
+        }
+        else if (reconciled)
+        {
+            long g = Generation;
+            SafeRaise(new CatalogChangeBatch(g, [], true, volumeId, g));
         }
     }
 
-    private bool RebuildCore()
+    private void CompactIfNeeded()
     {
-        lock (topologyGate)
-        {
-        FileSystemEntry[] discovered = Discover();
-        Dictionary<string, FilenameRecord> next;
-        lock (gate)
-        {
-            var prior = new Dictionary<string, FilenameRecord>(byPath, StringComparer.OrdinalIgnoreCase);
-            var reserved = prior.Values.Select(record => record.FileId).ToHashSet();
-            var assigned = new HashSet<int>();
-            var movedCandidates = prior.Values
-                .GroupBy(Signature)
-                .ToDictionary(group => group.Key, group => new Queue<FilenameRecord>(group), EqualityComparer<FileSignature>.Default);
-            var idsByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var preliminary = new List<(string Path, bool Directory, int Id, FilenameRecord Metadata)>();
-            foreach (FileSystemEntry entry in discovered)
-            {
-                FilenameRecord metadata = ReadRecord(entry.Path, 0);
-                int id;
-                if (prior.TryGetValue(entry.Path, out FilenameRecord? old))
-                {
-                    id = old.FileId;
-                }
-                else if (movedCandidates.TryGetValue(Signature(metadata), out Queue<FilenameRecord>? candidates))
-                {
-                    while (candidates.Count > 0 && assigned.Contains(candidates.Peek().FileId)) candidates.Dequeue();
-                    id = candidates.Count > 0 ? candidates.Dequeue().FileId : AllocateId(reserved);
-                }
-                else
-                {
-                    id = AllocateId(reserved);
-                }
-                assigned.Add(id);
-                reserved.Add(id);
-                idsByPath[entry.Path] = id;
-                preliminary.Add((entry.Path, entry.IsDirectory, id, metadata));
-            }
-            next = new Dictionary<string, FilenameRecord>(StringComparer.OrdinalIgnoreCase);
-            foreach ((string path, bool isDirectory, int id, FilenameRecord metadata) in preliminary)
-            {
-                FilenameRecord record = metadata with { FileId = id };
-                string? parentPath = Path.GetDirectoryName(path);
-                int? parentId = parentPath is not null && idsByPath.TryGetValue(NormalizePath(parentPath), out int parent) ? parent : null;
-                next[path] = record with { ParentId = parentId, Flags = isDirectory ? (byte)2 : (byte)1 };
-            }
-        }
-
-        // Build the replacement off the live engine. Existing-index searches remain usable
-        // while a startup catch-up scans and indexes a large tree.
-        var rebuilt = new FilenameSearchEngine();
-        rebuilt.Build(next.Values.OrderBy(record => record.FileId).ToArray());
-        FilenameSearchEngine previous;
-        engineGate.EnterWriteLock();
+        if (!engine.ShouldCompact && !persistence.ShouldCompact) return;
+        if (Interlocked.Exchange(ref compactionRunning, 1) != 0) return;
         try
         {
-            lock (gate)
-            {
-                previous = engine;
-                engine = rebuilt;
-                byPath.Clear();
-                foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
-            }
+            SetStatus("最適化中");
+            FilenameSearchEngine compacted;
+            engineGate.EnterReadLock(); try { compacted = engine.CreateCompacted(); } finally { engineGate.ExitReadLock(); }
+            FilenameRecord[] snapshot; lock (gate) snapshot = byPath.Values.OrderBy(r => r.FileId).ToArray();
+            persistence.CommitCompaction(compacted, snapshot, Generation);
+            engineGate.EnterWriteLock();
+            try { FilenameSearchEngine old = engine; engine = compacted; compacted = null!; old.Dispose(); }
+            finally { engineGate.ExitWriteLock(); }
+            compacted?.Dispose();
         }
-        finally { engineGate.ExitWriteLock(); }
-        previous.Dispose();
-        return true;
-        }
+        finally { Interlocked.Exchange(ref compactionRunning, 0); }
     }
 
-    private bool CatchUpCore()
+    private void RebuildInitial()
     {
-        lock (topologyGate)
-        {
-        FileSystemEntry[] discovered = Discover();
-        Dictionary<string, FilenameRecord> prior;
-        lock (gate) prior = new Dictionary<string, FilenameRecord>(byPath, StringComparer.OrdinalIgnoreCase);
-        var reusable = new bool[discovered.Length];
-        Parallel.For(0, discovered.Length, index =>
-        {
-            FileSystemEntry entry = discovered[index];
-            if (!prior.TryGetValue(entry.Path, out FilenameRecord? old)) return;
-            // Large roots retain persisted metadata for paths that still exist and let
-            // the live watcher handle subsequent metadata changes. Avoid one metadata
-            // syscall per entry on GUI startup; topology deltas are still reconciled.
-            if (old.IsDirectory || discovered.Length > 4_096)
-            {
-                reusable[index] = true;
-                return;
-            }
-            try { reusable[index] = File.GetLastWriteTimeUtc(entry.Path) == old.ModifiedUtc; }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-        });
-        // The snapshot is prepared outside the catalog lock so status/count reads and
-        // existing-index searches stay responsive while a large root is reconciled.
-        var discoveredPaths = discovered.Select(entry => entry.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var reserved = prior.Values.Select(record => record.FileId).ToHashSet();
-        var assigned = new HashSet<int>();
-        var movedCandidates = prior.Values
-            .Where(record => !discoveredPaths.Contains(record.FullPath))
-            .GroupBy(Signature)
-            .ToDictionary(group => group.Key, group => new Queue<FilenameRecord>(group), EqualityComparer<FileSignature>.Default);
-        var idsByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var preliminary = new List<(string Path, bool Directory, int Id, FilenameRecord Metadata)>();
-        for (int discoveredIndex = 0; discoveredIndex < discovered.Length; discoveredIndex++)
-        {
-            FileSystemEntry entry = discovered[discoveredIndex];
-            FilenameRecord metadata;
-            int id;
-            if (prior.TryGetValue(entry.Path, out FilenameRecord? old))
-            {
-                id = old.FileId;
-                // A restart normally has an unchanged tree. Reuse the persisted metadata
-                // after one cheap timestamp check; the previous full FileInfo.Refresh per
-                // entry made a 100k-file catch-up exceed the five-second product gate.
-                if (reusable[discoveredIndex])
-                    metadata = old;
-                else metadata = ReadRecord(entry.Path, id);
-            }
-            else
-            {
-                metadata = ReadRecord(entry.Path, 0);
-                if (movedCandidates.TryGetValue(Signature(metadata), out Queue<FilenameRecord>? candidates))
-                {
-                    while (candidates.Count > 0 && assigned.Contains(candidates.Peek().FileId)) candidates.Dequeue();
-                    id = candidates.Count > 0 ? candidates.Dequeue().FileId : AllocateId(reserved);
-                }
-                else id = AllocateId(reserved);
-            }
-            assigned.Add(id);
-            reserved.Add(id);
-            idsByPath[entry.Path] = id;
-            preliminary.Add((entry.Path, entry.IsDirectory, id, metadata));
-        }
-        var next = new Dictionary<string, FilenameRecord>(StringComparer.OrdinalIgnoreCase);
-        foreach ((string path, bool isDirectory, int id, FilenameRecord metadata) in preliminary)
-        {
-            string? parentPath = Path.GetDirectoryName(path);
-            int? parentId = parentPath is not null && idsByPath.TryGetValue(NormalizePath(parentPath), out int parent) ? parent : null;
-            next[path] = metadata with { FileId = id, ParentId = parentId, Flags = isDirectory ? (byte)2 : (byte)1 };
-        }
+        FilenameRecord[] records = DiscoverRecords([], CancellationToken.None);
+        engine.Build(records);
+        lock (gate) { byPath.Clear(); foreach (FilenameRecord r in records) byPath[r.FullPath] = r; }
+        generation = 1; persistence.InitializeBase(engine, records, generation);
+    }
 
-        var nextIds = next.Values.Select(record => record.FileId).ToHashSet();
-        int changedCount = prior.Values.Count(record => !nextIds.Contains(record.FileId));
-        changedCount += next.Count(pair => !prior.TryGetValue(pair.Key, out FilenameRecord? old) || !Equivalent(old, pair.Value));
-        if (changedCount > 512)
-        {
-            // A large restart delta would force Route C's overlay into a full scan for
-            // every query. Build a replacement off the live engine so the GUI can keep
-            // serving the committed snapshot while catch-up indexes in the background.
-            var rebuilt = new FilenameSearchEngine();
-            rebuilt.Build(next.Values.OrderBy(record => record.FileId).ToArray());
-            FilenameSearchEngine previous;
-            engineGate.EnterWriteLock();
-            try
-            {
-                previous = engine;
-                engine = rebuilt;
-                lock (gate)
-                {
-                    byPath.Clear();
-                    foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
-                }
-            }
-            finally { engineGate.ExitWriteLock(); }
-            previous.Dispose();
-            return true;
-        }
-
+    private IReadOnlyList<CatalogChange> ReconcileCore(CancellationToken token)
+    {
+        Dictionary<string, FilenameRecord> prior; lock (gate) prior = new(byPath, StringComparer.Ordinal);
+        FilenameRecord[] records = DiscoverRecords(prior.Values, token);
+        var next = records.ToDictionary(r => r.FullPath, StringComparer.Ordinal);
+        IReadOnlyList<CatalogChange> changes = Diff(prior, next);
+        if (changes.Count == 0) return changes;
         engineGate.EnterReadLock();
         try
         {
-            var nextIdsForApply = next.Values.Select(record => record.FileId).ToHashSet();
-            foreach (FilenameRecord old in prior.Values)
-                if (!nextIdsForApply.Contains(old.FileId)) engine.Remove(old.FileId);
-            foreach ((string path, FilenameRecord current) in next)
-                if (!prior.TryGetValue(path, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
+            var ids = next.Values.Select(r => r.FileId).ToHashSet();
+            foreach (FilenameRecord old in prior.Values) if (!ids.Contains(old.FileId)) engine.Remove(old.FileId);
+            foreach (FilenameRecord current in next.Values)
+                if (!prior.TryGetValue(current.FullPath, out FilenameRecord? old) || !Equivalent(old, current)) engine.Upsert(current);
         }
         finally { engineGate.ExitReadLock(); }
-        lock (gate)
+        lock (gate) { byPath.Clear(); foreach ((string path, FilenameRecord r) in next) byPath[path] = r; }
+        return changes;
+    }
+
+    private FilenameRecord[] DiscoverRecords(IEnumerable<FilenameRecord> priorRecords, CancellationToken token)
+    {
+        var prior = priorRecords.ToArray();
+        var priorByPath = prior.ToDictionary(r => r.FullPath, StringComparer.Ordinal);
+        var priorByKey = prior.GroupBy(r => r.Key).ToDictionary(g => g.Key, g => new Queue<FilenameRecord>(g.OrderBy(r => r.FileId)));
+        var used = new HashSet<int>(); var reserved = prior.Select(r => r.FileId).ToHashSet();
+        var prelim = new List<FilenameRecord>();
+        foreach ((string path, bool isDirectory) in Discover(token))
         {
-            byPath.Clear();
-            foreach ((string path, FilenameRecord record) in next) byPath[path] = record;
+            token.ThrowIfCancellationRequested();
+            FilenameRecord? read = TryReadRecord(path, 0); if (read is null) continue;
+            int id;
+            if (priorByPath.TryGetValue(path, out FilenameRecord? same)) id = same.FileId;
+            else if (read.Key.IsNative && priorByKey.TryGetValue(read.Key, out Queue<FilenameRecord>? q))
+            {
+                while (q.Count > 0 && used.Contains(q.Peek().FileId)) q.Dequeue();
+                id = q.Count > 0 ? q.Dequeue().FileId : AllocateId(reserved);
+            }
+            else id = AllocateId(reserved);
+            used.Add(id); reserved.Add(id); prelim.Add(read with { FileId = id, Flags = isDirectory ? (byte)2 : (byte)1 });
         }
-        return changedCount > 0;
+        var idsByPath = prelim.ToDictionary(r => r.FullPath, r => r, StringComparer.Ordinal);
+        return prelim.Select(r =>
+        {
+            string? parent = Path.GetDirectoryName(r.FullPath);
+            return parent is not null && idsByPath.TryGetValue(Path.GetFullPath(parent), out FilenameRecord? p)
+                ? r with { ParentId = p.FileId, ParentKey = p.Key } : r with { ParentId = null, ParentKey = null };
+        }).OrderBy(r => r.FileId).ToArray();
+    }
+
+    private IEnumerable<(string Path, bool IsDirectory)> Discover(CancellationToken token)
+    {
+        var stack = new Stack<string>(); stack.Push(root); yield return (root, true);
+        while (stack.Count > 0)
+        {
+            token.ThrowIfCancellationRequested(); string dir = stack.Pop();
+            string[] children;
+            try { children = Directory.EnumerateFileSystemEntries(dir, "*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }).ToArray(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+            foreach (string raw in children)
+            {
+                string path = Path.GetFullPath(raw); if (IsExcluded(path)) continue;
+                FileAttributes attr; try { attr = File.GetAttributes(path); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
+                if (attr.HasFlag(FileAttributes.ReparsePoint)) continue;
+                bool dirChild = attr.HasFlag(FileAttributes.Directory); yield return (path, dirChild); if (dirChild) stack.Push(path);
+            }
         }
     }
 
-    private static bool Equivalent(FilenameRecord left, FilenameRecord right) =>
-        left.FileId == right.FileId && left.ParentId == right.ParentId &&
-        left.Name == right.Name && left.FullPath == right.FullPath &&
-        left.SizeBytes == right.SizeBytes && left.ModifiedUtc == right.ModifiedUtc && left.Flags == right.Flags;
+    private FilenameRecord? TryReadRecord(string path, int id)
+    {
+        path = Path.GetFullPath(path);
+        try
+        {
+            FileAttributes attr = File.GetAttributes(path); bool isDirectory = attr.HasFlag(FileAttributes.Directory);
+            FileSystemInfo info = isDirectory ? new DirectoryInfo(path) : new FileInfo(path); info.Refresh();
+            ulong size = isDirectory ? 0 : checked((ulong)((FileInfo)info).Length);
+            return new FilenameRecord(id, null, info.Name, path, size, info.LastWriteTimeUtc, isDirectory ? (byte)2 : (byte)1)
+            { Key = VolumeIdentity.GetFileKey(path, isDirectory, volumeId) };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    private FilenameRecord AttachParent(FilenameRecord record)
+    {
+        string? parent = Path.GetDirectoryName(record.FullPath);
+        return parent is not null && byPath.TryGetValue(Path.GetFullPath(parent), out FilenameRecord? p)
+            ? record with { ParentId = p.FileId, ParentKey = p.Key } : record with { ParentId = null, ParentKey = null };
+    }
+
+    private static IReadOnlyList<CatalogChange> Diff(
+        IReadOnlyDictionary<string, FilenameRecord> prior, IReadOnlyDictionary<string, FilenameRecord> next)
+    {
+        var result = new List<CatalogChange>();
+        foreach ((string path, FilenameRecord current) in next)
+            if (prior.TryGetValue(path, out FilenameRecord? old) && !Equivalent(old, current))
+                result.Add(new(CatalogChangeKind.Updated, current.Key, old, current));
+        var removed = prior.Where(p => !next.ContainsKey(p.Key)).Select(p => p.Value).ToList();
+        var added = next.Where(p => !prior.ContainsKey(p.Key)).Select(p => p.Value).ToList();
+        var addedByKey = added.GroupBy(r => r.Key).ToDictionary(g => g.Key, g => new Queue<FilenameRecord>(g));
+        var pairedAdded = new HashSet<int>();
+        foreach (FilenameRecord old in removed)
+        {
+            if (old.Key.IsNative && addedByKey.TryGetValue(old.Key, out Queue<FilenameRecord>? q) && q.Count > 0)
+            {
+                FilenameRecord current = q.Dequeue(); pairedAdded.Add(current.FileId);
+                CatalogChangeKind kind = string.Equals(Path.GetDirectoryName(old.FullPath), Path.GetDirectoryName(current.FullPath), StringComparison.OrdinalIgnoreCase)
+                    ? CatalogChangeKind.Renamed : CatalogChangeKind.Moved;
+                result.Add(new(kind, current.Key, old, current));
+            }
+            else result.Add(new(CatalogChangeKind.Removed, old.Key, old, null));
+        }
+        foreach (FilenameRecord current in added) if (!pairedAdded.Contains(current.FileId)) result.Add(new(CatalogChangeKind.Added, current.Key, null, current));
+        return result;
+    }
 
     private void LoadExistingRecords()
     {
         lock (gate)
         {
             byPath.Clear();
-            foreach (FilenameRecord record in engine.Records)
+            foreach (FilenameRecord r in engine.Records)
             {
-                string path = NormalizePath(record.FullPath);
-                if (!IsWithinRoot(path) || IsExcluded(path)) continue;
-                byPath[path] = record with { FullPath = path, Name = Path.GetFileName(path) };
-                if (record.FileId >= nextId) nextId = record.FileId == int.MaxValue ? int.MaxValue : record.FileId + 1;
+                if (!PathIdentity.IsSameOrChild(root, r.FullPath) || IsExcluded(r.FullPath)) continue;
+                byPath[r.FullPath] = r; nextId = Math.Max(nextId, r.FileId == int.MaxValue ? int.MaxValue : r.FileId + 1);
             }
         }
     }
 
-    private FileSystemEntry[] Discover()
+    private int AllocateId(HashSet<int>? reserved = null)
     {
-        var entries = new List<FileSystemEntry>();
-        var pending = new Stack<string>();
-        pending.Push(root);
-        entries.Add(new FileSystemEntry(root, true));
-        while (pending.Count > 0)
-        {
-            string directory = pending.Pop();
-            IEnumerable<string> children;
-            try
-            {
-                children = Directory.EnumerateFileSystemEntries(directory, "*", new EnumerationOptions
-                {
-                    IgnoreInaccessible = true,
-                    RecurseSubdirectories = false,
-                    ReturnSpecialDirectories = false,
-                    AttributesToSkip = FileAttributes.ReparsePoint
-                }).ToArray();
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                continue;
-            }
-            foreach (string rawPath in children)
-            {
-                string path = NormalizePath(rawPath);
-                if (IsExcluded(path)) continue;
-                FileAttributes attributes;
-                try { attributes = File.GetAttributes(path); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { continue; }
-                if (attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
-                bool isDirectory = attributes.HasFlag(FileAttributes.Directory);
-                entries.Add(new FileSystemEntry(path, isDirectory));
-                if (isDirectory) pending.Push(path);
-            }
-        }
-        return entries.OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase).ToArray();
-    }
-
-    private FilenameRecord ReadRecord(string path, int id)
-    {
-        path = NormalizePath(path);
-        bool isDirectory = Directory.Exists(path);
-        try
-        {
-            FileSystemInfo info = isDirectory ? new DirectoryInfo(path) : new FileInfo(path);
-            info.Refresh();
-            ulong size = isDirectory ? 0UL : checked((ulong)((FileInfo)info).Length);
-            string name = isDirectory ? ((DirectoryInfo)info).Name : ((FileInfo)info).Name;
-            return new FilenameRecord(id, null, name.Normalize(), path.Normalize(), size, info.LastWriteTimeUtc, isDirectory ? (byte)2 : (byte)1);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            // The event raced with deletion or an ACL change. A zero-sized metadata record
-            // is safe to replace on the next watcher/reconcile pass.
-            return new FilenameRecord(id, null, Path.GetFileName(path), path, 0, DateTime.UtcNow, isDirectory ? (byte)2 : (byte)1);
-        }
-    }
-
-    private int AllocateId() => AllocateId(null);
-
-    private int AllocateId(HashSet<int>? used)
-    {
-        while (nextId <= 0 || (used is not null && used.Contains(nextId)))
-        {
-            if (nextId == int.MaxValue) throw new InvalidOperationException("File ID space exhausted");
-            nextId++;
-        }
+        while (nextId <= 0 || reserved?.Contains(nextId) == true) { if (nextId == int.MaxValue) throw new InvalidOperationException("File ID space exhausted"); nextId++; }
         return nextId++;
     }
+    private bool IsExcluded(string path) => excludedRoots.Any(x => PathIdentity.IsSameOrChild(x, path)) || PathIdentity.IsSameOrChild(store + ".data", path) || path.Equals(store, StringComparison.OrdinalIgnoreCase);
+    private static bool Equivalent(FilenameRecord a, FilenameRecord b) => a.FileId == b.FileId && a.Key == b.Key && a.ParentId == b.ParentId && a.ParentKey == b.ParentKey && a.Name == b.Name && a.FullPath == b.FullPath && a.SizeBytes == b.SizeBytes && a.ModifiedUtc == b.ModifiedUtc && a.Flags == b.Flags;
+    private void SafeRaise(CatalogChangeBatch batch) { try { Changed?.Invoke(batch); } catch { } }
+    private void SetStatus(string value) => Volatile.Write(ref status, value);
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
 
-    private static FileSignature Signature(FilenameRecord record) =>
-        new(record.Name, record.SizeBytes, record.ModifiedUtc.Ticks, record.Flags);
-
-    private bool IsWithinRoot(string path) =>
-        path.Equals(root, StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-
-    private bool IsExcluded(string path)
+    private void DisposeFailedOpen()
     {
-        path = NormalizePath(path);
-        string excluded = store;
-        bool storeDirectoryIsChild = !storeDirectory.Equals(root, StringComparison.OrdinalIgnoreCase) && IsWithinRoot(storeDirectory);
-        return path.Equals(excluded, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith(excluded + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-            storeDirectoryIsChild && (path.Equals(storeDirectory, StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith(storeDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private void PersistSoon()
-    {
-        if (disposed) return;
-        Interlocked.Increment(ref pendingPersists);
-        persistRequests.Writer.TryWrite(true);
-    }
-
-    private async Task PersistLoop()
-    {
-        try
-        {
-            while (await persistRequests.Reader.WaitToReadAsync(stop.Token).ConfigureAwait(false))
-            {
-                await Task.Delay(250, stop.Token).ConfigureAwait(false);
-                while (persistRequests.Reader.TryRead(out _)) Interlocked.Decrement(ref pendingPersists);
-                try
-                {
-                    SetStatus("保存中");
-                    FilenameRecord[] snapshot;
-                    lock (gate) snapshot = byPath.Values.OrderBy(record => record.FileId).ToArray();
-                    FilenameSearchEngine.SaveSnapshotAtomic(store, snapshot);
-                    SetStatus("Ready");
-                    RaiseChanged();
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-                {
-                    SetStatus("保存エラー: " + ex.Message);
-                    RaiseChanged();
-                }
-            }
-        }
-        catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-    }
-
-    private void SetStatus(string value)
-    {
-        Volatile.Write(ref status, value);
-        RaiseChanged();
-    }
-
-    private void RaiseChanged()
-    {
-        try { Changed?.Invoke(); }
-        catch { /* observers cannot stop the indexing worker */ }
+        disposed = true; try { changeFeed.Dispose(); } catch { } try { persistence.Dispose(); } catch { } try { engine.Dispose(); } catch { } stop.Cancel(); events.Writer.TryComplete();
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (disposed) return;
-        disposed = true;
-        watcher.EnableRaisingEvents = false;
-        watcher.Dispose();
-        stop.Cancel();
-        events.Writer.TryComplete();
-        persistRequests.Writer.TryComplete();
+        if (disposed) return; disposed = true;
+        try { changeFeed.Stop(); } catch { } changeFeed.Dispose();
+        stop.Cancel(); events.Writer.TryComplete();
         try { await worker.ConfigureAwait(false); } catch (OperationCanceledException) { }
-        try { await persister.ConfigureAwait(false); } catch (OperationCanceledException) { }
-        // Persist the last in-memory snapshot even when shutdown races a debounce timer.
-        engineGate.EnterWriteLock();
-        try
-        {
-            try { engine.SaveAtomic(store); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-            { SetStatus("終了時保存エラー: " + ex.Message); }
-            engine.Dispose();
-        }
-        finally
-        {
-            engineGate.ExitWriteLock();
-            engineGate.Dispose();
-        }
+        persistence.MarkClean(); persistence.Dispose();
+        engineGate.EnterWriteLock(); try { engine.Dispose(); } finally { engineGate.ExitWriteLock(); engineGate.Dispose(); }
         stop.Dispose();
     }
-
-    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
-    private static string NormalizePath(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-    private readonly record struct FileSystemEntry(string Path, bool IsDirectory);
-    private readonly record struct FileSignature(string Name, ulong SizeBytes, long ModifiedUtcTicks, byte Flags);
 }
