@@ -313,7 +313,7 @@ $inaccessibleStore = Join-Path $data 'stores\inaccessible.manifest'
 $inaccessible = Invoke-FormalMode 'inaccessible' @($inaccessibleRoot,$inaccessibleStore) 'INACCESSIBLE.json'
 
 $guiSamples = [System.Collections.Generic.List[object]]::new()
-$queries = @('fixture_','ReadMe','report_*.xlsx','Ω','zz','STRASSE','café','日本語','absent_formal_query','fixture_0000001')
+$queries = @('fixture_','ReadMe','report_*.xlsx',([char]0x03A9),'zz','STRASSE',('caf' + [char]0x00E9),([char]0x65E5 + [char]0x672C + [char]0x8A9E),'absent_formal_query','fixture_0000001')
 for ($i = 0; $i -lt $queries.Count; $i++) {
     $samplePath = Join-Path $logs ('gui-startup-{0:D2}.json' -f ($i + 1))
     $guiOp = Invoke-Captured -FilePath (Get-Command powershell).Source -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$guiScriptPath,'-GuiExe',$guiExe,'-Root',$corpusRoot,'-Store',$store,'-Report',$samplePath,'-Query',$queries[$i]) -Name ('gui-startup-{0:D2}' -f ($i + 1)) -WorkingDirectory $worktree
