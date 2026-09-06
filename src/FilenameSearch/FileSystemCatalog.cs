@@ -41,7 +41,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private Task basePathIndexReady = Task.CompletedTask;
     private int recordCount;
     private FilenameSearchEngine engine;
-    private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, compactionRunning, directoryReconcileScheduled;
+    private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, reconcileQueued, compactionRunning, directoryReconcileScheduled;
     private long queueSaturationCount, reconcileCount, compactionCount;
     private long generation;
     private string status = "準備中";
@@ -215,12 +215,17 @@ public sealed class FileSystemCatalog : IFilenameCatalog
 
     private void SignalReconcile()
     {
+        if (Interlocked.Exchange(ref reconcileQueued, 1) != 0) return;
         if (events.Writer.TryWrite(new FileSystemEvent(root, Reconcile: true)))
         {
             int pending = Interlocked.Increment(ref pendingEvents);
             UpdateMaxPending(pending);
         }
-        else Interlocked.Increment(ref queueSaturationCount);
+        else
+        {
+            Interlocked.Exchange(ref reconcileQueued, 0);
+            Interlocked.Increment(ref queueSaturationCount);
+        }
     }
 
     private async Task UpdateLoop()
@@ -233,6 +238,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 await Task.Delay(50, stop.Token).ConfigureAwait(false);
                 var batch = new List<FileSystemEvent>();
                 while (events.Reader.TryRead(out FileSystemEvent? e)) { Interlocked.Decrement(ref pendingEvents); batch.Add(e); }
+                if (batch.Any(e => e.Reconcile || e.CatchUp)) Interlocked.Exchange(ref reconcileQueued, 0);
                 try
                 {
                     SetStatus("変更を反映中");
