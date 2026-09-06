@@ -18,12 +18,20 @@
     "queryP95Ms": 50,
     "queryP99Ms": 100,
     "worstClassP95Ms": 50,
+    "sustainedQueryP95Ms": 50,
+    "sustainedQueryP99Ms": 100,
     "readyCorePrivateBytes": 1073741824,
     "persistentBytes": 1073741824,
     "initialBuildSeconds": 60,
     "existingLoadSeconds": 1.5,
+    "restartCatchupSeconds": 5,
+    "postUpdateQueryP95Ms": 50,
+    "postUpdateQueryP99Ms": 100,
+    "writeAmplificationFullBaseRewriteCount": 0,
     "sustainedQueryCount": 10000,
     "churnConvergenceP95Ms": 1000,
+    "churnSearchP95Ms": 50,
+    "churnSearchP99Ms": 100,
     "churnPrivateBytes": 1610612736,
     "guiFreshProcessCount": 10,
     "guiStartupP95Ms": 2000,
@@ -31,12 +39,17 @@
     "guiWarmMaxMs": 200,
     "guiLiveRefreshMs": 1000,
     "idleSeconds": 600,
-    "idleCpuPercent": 1
+    "idleCpuPercent": 1,
+    "idlePrivateBytes": 1610612736
   },
   "requiredQueryClasses": ["rare", "common", "oneChar", "twoChar", "wildcard", "fullPath"],
   "requiredUnicodeVectors": ["sharpS", "capitalSharpS", "ligatureFfi", "finalSigma", "kelvin", "dottedI", "nfcNfd"],
   "requiredChurn": { "create": 10000, "modify": 10000, "rename": 10000, "move": 10000, "delete": 10000, "mixedSeconds": 1800, "stormEvents": 100000 },
   "requiredRestartRootEntries": 4096,
+  "requiredPostUpdateStates": ["updates-0", "updates-1", "updates-100", "updates-1000", "compaction-during", "compaction-after", "compaction-after-reconcile"],
+  "requiredPersistenceFixtures": ["writer_lease", "base_index_corruption", "base_metadata_corruption", "delta_payload_corruption", "manifest_corruption", "dirty_shutdown_torn_tail", "partial_temp_file", "root_identity_mismatch", "normalizer_version_mismatch"],
+  "requiredDirectoryFixtures": ["file_create", "file_modify", "file_delete", "file_rename", "file_move", "directory_create", "directory_rename", "directory_move", "recursive_directory_delete", "ten_thousand_child_delete", "reparse_point"],
+  "requiredGuiSamples": { "freshProcesses": 10, "warmupRounds": 2, "measuredRounds": 18 },
   "persistentAccounting": ["manifest", "dataRecursive", "writerLock", "dirtyMarker"],
   "inaccessibleFixture": { "safeAclWhenPossible": true, "otherwise": "informational_limitation", "formalNotRun": false },
   "remotePolicy": { "afterLock": ["noPull", "noMerge", "noRebase", "noForcePush"], "recordRemoteSha": true },
@@ -45,6 +58,13 @@
     "wildcardSubstringSemantics", "requiredQueryClasses", "actualFilesystemEntryCount",
     "logical100GiB", "corpusDifficulty", "independentOracle", "fpFnZero", "churnQuantity",
     "churnDuration", "guiProcessCount", "corruptionFixtures", "postUpdateStates", "completionRules"
+  ],
+  "codexMayNotChange": [
+    "hardThresholds", "filenameFullPathSemantics", "caseSemantics", "unicodeFullCasefoldRequirements",
+    "wildcardSubstringSemantics", "requiredQueryClasses", "actualFilesystemEntryCount", "logical100GiB",
+    "corpusDifficulty", "independentOracleExpectations", "fpFnZero", "requiredChurnQuantity",
+    "requiredDuration", "requiredGuiProcessCount", "requiredCorruptionFixtures", "requiredPostUpdateStates",
+    "completion判定"
   ],
   "completion": { "allowedNotRun": ["NOT_RUN_NO_SECOND_FIXED_VOLUME"] }
 }

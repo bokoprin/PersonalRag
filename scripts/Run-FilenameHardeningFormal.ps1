@@ -95,6 +95,7 @@ function Add-CommonReportFields([object]$Value, [string]$ReportPath, [object]$Op
     $Value | Add-Member -NotePropertyName battery_status -NotePropertyValue $power.BatteryStatus -Force
     $Value | Add-Member -NotePropertyName charging -NotePropertyValue $power.Charging -Force
     $Value | Add-Member -NotePropertyName power_scheme -NotePropertyValue $power.PowerScheme -Force
+    $Value | Add-Member -NotePropertyName thermal_throttling -NotePropertyValue $power.ThermalThrottling -Force
     $Value | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-Sha256 $ExecutablePath) -Force
     if (Test-Path -LiteralPath $CorpusManifest) {
         $Value | Add-Member -NotePropertyName corpus_manifest_sha256 -NotePropertyValue (Get-Sha256 $CorpusManifest) -Force
@@ -132,6 +133,7 @@ function Add-GuiReportFields([object]$Value, [string]$ReportPath, [object]$Opera
     $Value | Add-Member -NotePropertyName battery_status -NotePropertyValue $power.BatteryStatus -Force
     $Value | Add-Member -NotePropertyName charging -NotePropertyValue $power.Charging -Force
     $Value | Add-Member -NotePropertyName power_scheme -NotePropertyValue $power.PowerScheme -Force
+    $Value | Add-Member -NotePropertyName thermal_throttling -NotePropertyValue $power.ThermalThrottling -Force
     $Value | Add-Member -NotePropertyName ac_requirement_overridden -NotePropertyValue $true -Force
     $Value | Add-Member -NotePropertyName informational_limitation -NotePropertyValue $null -Force
     $Value | Add-Member -NotePropertyName os -NotePropertyValue $machine.os -Force
@@ -171,7 +173,7 @@ function Get-PowerState {
     } catch {}
     $scheme = $null
     try { $scheme = (& powercfg /getactivescheme 2>$null | Out-String).Trim() } catch {}
-    return [pscustomobject][ordered]@{ ACLineStatus = $ac; BatteryStatus = $batteryStatus; Charging = $charging; PowerScheme = $scheme }
+    return [pscustomobject][ordered]@{ ACLineStatus = $ac; BatteryStatus = $batteryStatus; Charging = $charging; PowerScheme = $scheme; ThermalThrottling = $null }
 }
 
 $power = Get-PowerState
@@ -224,7 +226,7 @@ $suppStore = Join-Path $suppRoot '.personalrag-store\index.routec'
 $gate.Add((Invoke-Captured -FilePath $dotnet -ArgumentList @('run','--project','tests\FilenameSearch.Idle','-c','Release','--no-build','--',$suppRoot,$suppStore,$suppIdleReport,$SupplementalIdleSeconds) -Name 'supplemental-idle' -WorkingDirectory $worktree))
 $regressionPath = Join-Path $reports 'REGRESSION.json'
 $gateFailures = @($gate | Where-Object { $_.exit_code -ne 0 }).Count
-$regression = [ordered]@{ version = 1; source_commit_sha = $sourceSha; report_head_sha = $sourceSha; command = 'isolated worktree: dotnet --info; dotnet restore PersonalRag.sln; dotnet build PersonalRag.sln -c Release --no-restore; FilenameSearch.Tests; FilenameSearch.Gui.Tests; supplemental E2E/Idle'; operations = $gate; failed_operation_count = $gateFailures; pass = ($gateFailures -eq 0); ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; ac_requirement_overridden = $true }
+$regression = [ordered]@{ version = 1; source_commit_sha = $sourceSha; report_head_sha = $sourceSha; command = 'isolated worktree: dotnet --info; dotnet restore PersonalRag.sln; dotnet build PersonalRag.sln -c Release --no-restore; FilenameSearch.Tests; FilenameSearch.Gui.Tests; supplemental E2E/Idle'; operations = $gate; failed_operation_count = $gateFailures; pass = ($gateFailures -eq 0); ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; thermal_throttling = $power.ThermalThrottling; ac_requirement_overridden = $true }
 $regression | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $regressionPath -Encoding utf8
 if (-not $regression.pass) { throw 'Gate 0 regression failed; formal measurement is not started.' }
 
@@ -240,6 +242,10 @@ if ($generate.exit_code -ne 0 -or -not (Test-Path -LiteralPath $corpusManifest))
 $sourceHashes = [ordered]@{}
 Get-ChildItem -LiteralPath (Join-Path $repo 'src\FilenameSearch.Core'), (Join-Path $repo 'src\FilenameSearch.RouteC'), (Join-Path $repo 'src\FilenameSearch'), (Join-Path $repo 'src\FilenameSearch.Gui'), (Join-Path $repo 'tests\FilenameSearch.Formal') -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json') } | Sort-Object FullName | ForEach-Object { $relative = [System.IO.Path]::GetRelativePath($repo,$_.FullName); $sourceHashes[$relative] = Get-Sha256 $_.FullName }
 $lockPath = Join-Path $reports 'FORMAL_SERIES_LOCK.json'
+$measurementScriptHashes = [ordered]@{}
+Get-ChildItem -LiteralPath (Join-Path $repo 'scripts') -Filter '*.ps1' -File | Sort-Object FullName | ForEach-Object {
+    $measurementScriptHashes[[System.IO.Path]::GetRelativePath($repo,$_.FullName)] = Get-Sha256 $_.FullName
+}
 $lock = [ordered]@{
     version = 1
     series_id = [guid]::NewGuid().ToString('N')
@@ -253,6 +259,7 @@ $lock = [ordered]@{
     production_executable_sha256 = Get-Sha256 $guiExe
     formal_runner_sha256 = Get-Sha256 $formalSourcePath
     measurement_script_sha256 = Get-Sha256 $PSCommandPath
+    measurement_script_hashes = $measurementScriptHashes
     gui_probe_script_sha256 = Get-Sha256 $guiScriptPath
     corpus_generator_sha256 = Get-Sha256 $formalSourcePath
     corpus_manifest_sha256 = Get-Sha256 $corpusManifest
@@ -264,11 +271,12 @@ $lock = [ordered]@{
     acceptance_rules_path = $rulesPath
     acceptance_plan_sha256 = Get-Sha256 (Join-Path $repo 'docs\FILENAME_HARDENING_ACCEPTANCE_PLAN.md')
     source_branch = $branch
-    measurement_configuration = [ordered]@{ data_root = $data; corpus_root = $corpusRoot; store = $store; count = $Count; logical_bytes = 100GB; churn_seconds = $ChurnSeconds; idle_seconds = $IdleSeconds; build_configuration = 'Release'; gc_forced = $false; fixed_query_order = $true }
+    measurement_configuration = [ordered]@{ data_root = $data; corpus_root = $corpusRoot; store = $store; count = $Count; logical_bytes = 100GB; churn_seconds = $ChurnSeconds; idle_seconds = $IdleSeconds; build_configuration = 'Release'; gc_forced = $false; fixed_query_order = $true; benchmark_rounds = 20; warmup_rounds = 2; measured_rounds = 18; query_shuffle_seed = 123456 }
     ACLineStatus = $power.ACLineStatus
     battery_status = $power.BatteryStatus
     charging = $power.Charging
     power_scheme = $power.PowerScheme
+    thermal_throttling = $power.ThermalThrottling
     source_hashes = $sourceHashes
 }
 $lock | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $lockPath -Encoding utf8
@@ -316,7 +324,7 @@ $startupValues = @($guiSamples | ForEach-Object { [double]$_.process_start_to_re
 $startupP95 = Get-Percentile $startupValues .95
 $startupPrivate = @($guiSamples | ForEach-Object { [int64]$_.private_bytes }) | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum
 $guiActualPath = Join-Path $reports 'GUI_ACTUAL_STARTUP.json'
-$guiActual = [ordered]@{ version = 1; mode = 'actual-child-process'; source_commit_sha = $sourceSha; report_head_sha = $sourceSha; fresh_process_count = $guiSamples.Count; samples = $guiSamples; startup_p95_ms = $startupP95; max_private_bytes = $startupPrivate; hard_threshold = [ordered]@{ fresh_process_count = 10; startup_p95_ms = 2000; private_bytes = 1500000000 }; pass = $guiSamples.Count -ge 10 -and $startupP95 -le 2000 -and $startupPrivate -le 1500000000; ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; ac_requirement_overridden = $true }
+$guiActual = [ordered]@{ version = 1; mode = 'actual-child-process'; source_commit_sha = $sourceSha; report_head_sha = $sourceSha; fresh_process_count = $guiSamples.Count; samples = $guiSamples; startup_p95_ms = $startupP95; max_private_bytes = $startupPrivate; hard_threshold = [ordered]@{ fresh_process_count = 10; startup_p95_ms = 2000; private_bytes = 1500000000 }; pass = $guiSamples.Count -ge 10 -and $startupP95 -le 2000 -and $startupPrivate -le 1500000000; ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; thermal_throttling = $power.ThermalThrottling; ac_requirement_overridden = $true }
 $guiActual | ConvertTo-Json -Depth 50 | Set-Content -LiteralPath $guiActualPath -Encoding utf8
 
 $warmPath = Join-Path $logs 'gui-warm-raw.json'
@@ -353,7 +361,7 @@ foreach ($entry in $reportValues.GetEnumerator()) {
 }
 $limitations = @($reportValues.GetEnumerator() | Where-Object { $_.Value.status -eq 'informational_limitation' -or $_.Value.informational_limitation } | ForEach-Object { [pscustomobject]@{ report = $_.Key; reason = if ($_.Value.informational_limitation) { $_.Value.informational_limitation } else { $_.Value.limitation } } })
 $finalPath = Join-Path $reports 'FINAL_FILENAME_HARDENING.json'
-$final = [ordered]@{ version = 1; series_id = $lock.series_id; evaluation_complete = $formalPass; pass = $formalPass; measured_source_commit_sha = $sourceSha; report_head_sha = $sourceSha; initial_remote_branch_sha = $initialRemoteSha; reports = $reportValues; allowed_not_run = @('NOT_RUN_NO_SECOND_FIXED_VOLUME'); informational_limitations = $limitations; AC_requirement_overridden = $true; ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; utc = [DateTime]::UtcNow }
+$final = [ordered]@{ version = 1; series_id = $lock.series_id; evaluation_complete = $formalPass; pass = $formalPass; measured_source_commit_sha = $sourceSha; report_head_sha = $sourceSha; initial_remote_branch_sha = $initialRemoteSha; reports = $reportValues; allowed_not_run = @('NOT_RUN_NO_SECOND_FIXED_VOLUME'); informational_limitations = $limitations; AC_requirement_overridden = $true; ACLineStatus = $power.ACLineStatus; battery_status = $power.BatteryStatus; charging = $power.Charging; power_scheme = $power.PowerScheme; thermal_throttling = $power.ThermalThrottling; utc = [DateTime]::UtcNow }
 $final | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $finalPath -Encoding utf8
 $acceptancePath = Join-Path $reports 'FINAL_FILENAME_HARDENING_ACCEPTANCE.json'
 $acceptance = [ordered]@{ version = 1; series_id = $lock.series_id; evaluation_complete = $formalPass; pass = $formalPass; measured_source_commit_sha = $sourceSha; report_commit_sha = $null; branch = 'codex/filename-hardening'; hard_thresholds = $rules.hardThresholds; final_report = $finalPath; AC_requirement_overridden = $true; remaining_issue = if ($formalPass) { $null } else { 'One or more formal report pass fields are false; use raw reports for the required FAIL loop.' } }
