@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "phase": "filename/path",
+  "status": "PERSONALRAG_FILENAME_PHASE_COMPLETE",
+  "pass": true,
+  "branch": "feature/filename-search-champion",
+  "measured_source_commit": "42a13c170662c47c26101886cafc86cd80a74ee9",
+  "generated_utc": "2026-09-06T00:31:59.6901654Z",
+  "spec": {
+    "path": "specification/PersonalRag_ASTRA_SPEC_v1.md",
+    "sha256": "9a10515eee6aaed64517aa57891def400cd8515e290425b6d2ec896389cd607b",
+    "filename_phase_plan_attachment_sha256": "E4F739A59C24F5CAF1428F421A6070D0AB02F8DE914AAA66AEC17074132F0288",
+    "completion_section": "30",
+    "content_search_started": false
+  },
+  "experiment": {
+    "experiment_lock": {
+      "pass": true,
+      "path": "experiment/EXPERIMENT_LOCK.json",
+      "sha256": "e17171bfceb236d0a26562e0139988629dd1960106d1f6af054e22e9c877f52e",
+      "locked": true,
+      "generator_sha256": "771a291702f60b4e9e744b2991386ffa91cdad4d1e63a275dc31515087274d3e",
+      "oracle_sha256": "189c336656435c39d9eaf21b92f0431d08c0bc970559b53f84cc9f05dbdf3ea6",
+      "runner_sha256": "b0f6582615257f022270d0412bc933e14427ebbd6a4fa82e799d9b78735e2608"
+    },
+    "calibration_only_route_tuning": {
+      "pass": true,
+      "path": "bench/CALIBRATION_RESULT.json",
+      "sha256": "9c34eaea2c32daaf1ad1c7fd85081d2b726c3a931fe933fe1e9192afd8c0b854",
+      "seed": "0x505241475F43414C",
+      "note": "Route tuning was performed only against calibration data before the official freeze."
+    },
+    "routes": [
+      {
+        "route": "A",
+        "implemented": true,
+        "branch": "experiment/filename-route-a",
+        "implementation_commit": "a2572d3e62f01e0c2a3c227edce3a3d18e4cabb5"
+      },
+      {
+        "route": "B",
+        "implemented": true,
+        "branch": "experiment/filename-route-b",
+        "implementation_commit": "639722308659e4657c14848a94b54caad9e54944"
+      },
+      {
+        "route": "C",
+        "implemented": true,
+        "branch": "experiment/filename-route-c",
+        "implementation_commit": "29870c91322675b2d3232225d05528af7dff2f88"
+      }
+    ],
+    "official_corpus": {
+      "pass": true,
+      "record_count": 1000000,
+      "logical_bytes": 107374182400,
+      "seed": "0x505241475F314D31",
+      "manifest_sha256": "ad8c7abcd08916a39e588781e5bd478b1a834a75fa47ce59111d7f4a30398bd7",
+      "records_sha256": "4d14896b236bffdf5a0f07b248e42720944c056a67121fceaa93a965400fa9e0"
+    },
+    "official_queries": {
+      "pass": true,
+      "path": "experiment/queries.v1.json",
+      "sha256": "c49032724de077c27334d70d984d8daea39bcaaa323b79162edbd1f0beb208dc",
+      "rounds": 20,
+      "warmup_rounds": 2,
+      "timed_rounds": 18
+    },
+    "oracle_correctness": {
+      "pass": true,
+      "false_positive": 0,
+      "false_negative": 0,
+      "hash_and_count_match": true,
+      "source_report": "bench-data/official-20260905/reports/route-c-final-6c3ba2f.json"
+    },
+    "all_official_results_recorded": {
+      "pass": true,
+      "path": "bench/BAKEOFF_RESULT.json",
+      "sha256": "84ac860d7252b4e322f93480c95bc908258348127e05936af7a2e957e7b88974",
+      "routes_recorded": ["A", "B", "C"]
+    },
+    "champion_selection": {
+      "pass": true,
+      "route": "C",
+      "implementation_commit": "29870c91322675b2d3232225d05528af7dff2f88",
+      "score": 0.6498577597564947,
+      "formula": "Exclude any route failing a hard gate, then minimize the fixed weighted normalized score.",
+      "decision_path": "docs/BAKEOFF_DECISION.md"
+    }
+  },
+  "champion_core": {
+    "route": "C",
+    "measured_commit": "6c3ba2f616778f03750b4909668e4192513ef3ec",
+    "report": "bench-data/official-20260905/reports/route-c-final-6c3ba2f.json",
+    "report_sha256": "3cd3ecc984f8238d32762a9e3fd7ab74f9dfbea19053e3459107f9dc8ad85ccd",
+    "correctness": {
+      "false_positive": 0,
+      "false_negative": 0,
+      "hash_and_count_match": true
+    },
+    "latency_ms": {
+      "p50": 3.8065,
+      "p95": 23.9066,
+      "p99": 31.7082,
+      "worst_class_p95": 38.6437
+    },
+    "persistent_bytes": 477165162,
+    "ready_core_private_bytes": 518512640,
+    "build_seconds": 38.8485664,
+    "fresh_load_seconds": 1.3819704,
+    "update_p95_ms": 0.008,
+    "build_private_bytes_informational": 2310307840,
+    "hard_gate": "PASS",
+    "limits": {
+      "p50_ms": 20,
+      "p95_ms": 50,
+      "p99_ms": 100,
+      "worst_class_p95_ms": 50,
+      "persistent_bytes": 1073741824,
+      "ready_core_private_bytes": 1073741824,
+      "build_seconds": 60,
+      "fresh_load_seconds": 1.5,
+      "update_p95_ms": 10
+    }
+  },
+  "windows_product": {
+    "report": "reports/filename-product-acceptance-final.json",
+    "report_sha256": "4fb58da5a92331649bf72243bf5be0aaa32fe87cf16ecbbcb662758e26f014c2",
+    "frozen_gui_contract": {
+      "pass": true,
+      "evidence": [
+        "src/FilenameSearch.Gui/MainWindow.xaml",
+        "src/FilenameSearch.Gui/MainWindow.xaml.cs",
+        "tests/FilenameSearch.Gui.Tests/Program.cs",
+        "docs/FILENAME_ENGINE_ARCHITECTURE.md"
+      ],
+      "content_search_started": false
+    },
+    "first_batch": {
+      "p95_ms": 85.7499,
+      "hard_max_ms": 89.5225,
+      "rows": 10,
+      "pass": true,
+      "limits": {
+        "p95_ms": 100,
+        "hard_max_ms": 200
+      }
+    },
+    "existing_index_startup_ms": 979.2621,
+    "full_app_private_bytes": 414441472,
+    "idle": {
+      "requested_seconds": 600,
+      "actual_seconds": 600.0080584,
+      "cpu_percent": 0,
+      "store_unchanged": true,
+      "pass": true
+    },
+    "live_convergence_p95_ms": {
+      "create": 127.8064,
+      "delete": 100.5528,
+      "rename": 127.0817,
+      "move": 134.651
+    },
+    "restart_catchup": {
+      "pass": true,
+      "milliseconds": 2812.5986,
+      "limit_ms": 5000
+    },
+    "crash_recovery": {
+      "pass": true,
+      "forced_termination_recovery": true,
+      "forced_termination_recovery_ms_informational": 8142.3139,
+      "corrupt_store_recovery": true
+    },
+    "real_files_e2e": {
+      "pass": true,
+      "report": "reports/filename-e2e-product.json",
+      "report_sha256": "9f4da845befde712478b8accefca52fd05171ba0d1a770ba588a35c8773ff0e0",
+      "requested_real_files": 100000,
+      "initial_entries": 104007,
+      "checks": 49,
+      "churn": {
+        "create": 10000,
+        "modify": 10000,
+        "rename": 10000,
+        "move": 10000,
+        "delete": 10000,
+        "created_matches": 10000,
+        "remaining_matches": 0,
+        "pass": true
+      },
+      "reparse_point": {
+        "status": "PASS",
+        "indexed": false
+      },
+      "inaccessible_directory": "NOT_RUN: ACL mutation requires a separately provisioned account"
+    },
+    "product_persistent_size_informational": {
+      "persistent_bytes": 56751349,
+      "source_logical_bytes": 800016,
+      "ratio_percent": 70.9377674946501,
+      "note": "Recorded for transparency; the section 30 Windows product gates do not define a product PersistentRatio threshold."
+    },
+    "component_reports": {
+      "gui": {
+        "path": "reports/filename-gui-startup-100k.json",
+        "sha256": "b86a3fc9a7b297878cc1b92f54d26bdee50719181bf86b07925b17043dd3ee4d"
+      },
+      "idle": {
+        "path": "reports/filename-idle-10m.json",
+        "sha256": "57da049f146729a86150f5ea68739272b4e4c81657f4e8d7d109e90294800ecb"
+      }
+    },
+    "limits": {
+      "existing_index_startup_ms": 2000,
+      "full_app_private_bytes": 1610612736,
+      "idle_cpu_percent": 1,
+      "live_convergence_p95_ms": 1000
+    }
+  },
+  "future_boundary": {
+    "pass": true,
+    "content_search_started": false,
+    "documents": [
+      {
+        "path": "docs/CONTENT_ENGINE_BOUNDARY.md",
+        "sha256": "f884e0c8ab53297677b95f0cc620427f6b2c29cd74df731265067019e89f3c72"
+      },
+      {
+        "path": "docs/FILENAME_ENGINE_ARCHITECTURE.md",
+        "sha256": "2b82ab3a0e91373f94be22ee3e1eb4d1016f9d1df1834af82ab8a34db3c5af63"
+      },
+      {
+        "path": "docs/ARCHITECTURE.md",
+        "sha256": "a2add6a9e36afb300a91c0609a84dc21f2d1981eafb64a908afe833446aab8bc"
+      }
+    ],
+    "statement": "A separate content engine can be added above the stable filename/path boundary without rewriting FilenameSearchEngine or FileSystemCatalog."
+  },
+  "gates": {
+    "experiment_lock": true,
+    "calibration_only_route_tuning": true,
+    "route_a_implemented": true,
+    "route_b_implemented": true,
+    "route_c_implemented": true,
+    "official_1m_corpus_frozen": true,
+    "official_query_set_frozen": true,
+    "oracle_correctness": true,
+    "all_official_results_recorded": true,
+    "champion_selected_by_fixed_formula": true,
+    "false_positives_zero": true,
+    "false_negatives_zero": true,
+    "p50_le_20_ms": true,
+    "p95_le_50_ms": true,
+    "p99_le_100_ms": true,
+    "every_class_p95_le_50_ms": true,
+    "persistent_le_1_gib": true,
+    "ready_core_ram_le_1_gib": true,
+    "build_1m_le_60_sec": true,
+    "fresh_load_le_1_5_sec": true,
+    "update_p95_le_10_ms": true,
+    "frozen_gui_contract": true,
+    "gui_first_batch_p95_le_100_ms": true,
+    "gui_hard_max_le_200_ms": true,
+    "existing_index_startup_le_2_sec": true,
+    "full_app_ram_le_1_5_gib": true,
+    "idle_cpu_le_1_percent": true,
+    "create_convergence_p95_le_1_sec": true,
+    "delete_convergence_p95_le_1_sec": true,
+    "rename_convergence_p95_le_1_sec": true,
+    "move_convergence_p95_le_1_sec": true,
+    "restart_catchup_le_5_sec": true,
+    "crash_recovery": true,
+    "100k_real_files_e2e_correctness": true,
+    "content_engine_boundary_without_filename_rewrite": true
+  },
+  "reports": [
+    {
+      "path": "reports/filename-product-acceptance-final.json",
+      "sha256": "4fb58da5a92331649bf72243bf5be0aaa32fe87cf16ecbbcb662758e26f014c2"
+    },
+    {
+      "path": "reports/filename-e2e-product.json",
+      "sha256": "9f4da845befde712478b8accefca52fd05171ba0d1a770ba588a35c8773ff0e0"
+    },
+    {
+      "path": "reports/filename-gui-startup-100k.json",
+      "sha256": "b86a3fc9a7b297878cc1b92f54d26bdee50719181bf86b07925b17043dd3ee4d"
+    },
+    {
+      "path": "reports/filename-idle-10m.json",
+      "sha256": "57da049f146729a86150f5ea68739272b4e4c81657f4e8d7d109e90294800ecb"
+    },
+    {
+      "path": "bench/BAKEOFF_RESULT.json",
+      "sha256": "84ac860d7252b4e322f93480c95bc908258348127e05936af7a2e957e7b88974"
+    },
+    {
+      "path": "bench/CALIBRATION_RESULT.json",
+      "sha256": "9c34eaea2c32daaf1ad1c7fd85081d2b726c3a931fe933fe1e9192afd8c0b854"
+    },
+    {
+      "path": "experiment/EXPERIMENT_LOCK.json",
+      "sha256": "e17171bfceb236d0a26562e0139988629dd1960106d1f6af054e22e9c877f52e"
+    },
+    {
+      "path": "experiment/corpus_manifest.json",
+      "sha256": "ad8c7abcd08916a39e588781e5bd478b1a834a75fa47ce59111d7f4a30398bd7"
+    },
+    {
+      "path": "experiment/queries.v1.json",
+      "sha256": "c49032724de077c27334d70d984d8daea39bcaaa323b79162edbd1f0beb208dc"
+    }
+  ]
+}

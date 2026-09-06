@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-filename-e2e-8c343febc7254516b782485f47d01b2d",
+  "store": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-filename-e2e-8c343febc7254516b782485f47d01b2d\\.personalrag-store\\index.routec",
+  "requested_seconds": 600,
+  "started_utc": "2026-09-06T00:16:13.6151566Z",
+  "initialization_settle_seconds": 1.0147231,
+  "actual_seconds": 600.0080584,
+  "cpu_percent": 0,
+  "store_unchanged": true,
+  "private_bytes": 542986240,
+  "entries": 104008,
+  "pass": true,
+  "finished_utc": "2026-09-06T00:26:26.0158063Z"
+}
