@@ -155,11 +155,17 @@ function Invoke-FormalMode([string]$Mode, [string[]]$ModeArguments, [string]$Rep
     $rawPath = Join-Path $logs ('raw-' + [System.IO.Path]::GetFileNameWithoutExtension($ReportName) + '.json')
     if ($ModeArguments.Count -lt 2) { throw "Formal mode $Mode requires root and store arguments." }
     $runnerArguments = @($formalDll, $Mode, $ModeArguments[0], $ModeArguments[1], $rawPath) + @($ModeArguments | Select-Object -Skip 2)
+    # Never let a failed child process leave a previous series' raw JSON looking like
+    # current evidence. Each mode must create a fresh payload for this invocation.
+    if (Test-Path -LiteralPath $rawPath) { Remove-Item -LiteralPath $rawPath -Force }
     $operation = Invoke-Captured -FilePath $dotnet -ArgumentList $runnerArguments -Name ('formal-' + $Mode) -WorkingDirectory $worktree
-    if (-not (Test-Path -LiteralPath $rawPath)) {
+    if ($operation.exit_code -ne 0 -or -not (Test-Path -LiteralPath $rawPath)) {
         throw "Formal runner did not write $rawPath (exit $($operation.exit_code))."
     }
     $value = Get-Content -LiteralPath $rawPath -Raw | ConvertFrom-Json
+    if ([string]$value.source_commit -ne $sourceSha) {
+        throw "Formal runner source mismatch for $Mode: expected $sourceSha, got $($value.source_commit)."
+    }
     Add-CommonReportFields $value $reportPath $operation $guiExe $corpusManifest | Out-Null
     return [pscustomobject]@{ Value = $value; Path = $reportPath; Operation = $operation }
 }
