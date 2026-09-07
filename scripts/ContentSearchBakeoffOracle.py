@@ -23,9 +23,9 @@ def decode(path: Path) -> str | None:
     if data.startswith(b"\xef\xbb\xbf"):
         return data.decode("utf-8-sig")
     if data.startswith(b"\xff\xfe"):
-        return data.decode("utf-16-le")
+        return data[2:].decode("utf-16-le")
     if data.startswith(b"\xfe\xff"):
-        return data.decode("utf-16-be")
+        return data[2:].decode("utf-16-be")
     if b"\x00" in data[:4096] and data[:4096].count(b"\x00") > max(1, len(data[:4096]) // 32):
         return None
     try:
