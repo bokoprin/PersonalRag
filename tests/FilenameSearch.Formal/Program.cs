@@ -976,6 +976,10 @@ static async Task<object> RunIdleAsync(string root, string store, int seconds)
     await using var catalog = FileSystemCatalog.Open(root, store);
     await catalog.Ready.ConfigureAwait(false);
     await catalog.WaitForIdleAsync(TimeSpan.FromMinutes(30)).ConfigureAwait(false);
+    // Measure the idle footprint after the persisted-load/path-index work has settled.
+    // This is outside the ten-minute idle interval and does not alter the no-write,
+    // generation, or CPU invariants being measured below.
+    StabilizeMemory();
     using Process process = Process.GetCurrentProcess();
     TimeSpan cpuBefore = process.TotalProcessorTime;
     long privateBefore = process.PrivateMemorySize64;
