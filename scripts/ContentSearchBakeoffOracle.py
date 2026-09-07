@@ -245,6 +245,15 @@ def scan(root: Path, queries: list[dict], generated: bool = False) -> dict:
         except (FileNotFoundError, RuntimeError):
             files = sorted((str(p.resolve()) for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED), key=str)
 
+    if generated:
+        partial = scan_directory((files, queries))
+        for key, values in partial.items():
+            results[key].update(values)
+        return {
+            key: [{"path": p, "offset": o, "length": l} for p, o, l in sorted(values)]
+            for key, values in results.items()
+        }
+
     # One process handles a group of candidate files.  This avoids 500k
     # individually pickled tasks while retaining deterministic result ordering.
     workers = max(1, min(8, multiprocessing.cpu_count() or 1))
