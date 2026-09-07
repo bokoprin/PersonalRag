@@ -164,7 +164,7 @@ function Invoke-FormalMode([string]$Mode, [string[]]$ModeArguments, [string]$Rep
     }
     $value = Get-Content -LiteralPath $rawPath -Raw | ConvertFrom-Json
     if ([string]$value.source_commit -ne $sourceSha) {
-        throw "Formal runner source mismatch for $Mode: expected $sourceSha, got $($value.source_commit)."
+        throw "Formal runner source mismatch for ${Mode}: expected $sourceSha, got $($value.source_commit)."
     }
     Add-CommonReportFields $value $reportPath $operation $guiExe $corpusManifest | Out-Null
     return [pscustomobject]@{ Value = $value; Path = $reportPath; Operation = $operation }
