@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "scope": "content-search-bakeoff",
+  "semantics": {
+    "substring": "ordinal substring; case-insensitive uses Unicode full casefold with NFC search normalization",
+    "regex": "CultureInvariant NonBacktracking equivalent fixed query semantics",
+    "encodings": ["utf8", "utf8-bom", "utf16-le", "utf16-be", "cp932"],
+    "binary": "unsupported binary entries are skipped without stopping the catalog",
+    "blocks": { "blockSizeChars": 65536, "overlapChars": 256 }
+  },
+  "thresholds": {
+    "fp": 0,
+    "fn": 0,
+    "cancelP95Ms": 100,
+    "rareFullP95Ms": 50,
+    "generalFullP95Ms": 100,
+    "firstUsefulP95Ms": 100,
+    "additionalReadyRamBytes": 536870912,
+    "updateFullRebuildCount": 0
+  },
+  "corpus": {
+    "sourceConfigFilesMin": 500000,
+    "sourceConfigBytesMin": 5368709120,
+    "logFilesMin": 20000,
+    "logBytesMin": 21474836480,
+    "hugeFilesMin": 20,
+    "hugeBytesMin": 10737418240,
+    "actualFilesystem": true,
+    "logical100GiBRequirement": false,
+    "seed": 123456
+  },
+  "benchmark": {
+    "rounds": 20,
+    "warmupRounds": 2,
+    "measuredRounds": 18,
+    "queryShuffleSeed": 123456
+  },
+  "updates": {
+    "modifyCounts": [1, 100, 1000],
+    "singleFileWriteAmplificationUpdates": 100,
+    "rename": true,
+    "move": true,
+    "delete": true
+  },
+  "requiredQueryClasses": [
+    "rare_ascii", "common_ascii", "zero_hit", "japanese", "unicode_casefold",
+    "hex_id", "guid_like", "path_like", "three_char", "two_char", "one_char",
+    "regex_fixed_literal", "regex_no_literal", "deep_position", "case_sensitive",
+    "encoding_utf16", "encoding_cp932"
+  ],
+  "churn": { "create": 10000, "modify": 10000, "rename": 10000, "move": 10000, "delete": 10000, "durationMinutes": 30, "stormEvents": 100000 },
+  "gui": { "freshProcesses": 10, "warmRounds": 20, "warmupRounds": 2, "measuredRounds": 18, "liveRefreshMs": 1000 },
+  "completion": { "allowedNotRun": ["NOT_RUN_NO_SECOND_FIXED_VOLUME"], "evaluationCompleteRequiresNoOtherExceptions": true }
+}

@@ -6,9 +6,16 @@ using PersonalRag.ContentSearch.Backends.Bloom;
 using PersonalRag.ContentSearch.Backends.Scan;
 using PersonalRag.ContentSearch.Backends.Sqlite;
 using PersonalRag.ContentSearch.Backends.Trigram;
+using PersonalRag.ContentSearch.Bakeoff;
 using PersonalRag.ContentSearch.Core;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+if (FormalRunner.IsFormal(args))
+{
+    await FormalRunner.RunAsync(args);
+    return;
+}
 
 Arguments parsed = Arguments.Parse(args);
 string root = parsed.Root ?? Path.Combine(Path.GetTempPath(), "PersonalRag-ContentBakeoff-Smoke");

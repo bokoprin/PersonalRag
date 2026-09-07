@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "eligibility": { "fp": 0, "fn": 0, "majorRuntimeFailure": false },
+  "weights": {
+    "searchLatency": 0.25,
+    "readyMemory": 0.20,
+    "persistentBytes": 0.15,
+    "update": 0.15,
+    "build": 0.10,
+    "complexity": 0.10,
+    "robustness": 0.05
+  },
+  "searchMetric": "geometric mean full-result p95 across corpora and query classes",
+  "readyMetric": "maximum ready private bytes",
+  "persistentMetric": "geometric mean persistent bytes/source bytes",
+  "updateMetric": "convergence plus write bytes",
+  "classification": ["WINNER", "SECONDARY", "REJECTED"]
+}

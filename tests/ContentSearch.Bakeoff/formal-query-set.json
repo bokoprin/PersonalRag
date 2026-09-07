@@ -1,0 +1,19 @@
+[
+  { "id": "rare_ascii", "class": "rare_ascii", "text": "CONTENT_RARE_KAPPA_9901", "mode": "Substring", "caseSensitive": false },
+  { "id": "common_ascii", "class": "common_ascii", "text": "CONTENT_COMMON_KAPPA", "mode": "Substring", "caseSensitive": false },
+  { "id": "zero_hit", "class": "zero_hit", "text": "CONTENT_ZERO_NO_MATCH_2026", "mode": "Substring", "caseSensitive": false },
+  { "id": "japanese", "class": "japanese", "text": "障害復旧", "mode": "Substring", "caseSensitive": false },
+  { "id": "unicode_casefold", "class": "unicode_casefold", "text": "Straße", "mode": "Substring", "caseSensitive": false },
+  { "id": "hex_id", "class": "hex_id", "text": "0xA1B2C3D4", "mode": "Substring", "caseSensitive": false },
+  { "id": "guid_like", "class": "guid_like", "text": "8f14e45f-ea12-4d7b-9c31-0a1b2c3d4e5f", "mode": "Substring", "caseSensitive": false },
+  { "id": "path_like", "class": "path_like", "text": "C:\\data\\source\\config", "mode": "Substring", "caseSensitive": false },
+  { "id": "three_char", "class": "three_char", "text": "Q3A", "mode": "Substring", "caseSensitive": false },
+  { "id": "two_char", "class": "two_char", "text": "ZZ", "mode": "Substring", "caseSensitive": false },
+  { "id": "one_char", "class": "one_char", "text": "¤", "mode": "Substring", "caseSensitive": false },
+  { "id": "regex_fixed", "class": "regex_fixed_literal", "text": "CONTENT_(RARE|COMMON)_KAPPA", "mode": "Regex", "caseSensitive": false },
+  { "id": "regex_no_literal", "class": "regex_no_literal", "text": "[Ω]{2,}", "mode": "Regex", "caseSensitive": false },
+  { "id": "deep_position", "class": "deep_position", "text": "CONTENT_DEEP_END", "mode": "Substring", "caseSensitive": false },
+  { "id": "case_sensitive", "class": "case_sensitive", "text": "CONTENT_CASE_SENSITIVE", "mode": "Substring", "caseSensitive": true },
+  { "id": "utf16_fixture", "class": "encoding_utf16", "text": "CONTENT_UTF16", "mode": "Substring", "caseSensitive": false },
+  { "id": "cp932_fixture", "class": "encoding_cp932", "text": "旧字障害", "mode": "Substring", "caseSensitive": false }
+]

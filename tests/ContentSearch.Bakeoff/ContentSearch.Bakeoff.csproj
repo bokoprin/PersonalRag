@@ -17,5 +17,7 @@
     <None Include="query-set.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="oracle-v1.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="benchmark-settings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="formal-query-set.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="acceptance-rules.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
