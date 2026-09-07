@@ -109,7 +109,7 @@ public static class ContentExactVerifier
             searchFrom = foldedIndex + Math.Max(1, foldedQuery.Length);
         }
 
-        return Deduplicate(matches);
+        return Observe(Deduplicate(matches));
     }
 
     private static IReadOnlyList<ContentMatch> VerifyRegex(
@@ -131,7 +131,7 @@ public static class ContentExactVerifier
             if (!match.Success) continue;
             matches.Add(CreateMatch(block, text, match.Index, Math.Max(1, match.Length), backendId, usedScanFallback));
         }
-        return Deduplicate(matches);
+        return Observe(Deduplicate(matches));
     }
 
     private static IReadOnlyList<ContentMatch> FindOrdinal(
@@ -150,7 +150,7 @@ public static class ContentExactVerifier
             matches.Add(CreateMatch(block, text, index, Math.Max(1, query.Length), backendId, usedScanFallback));
             searchFrom = index + Math.Max(1, query.Length);
         }
-        return Deduplicate(matches);
+        return Observe(Deduplicate(matches));
     }
 
     private static ContentMatch CreateMatch(
@@ -197,6 +197,16 @@ public static class ContentExactVerifier
             .GroupBy(m => (m.FileKey, m.DecodedCharOffset, m.MatchLength))
             .Select(g => g.First())
             .ToArray();
+
+    private static IReadOnlyList<ContentMatch> Observe(IReadOnlyList<ContentMatch> matches)
+    {
+        foreach (var match in matches)
+        {
+            ContentSearchObservation.Report(match);
+        }
+
+        return matches;
+    }
 
     private static FoldedText FoldWithMap(string value)
     {

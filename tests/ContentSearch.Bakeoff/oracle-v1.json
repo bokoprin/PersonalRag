@@ -5,8 +5,8 @@
     "Substring|case=False|error": 2,
     "Substring|case=False|0xA1B2C3D4": 1,
     "Substring|case=False|障害": 1,
-    "Substring|case=False|SS": 4,
-    "Substring|case=True|x": 2,
+    "Substring|case=False|SS": 5,
+    "Substring|case=True|x": 4,
     "Regex|case=False|Generation(Store|Index)": 3,
     "Substring|case=False|definitely-no-hit-7f19d2": 0
   }
