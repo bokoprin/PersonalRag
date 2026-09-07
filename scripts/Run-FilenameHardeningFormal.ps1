@@ -78,6 +78,33 @@ function Get-CanonicalJsonHash([object]$Value) {
     finally { $sha.Dispose() }
 }
 
+function Reset-TaskOwnedPath([string]$Path) {
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $dataPrefix = $data.TrimEnd('\') + '\'
+    if (-not $full.StartsWith($dataPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove path outside formal DataRoot: $full"
+    }
+    if (Test-Path -LiteralPath $full) {
+        Remove-Item -LiteralPath $full -Recurse -Force
+    }
+}
+
+function Archive-TaskStore([string]$ManifestPath, [string]$Tag) {
+    $full = [System.IO.Path]::GetFullPath($ManifestPath)
+    $dataPrefix = $data.TrimEnd('\') + '\'
+    if (-not $full.StartsWith($dataPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to archive store outside formal DataRoot: $full"
+    }
+    $suffix = ".invalidated-$Tag"
+    $dataPath = $full + '.data'
+    $manifestArchive = $full + $suffix
+    $dataArchive = $dataPath + $suffix
+    if (Test-Path -LiteralPath $manifestArchive) { Remove-Item -LiteralPath $manifestArchive -Recurse -Force }
+    if (Test-Path -LiteralPath $dataArchive) { Remove-Item -LiteralPath $dataArchive -Recurse -Force }
+    if (Test-Path -LiteralPath $full) { Move-Item -LiteralPath $full -Destination $manifestArchive -Force }
+    if (Test-Path -LiteralPath $dataPath) { Move-Item -LiteralPath $dataPath -Destination $dataArchive -Force }
+}
+
 function Get-Percentile([double[]]$Values, [double]$P) {
     if ($Values.Count -eq 0) { return 0.0 }
     $sorted = @($Values | Sort-Object)
@@ -235,6 +262,7 @@ $gate.Add((Invoke-Captured -FilePath $dotnet -ArgumentList @($testDll) -Name 'fi
 $gate.Add((Invoke-Captured -FilePath $dotnet -ArgumentList @($guiTestDll) -Name 'filename-gui-tests' -WorkingDirectory $worktree))
 
 $suppRoot = Join-Path $data 'supplemental-e2e-root'
+Reset-TaskOwnedPath $suppRoot
 $suppReport = Join-Path $logs 'supplemental-e2e.json'
 $gate.Add((Invoke-Captured -FilePath $dotnet -ArgumentList @('run','--project','tests\FilenameSearch.E2E','-c','Release','--no-build','--',$suppRoot,$suppReport,'100000','--keep') -Name 'supplemental-e2e' -WorkingDirectory $worktree))
 $suppIdleReport = Join-Path $logs 'supplemental-idle.json'
@@ -313,6 +341,7 @@ $environmentValue = Get-Content -LiteralPath $environmentRaw -Raw | ConvertFrom-
 $environmentPath = Join-Path $reports 'ENVIRONMENT.json'
 Add-CommonReportFields $environmentValue $environmentPath $environmentOp $guiExe $corpusManifest | Out-Null
 
+Archive-TaskStore $store $lock.series_id
 $core = Invoke-FormalMode 'core' @($corpusRoot,$store,$Count,'123456') 'CORE_1M.json'
 $sustained = Invoke-FormalMode 'sustained' @($corpusRoot,$store,'10000') 'SUSTAINED_SEARCH_1M.json'
 $post = Invoke-FormalMode 'post-update' @($corpusRoot,$store) 'POST_UPDATE_1M.json'
@@ -322,9 +351,15 @@ $restart = Invoke-FormalMode 'restart' @($corpusRoot,$store) 'RESTART_MODIFY.jso
 
 $directoryRoot = Join-Path $data 'directory-root'
 $directoryStore = Join-Path $data 'stores\directory.manifest'
+Reset-TaskOwnedPath $directoryRoot
+Archive-TaskStore $directoryStore $lock.series_id
 $directory = Invoke-FormalMode 'directory' @($directoryRoot,$directoryStore) 'DIRECTORY_TREE.json'
 $persistenceRoot = Join-Path $data 'persistence-root'
 $persistenceStore = Join-Path $data 'stores\persistence.manifest'
+Reset-TaskOwnedPath $persistenceRoot
+Archive-TaskStore $persistenceStore $lock.series_id
+Get-ChildItem -LiteralPath (Join-Path $data 'stores') -Filter 'persistence-*.manifest*' -Force -ErrorAction SilentlyContinue | ForEach-Object { Reset-TaskOwnedPath $_.FullName }
+Get-ChildItem -LiteralPath (Join-Path $data 'stores') -Filter 'persistence-*.manifest.data*' -Force -ErrorAction SilentlyContinue | ForEach-Object { Reset-TaskOwnedPath $_.FullName }
 $persistence = Invoke-FormalMode 'persistence' @($persistenceRoot,$persistenceStore) 'PERSISTENCE_INTEGRITY.json'
 $multiRaw = Join-Path $logs 'multi-raw.json'
 $multiStoreRoot = Join-Path $data 'stores\multi-volumes'
@@ -334,6 +369,8 @@ $multiPath = Join-Path $reports 'MULTI_VOLUME.json'
 Add-CommonReportFields $multiValue $multiPath $multiOp $guiExe $corpusManifest | Out-Null
 $inaccessibleRoot = Join-Path $data 'inaccessible-root'
 $inaccessibleStore = Join-Path $data 'stores\inaccessible.manifest'
+Reset-TaskOwnedPath $inaccessibleRoot
+Archive-TaskStore $inaccessibleStore $lock.series_id
 $inaccessible = Invoke-FormalMode 'inaccessible' @($inaccessibleRoot,$inaccessibleStore) 'INACCESSIBLE.json'
 
 $guiSamples = [System.Collections.Generic.List[object]]::new()
