@@ -64,6 +64,8 @@ public partial class MainWindow : Window
         {
             SetStatus("ファイルシステムを読み込み中");
             catalog = await catalogOpenTask.ConfigureAwait(true);
+            if (catalog is FileSystemCatalog startupCatalog)
+                startupCatalog.DeferBasePathIndexBuild();
 
             catalog.Changed += CatalogChanged;
             await catalog.Ready.ConfigureAwait(true);
@@ -71,10 +73,14 @@ public partial class MainWindow : Window
             if (startupProbeQuery is not null) FileQuery.Text = startupProbeQuery;
             ready = true;
             await SearchAsync();
+            if (catalog is FileSystemCatalog settledCatalog)
+                settledCatalog.StartBasePathIndexBuild();
             FileQuery.Focus();
         }
         catch (Exception ex)
         {
+            if (catalog is FileSystemCatalog failedCatalog)
+                failedCatalog.StartBasePathIndexBuild();
             SetStatus("開始エラー: " + ex.Message);
             Summary.Text = "検索を開始できませんでした。";
             WriteStartupProbeOnce(error: ex.ToString());

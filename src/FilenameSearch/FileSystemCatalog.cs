@@ -40,6 +40,9 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private int[] basePathIds = [];
     private readonly Dictionary<int, FilenameRecord> mutableRecords = [];
     private Task basePathIndexReady = Task.CompletedTask;
+    private TaskCompletionSource? basePathIndexCompletion;
+    private int basePathIndexStarted = 1;
+    private int deferBasePathIndex;
     private int recordCount;
     private FilenameSearchEngine engine;
     private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, reconcileQueued, compactionRunning, directoryReconcileScheduled;
@@ -162,8 +165,14 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     {
         ThrowIfDisposed();
         engineGate.EnterReadLock();
-        try { return engine.Search(request); }
+        FilenameSearchResult result;
+        try { result = engine.Search(request); }
         finally { engineGate.ExitReadLock(); }
+        // Immediate searches by non-GUI consumers release the update worker's idle
+        // barrier.  The GUI can defer this one-time task until after its first useful
+        // result so cold WPF startup is not contending with path-index construction.
+        if (Volatile.Read(ref deferBasePathIndex) == 0) StartBasePathIndexBuild();
+        return result;
     }
 
     public Task ReconcileAsync(CancellationToken cancellationToken = default)
@@ -175,6 +184,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
 
     public async Task WaitForIdleAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
+        StartBasePathIndexBuild();
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
         while (true)
@@ -1121,17 +1131,38 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             nextId = Math.Max(nextId, engine.MaxFileId == int.MaxValue ? int.MaxValue : engine.MaxFileId + 1);
             recordCount = count;
         }
-        basePathIndexReady = Task.Factory.StartNew(
+        basePathIndexCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        basePathIndexReady = basePathIndexCompletion.Task;
+        Volatile.Write(ref basePathIndexStarted, 0);
+        Volatile.Write(ref deferBasePathIndex, 0);
+    }
+
+    internal void DeferBasePathIndexBuild() => Volatile.Write(ref deferBasePathIndex, 1);
+
+    internal void StartBasePathIndexBuild()
+    {
+        Volatile.Write(ref deferBasePathIndex, 0);
+        TaskCompletionSource? completion = basePathIndexCompletion;
+        if (completion is null || Interlocked.Exchange(ref basePathIndexStarted, 1) != 0) return;
+        _ = Task.Factory.StartNew(
             static state =>
             {
-                // Keep the one-time million-entry hash copy from taking CPU priority
-                // over the GUI's first useful search on a cold process.  The index is
-                // still built immediately and remains part of the same idle barrier.
-                try { Thread.CurrentThread.Priority = ThreadPriority.BelowNormal; }
-                catch (PlatformNotSupportedException) { }
-                ((FileSystemCatalog)state!).BuildLoadedBasePathIndex();
+                var tuple = ((FileSystemCatalog Catalog, TaskCompletionSource Completion))state!;
+                try
+                {
+                    // Keep the one-time million-entry hash copy from taking CPU priority
+                    // over a consumer's active search while preserving the idle barrier.
+                    try { Thread.CurrentThread.Priority = ThreadPriority.BelowNormal; }
+                    catch (PlatformNotSupportedException) { }
+                    tuple.Catalog.BuildLoadedBasePathIndex();
+                    tuple.Completion.TrySetResult();
+                }
+                catch (Exception ex)
+                {
+                    tuple.Completion.TrySetException(ex);
+                }
             },
-            this,
+            (this, completion),
             CancellationToken.None,
             TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
             TaskScheduler.Default);
@@ -1338,6 +1369,9 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     public async ValueTask DisposeAsync()
     {
         if (disposed) return; disposed = true;
+        // A caller may dispose immediately after Ready without ever searching or waiting
+        // for idle.  Complete the deferred path-index barrier before joining the worker.
+        StartBasePathIndexBuild();
         try { changeFeed.Stop(); } catch { } changeFeed.Dispose();
         stop.Cancel(); events.Writer.TryComplete();
         try { await worker.ConfigureAwait(false); } catch (OperationCanceledException) { }
