@@ -66,15 +66,15 @@ public sealed record ContentChange(
 
 public sealed class ContentBackendDiagnostics
 {
-    public long SearchCount { get; internal set; }
-    public long BytesRead { get; internal set; }
-    public long CandidateBlocks { get; internal set; }
-    public long VerifiedBlocks { get; internal set; }
-    public long ScanFallbackCount { get; internal set; }
-    public long IndexedBlocks { get; internal set; }
-    public long ActiveBlocks { get; internal set; }
-    public long PersistentBytes { get; internal set; }
-    public long UpdateCount { get; internal set; }
+    public long SearchCount { get; set; }
+    public long BytesRead { get; set; }
+    public long CandidateBlocks { get; set; }
+    public long VerifiedBlocks { get; set; }
+    public long ScanFallbackCount { get; set; }
+    public long IndexedBlocks { get; set; }
+    public long ActiveBlocks { get; set; }
+    public long PersistentBytes { get; set; }
+    public long UpdateCount { get; set; }
 
     public ContentBackendDiagnostics Snapshot() => new()
     {
