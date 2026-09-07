@@ -4,7 +4,7 @@
   "evaluation_complete": true,
   "pass": true,
   "measured_source_commit_sha": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
-  "report_head_sha": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
+  "report_head_sha": "45223b13603eebf31e1f435ec28d2f7cf2792ec8",
   "initial_remote_branch_sha": "930bc4d38276b0d371a3c3df7f36107d3c601172",
   "reports": {
     "REGRESSION": {
@@ -124220,7 +124220,7 @@
     "idlePrivateBytes": 1610612736
   },
   "source_commit_sha": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
-  "report_commit_sha": null,
+  "report_commit_sha": "45223b13603eebf31e1f435ec28d2f7cf2792ec8",
   "branch": "codex/filename-hardening",
   "ac_requirement_overridden": true,
   "os": "Microsoft Windows NT 10.0.26200.0",
@@ -124236,5 +124236,7 @@
       "Size": 1024203640320
     }
   ],
-  "report_path": "C:\\shinsuke\\app\\personalRag_astra\\reports\\filename-hardening\\FINAL_FILENAME_HARDENING.json"
+  "report_path": "C:\\shinsuke\\app\\personalRag_astra\\reports\\filename-hardening\\FINAL_FILENAME_HARDENING.json",
+  "report_payload_commit_sha": "45223b13603eebf31e1f435ec28d2f7cf2792ec8",
+  "report_commit_kind": "report-payload"
 }

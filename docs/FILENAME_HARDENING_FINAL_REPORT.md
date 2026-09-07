@@ -6,8 +6,8 @@
 - measured source commit: `27ee9072bf65e9411f48b4c41b7465f10c460d93`
 - formal series: `632feb127d27423e8119e68850379b7a`
 - initial remote branch SHA: `930bc4d38276b0d371a3c3df7f36107d3c601172`
-- report payload commit: **この報告を含むreport commitのSHAを確定後に追記**
-- report metadata finalization commit: **report pointer確定後に追記**
+- report payload commit: `45223b13603eebf31e1f435ec28d2f7cf2792ec8`
+- report metadata finalization commit: payload pointerを確定する後続commit（branch HEADで確認）
 - production scope: `PersonalRag.sln`、`src/FilenameSearch.Core`、`src/FilenameSearch.RouteC`、`src/FilenameSearch`、`src/FilenameSearch.Gui`
 - 旧Astra、Content Search、LLM、embedding、vector search、rerankingは対象外。
 
