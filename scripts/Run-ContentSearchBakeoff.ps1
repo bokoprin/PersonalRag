@@ -29,10 +29,10 @@ function Invoke-Captured {
 }
 
 if (-not $Formal) {
-    $rootArg = if ($Root) { $Root } else { Join-Path $env:TEMP "PersonalRag-ContentBakeoff-Smoke" }
-    $workArg = if ($Work) { $Work } else { Join-Path $env:TEMP "PersonalRag-ContentBakeoff-Work" }
-    $reportArg = if ($Report) { $Report } else { Join-Path $workArg "CONTENT_SEARCH_BAKEOFF_SMOKE.json" }
-    $argsList = @("run", "--project", $project, "-c", "Release", "--no-build", "--", "--root", $rootArg, "--work", $workArg, "--report", $reportArg, "--backend", $Backend)
+    $argsList = @("run", "--project", $project, "-c", "Release", "--no-build", "--", "--backend", $Backend)
+    if ($Root) { $argsList += @("--root", $Root) }
+    if ($Work) { $argsList += @("--work", $Work) }
+    if ($Report) { $argsList += @("--report", $Report) }
     & dotnet @argsList
     exit $LASTEXITCODE
 }
