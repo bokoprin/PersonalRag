@@ -13,6 +13,7 @@ internal sealed record FileSystemEvent(
 /// <summary>One-volume exact-metadata catalog with bounded change ingestion and durable generation deltas.</summary>
 public sealed class FileSystemCatalog : IFilenameCatalog
 {
+    private const long IdleEventQuietMilliseconds = 250;
     private readonly record struct ReadMetadata(
         string FullPath, string Name, ulong SizeBytes, DateTime ModifiedUtc, byte Flags, FileKey Key);
     private readonly record struct DiscoveredEntry(
@@ -216,7 +217,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             cts.Token.ThrowIfCancellationRequested();
             if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 &&
                 Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0 &&
-                Volatile.Read(ref updateInProgress) == 0)
+                Volatile.Read(ref updateInProgress) == 0 &&
+                Environment.TickCount64 - Volatile.Read(ref lastEventTick) >= IdleEventQuietMilliseconds)
             {
                 // Existing stores publish Ready before the asynchronous compact path index
                 // is available.  A caller that starts querying immediately after Ready
@@ -226,7 +228,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 await basePathIndexReady.WaitAsync(cts.Token).ConfigureAwait(false);
                 if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 &&
                     Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0 &&
-                    Volatile.Read(ref updateInProgress) == 0)
+                    Volatile.Read(ref updateInProgress) == 0 &&
+                    Environment.TickCount64 - Volatile.Read(ref lastEventTick) >= IdleEventQuietMilliseconds)
                     return;
             }
             await Task.Delay(20, cts.Token).ConfigureAwait(false);
