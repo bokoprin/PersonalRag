@@ -89,7 +89,7 @@ $environment = [ordered]@{
     sdk = (& dotnet --version).Trim()
     runtime = (& dotnet --list-runtimes | Out-String).Trim()
     dataRoot = $formalRoot
-    freeBytesAtMeasurement = (Get-PSDrive -Name ([IO.Path]::GetPathRoot($formalRoot).TrimEnd('\'))).Free
+    freeBytesAtMeasurement = (Get-PSDrive -Name ([IO.Path]::GetPathRoot($formalRoot).Substring(0, 1))).Free
     acLineStatus = $acLineStatus
     batteryStatus = @($battery | ForEach-Object { [ordered]@{ status = $_.BatteryStatus; estimatedCharge = $_.EstimatedChargeRemaining } })
     powerScheme = $powerScheme
