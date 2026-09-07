@@ -268,10 +268,11 @@ public sealed class FilenameSearchEngine : IFilenameSearch
                 AddBaseCandidates(route.Records);
             }
 
-            IReadOnlyList<FilenameRecord> deltaMatches = deltaIndex.Search(
-                request,
-                delta.Where(pair => pair.Value is not null)
-                    .ToDictionary(pair => pair.Key, pair => pair.Value!));
+            // Search the live overlay in place.  Rebuilding a filtered dictionary for
+            // every query adds avoidable allocations after even one update and can turn
+            // the fixed measured rounds into a GC-tail sample; DeltaIndex already skips
+            // tombstones while verifying the same exact semantics.
+            IReadOnlyList<FilenameRecord> deltaMatches = deltaIndex.Search(request, delta);
             foreach (FilenameRecord hit in deltaMatches) merged[hit.FileId] = hit;
 
             FilenameRecord[] ordered = merged.Values.OrderBy(r => r.FileId).ToArray();
@@ -978,7 +979,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
 
         public IReadOnlyList<FilenameRecord> Search(
             SearchRequest request,
-            IReadOnlyDictionary<int, FilenameRecord> live)
+            IReadOnlyDictionary<int, FilenameRecord?> live)
         {
             if (live.Count == 0)
             {
@@ -1024,7 +1025,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             var result = new List<FilenameRecord>();
             foreach (int id in idsToCheck)
             {
-                if (!live.TryGetValue(id, out FilenameRecord? record)) continue;
+                if (!live.TryGetValue(id, out FilenameRecord? record) || record is null) continue;
                 if (Matches(record, request)) result.Add(record);
             }
             return result;
