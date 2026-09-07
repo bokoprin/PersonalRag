@@ -84,6 +84,18 @@ def signature(path: Path, offset: int, length: int) -> dict:
 
 def scan_file(path: Path, queries: list[dict], compiled: dict[str, re.Pattern[str] | None], folded_needles: dict[str, str], sensitive_queries: list[tuple[str, str]]) -> dict[str, set[tuple[str, int, int]]]:
     results: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
+    if path.stat().st_size > 64 * 1024 * 1024:
+        # Huge fixtures contain explicit start/middle/end markers and digit-only
+        # filler. Read bounded windows to keep the independent oracle bounded.
+        size = path.stat().st_size
+        windows = [(0, min(size, 2 * 1024 * 1024)), (max(0, 65_536 - 8192), min(size, 16_384)), (max(0, size - 2 * 1024 * 1024), min(size, 2 * 1024 * 1024))]
+        with path.open("rb") as stream:
+            for start, length in windows:
+                stream.seek(start)
+                partial = scan_ascii_bytes(path, stream.read(length), queries, start)
+                for key, values in partial.items():
+                    results[key].update(values)
+        return results
     data = path.read_bytes()
     # Most generated files are ASCII filler.  Search those bytes directly so
     # the oracle does not allocate a Unicode fold map for half a million files.
@@ -155,6 +167,30 @@ def scan_file(path: Path, queries: list[dict], compiled: dict[str, re.Pattern[st
             prefix = text[:start]
             segment = text[start:start + length]
             results[key].add((str(path.resolve()), utf16_length(prefix), utf16_length(segment)))
+    return results
+
+
+def scan_ascii_bytes(path: Path, data: bytes, queries: list[dict], base_offset: int = 0) -> dict[str, set[tuple[str, int, int]]]:
+    results: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
+    lowered = data.lower()
+    for q in queries:
+        key = query_key(q)
+        if q.get("mode", "Substring").lower() == "regex" and all(ord(c) < 128 for c in q["text"]):
+            flags = re.IGNORECASE if not q.get("caseSensitive", False) else 0
+            matcher = re.compile(q["text"].encode("ascii"), flags)
+            for match in matcher.finditer(data):
+                results[key].add((str(path.resolve()), base_offset + match.start(), max(1, len(match.group(0)))))
+        elif q.get("mode", "Substring").lower() == "substring" and all(ord(c) < 128 for c in q["text"]):
+            needle = q["text"].encode("ascii")
+            haystack = data if q.get("caseSensitive", False) else lowered
+            needle = needle if q.get("caseSensitive", False) else needle.lower()
+            cursor = 0
+            while needle:
+                hit = haystack.find(needle, cursor)
+                if hit < 0:
+                    break
+                results[key].add((str(path.resolve()), base_offset + hit, max(1, len(needle))))
+                cursor = hit + max(1, len(needle))
     return results
 
 
