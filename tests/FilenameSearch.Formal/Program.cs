@@ -1038,7 +1038,10 @@ static CorpusInfo GenerateCorpus(string root, int count, int seed)
     {
         try
         {
-            CorpusInfo? existing = JsonSerializer.Deserialize<CorpusInfo>(File.ReadAllText(marker));
+            // The marker is written with the canonical web/camel-case options below.
+            // Reuse the same options here so a valid 1M corpus is not needlessly deleted
+            // and regenerated before every formal series.
+            CorpusInfo? existing = JsonSerializer.Deserialize<CorpusInfo>(File.ReadAllText(marker), JsonConfig.Options);
             if (existing is not null && existing.Version >= CorpusMarkerVersion && existing.Count >= count &&
                 existing.LogicalBytes >= checked((long)count * LogicalBytesPerFile) && Directory.Exists(root)) return existing;
         }
