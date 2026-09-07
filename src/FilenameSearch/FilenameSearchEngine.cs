@@ -691,7 +691,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
                 throw new InvalidDataException("Filename metadata string length encoding invalid");
             }
 
-            // PRFMETA5 is the production format and has a fixed-width record section.  
+            // PRFMETA5 is the production format and has a fixed-width record section.
             // Decode it from one sequential byte buffer instead of issuing roughly ten
             // million BinaryReader calls and growing two intermediate blob buffers.  The
             // loaded table keeps one backing array for both exact UTF-8 blobs; offsets are
