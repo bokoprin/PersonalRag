@@ -1122,7 +1122,16 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             recordCount = count;
         }
         basePathIndexReady = Task.Factory.StartNew(
-            BuildLoadedBasePathIndex,
+            static state =>
+            {
+                // Keep the one-time million-entry hash copy from taking CPU priority
+                // over the GUI's first useful search on a cold process.  The index is
+                // still built immediately and remains part of the same idle barrier.
+                try { Thread.CurrentThread.Priority = ThreadPriority.BelowNormal; }
+                catch (PlatformNotSupportedException) { }
+                ((FileSystemCatalog)state!).BuildLoadedBasePathIndex();
+            },
+            this,
             CancellationToken.None,
             TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
             TaskScheduler.Default);
