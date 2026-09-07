@@ -214,7 +214,9 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             // common query path); if false positives consume that prefix, retry the complete
             // candidate set below so Limit never introduces a false negative.
             int routeLimit = request.Limit > 0
-                ? Math.Clamp(checked(request.Limit * 4), request.Limit, 4_096)
+                ? request.Limit > 4_096
+                    ? request.Limit
+                    : Math.Min(checked(request.Limit * 4), 4_096)
                 : 0;
             CoreQuery routeQuery = new(
                 broadQuery,
