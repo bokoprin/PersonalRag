@@ -576,7 +576,11 @@ public sealed class FilenameSearchEngine : IFilenameSearch
 
         public static ExactTable Load(string path, out int count)
         {
-            using var stream = File.OpenRead(path);
+            // Metadata is a fixed-width sequential file during restart. Use a large
+            // sequential buffer so BinaryReader does not turn the million-entry header
+            // pass into a stream of small random reads on a cold NVMe cache.
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.Read | FileShare.Delete, 1 << 20, FileOptions.SequentialScan);
             using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
             string magic = reader.ReadString();
             if (magic == "PRFMETA5") return LoadCompact(reader, stream, out count);
