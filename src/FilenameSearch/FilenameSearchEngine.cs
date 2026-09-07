@@ -131,6 +131,11 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         next.Build(ids, normalizedNames, normalizedPaths);
         normalizedNames = null!;
         normalizedPaths = null!;
+        // Release the million-entry normalization arrays before ExactTable allocates its
+        // durable UTF-8 columns.  Without a collection at this boundary, the arrays and
+        // their normalized strings remain committed through the subsequent base-table
+        // allocation and inflate the steady Ready private-bytes sample.
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
         lock (gate)
         {
             ThrowIfDisposed();

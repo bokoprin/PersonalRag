@@ -54,10 +54,10 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private bool started;
     private volatile bool disposed;
 
-    // Native FileKey collection is handle-bound I/O. Keep enough concurrent handles to
-    // saturate the local NVMe during a million-entry build while capping the fan-out so
-    // the formal runner remains stable on machines with many logical processors.
-    private static int MetadataParallelism => Math.Clamp(Environment.ProcessorCount * 2, 4, 64);
+    // Native FileKey collection is handle-bound I/O. Match the machine's logical CPU
+    // count rather than doubling it: this keeps the million-entry build parallel while
+    // bounding concurrent FileInfo/handle allocations and their private-memory peak.
+    private static int MetadataParallelism => Math.Clamp(Environment.ProcessorCount, 4, 32);
 
     private FileSystemCatalog(string root, string store, string rootIdentity, string volumeId,
         GenerationStore persistence, FilenameSearchEngine engine, IEnumerable<string>? excludedRoots)
