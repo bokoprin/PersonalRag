@@ -479,11 +479,14 @@ static async Task<object> RunPostUpdateAsync(string root, string store)
         {
             FilenameCatalogDiagnostics previous = catalog.GetDiagnostics();
             File.AppendAllText(compactionTarget.FullPath, "c");
-            // Keep the watcher producer below the bounded queue's coalescing/overflow
-            // window. The loop still waits for every journal/compaction acknowledgement;
-            // this small deterministic interval prevents a fast NVMe append storm from
-            // turning one dropped Changed notification into a 30-second harness timeout.
-            await Task.Delay(2).ConfigureAwait(false);
+            // Keep each same-file metadata change outside the Windows watcher delivery
+            // coalescing window.  The update loop intentionally waits for the journal or
+            // compaction acknowledgement below, but a very fast append storm can still
+            // collapse duplicate Changed notifications before FileSystemWatcher hands
+            // them to the bounded queue.  A fixed interval makes every one of the 4,096
+            // required updates observable without changing the production event path or
+            // weakening the compaction threshold.
+            await Task.Delay(100).ConfigureAwait(false);
             await UntilAsync(() =>
                 catalog.GetDiagnostics().DeltaChangeCount != previous.DeltaChangeCount ||
                 catalog.GetDiagnostics().CompactionCount != previous.CompactionCount,
