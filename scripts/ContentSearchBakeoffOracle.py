@@ -8,10 +8,12 @@ path/UTF-16-offset/length signatures for every fixed query.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import re
 import sys
+import multiprocessing
 import unicodedata
 from pathlib import Path
 
@@ -79,6 +81,79 @@ def signature(path: Path, offset: int, length: int) -> dict:
     return {"path": str(path.resolve()), "offset": offset, "length": length}
 
 
+def scan_file(path: Path, queries: list[dict], compiled: dict[str, re.Pattern[str] | None], folded_needles: dict[str, str], sensitive_queries: list[tuple[str, str]]) -> dict[str, set[tuple[str, int, int]]]:
+    results: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
+    text = decode(path)
+    if text is None:
+        return results
+    folded_text = ""
+    folded_map: list[int] = []
+    if folded_needles:
+        folded_parts: list[str] = []
+        for index, char in enumerate(text):
+            part = normalize_folded(char)
+            folded_parts.append(part)
+            folded_map.extend([index] * len(part))
+        folded_text = "".join(folded_parts)
+    for q in queries:
+        key = query_key(q)
+        if q.get("mode", "Substring").lower() == "regex":
+            matcher = compiled[key]
+            assert matcher is not None
+            matches = [(m.start(), max(1, len(m.group(0)))) for m in matcher.finditer(text)]
+        elif q.get("caseSensitive", False):
+            needle = q["text"]
+            matches = []
+            cursor = 0
+            while needle:
+                hit = text.find(needle, cursor)
+                if hit < 0:
+                    break
+                matches.append((hit, max(1, len(needle))))
+                cursor = hit + max(1, len(needle))
+        else:
+            needle = folded_needles[key]
+            matches = []
+            cursor = 0
+            while needle:
+                hit = folded_text.find(needle, cursor)
+                if hit < 0:
+                    break
+                original_start = folded_map[hit]
+                original_end = folded_map[min(len(folded_map) - 1, hit + len(needle) - 1)]
+                matches.append((original_start, max(1, original_end - original_start + 1)))
+                cursor = hit + max(1, len(needle))
+        for start, length in matches:
+            prefix = text[:start]
+            segment = text[start:start + length]
+            results[key].add((str(path.resolve()), utf16_length(prefix), utf16_length(segment)))
+    return results
+
+
+def scan_directory(argument: tuple[str, list[dict]]) -> dict[str, list[tuple[str, int, int]]]:
+    directory_name, queries = argument
+    compiled: dict[str, re.Pattern[str] | None] = {}
+    folded_needles: dict[str, str] = {}
+    sensitive_queries: list[tuple[str, str]] = []
+    for q in queries:
+        key = query_key(q)
+        if q.get("mode", "Substring").lower() == "regex":
+            flags = re.IGNORECASE if not q.get("caseSensitive", False) else 0
+            compiled[key] = re.compile(q["text"], flags)
+        elif q.get("caseSensitive", False):
+            sensitive_queries.append((key, q["text"]))
+        else:
+            folded_needles[key] = normalize_folded(q["text"])
+    merged: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
+    directory = Path(directory_name)
+    files = sorted((p for p in directory.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED), key=lambda p: str(p))
+    for path in files:
+        partial = scan_file(path, queries, compiled, folded_needles, sensitive_queries)
+        for key, values in partial.items():
+            merged[key].update(values)
+    return {key: sorted(values) for key, values in merged.items()}
+
+
 def scan(root: Path, queries: list[dict]) -> dict:
     results: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
     compiled: dict[str, re.Pattern[str] | None] = {}
@@ -93,56 +168,16 @@ def scan(root: Path, queries: list[dict]) -> dict:
             sensitive_queries.append((key, q["text"]))
         else:
             folded_needles[key] = normalize_folded(q["text"])
-    files = sorted((p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED), key=lambda p: str(p))
-    for number, path in enumerate(files, 1):
-        text = decode(path)
-        if text is None:
-            continue
-        folded_text = ""
-        folded_map: list[int] = []
-        if folded_needles:
-            folded_parts: list[str] = []
-            for index, char in enumerate(text):
-                part = normalize_folded(char)
-                folded_parts.append(part)
-                folded_map.extend([index] * len(part))
-            folded_text = "".join(folded_parts)
-        for q in queries:
-            key = query_key(q)
-            if q.get("mode", "Substring").lower() == "regex":
-                matcher = compiled[key]
-                assert matcher is not None
-                matches = [(m.start(), max(1, len(m.group(0)))) for m in matcher.finditer(text)]
-            elif q.get("caseSensitive", False):
-                needle = q["text"]
-                matches = []
-                cursor = 0
-                while needle:
-                    hit = text.find(needle, cursor)
-                    if hit < 0:
-                        break
-                    matches.append((hit, max(1, len(needle))))
-                    cursor = hit + max(1, len(needle))
-            else:
-                needle = folded_needles[key]
-                matches = []
-                cursor = 0
-                while needle:
-                    hit = folded_text.find(needle, cursor)
-                    if hit < 0:
-                        break
-                    original_start = folded_map[hit]
-                    original_end = folded_map[min(len(folded_map) - 1, hit + len(needle) - 1)]
-                    matches.append((original_start, max(1, original_end - original_start + 1)))
-                    cursor = hit + max(1, len(needle))
-            # C# uses UTF-16 offsets.  Convert the original Python code-point
-            # index and length to UTF-16 units for every returned signature.
-            for start, length in matches:
-                prefix = text[:start]
-                segment = text[start:start + length]
-                results[key].add((str(path.resolve()), utf16_length(prefix), utf16_length(segment)))
-        if number % 10000 == 0:
-            print(f"oracle: {number}/{len(files)}", file=sys.stderr, flush=True)
+    directories = sorted({p.parent for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED}, key=lambda p: str(p))
+    # One process handles a directory bucket.  The corpus generator deliberately
+    # uses 500/20/20 buckets, avoiding 500k individually pickled process tasks.
+    workers = max(1, min(8, multiprocessing.cpu_count() or 1))
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+        for index, partial in enumerate(executor.map(scan_directory, [(str(directory), queries) for directory in directories], chunksize=1), 1):
+            for key, values in partial.items():
+                results[key].update(values)
+            if index % 10 == 0 or index == len(directories):
+                print(f"oracle: {index}/{len(directories)} buckets", file=sys.stderr, flush=True)
     return {
         key: [{"path": p, "offset": o, "length": l} for p, o, l in sorted(values)]
         for key, values in results.items()
