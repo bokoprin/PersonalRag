@@ -54,6 +54,11 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private bool started;
     private volatile bool disposed;
 
+    // Native FileKey collection is handle-bound I/O. Keep enough concurrent handles to
+    // saturate the local NVMe during a million-entry build while capping the fan-out so
+    // the formal runner remains stable on machines with many logical processors.
+    private static int MetadataParallelism => Math.Clamp(Environment.ProcessorCount * 2, 4, 64);
+
     private FileSystemCatalog(string root, string store, string rootIdentity, string volumeId,
         GenerationStore persistence, FilenameSearchEngine engine, IEnumerable<string>? excludedRoots)
     {
@@ -880,7 +885,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         Parallel.ForEach(discovered, new ParallelOptions
         {
             CancellationToken = token,
-            MaxDegreeOfParallelism = Math.Max(4, Environment.ProcessorCount)
+            MaxDegreeOfParallelism = MetadataParallelism
         }, entry =>
         {
             FilenameRecord? read = TryReadRecord(entry, 0);
@@ -939,7 +944,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             Parallel.For(0, batch.Count, new ParallelOptions
             {
                 CancellationToken = token,
-                MaxDegreeOfParallelism = Math.Max(4, Environment.ProcessorCount)
+                MaxDegreeOfParallelism = MetadataParallelism
             }, i => reads[i] = TryReadMetadata(batch[i], null));
             for (int i = 0; i < reads.Length; i++)
             {
