@@ -346,6 +346,10 @@ $core = Invoke-FormalMode 'core' @($corpusRoot,$store,$Count,'123456') 'CORE_1M.
 $sustained = Invoke-FormalMode 'sustained' @($corpusRoot,$store,'10000') 'SUSTAINED_SEARCH_1M.json'
 $post = Invoke-FormalMode 'post-update' @($corpusRoot,$store) 'POST_UPDATE_1M.json'
 $write = Invoke-FormalMode 'write' @($corpusRoot,$store,'100') 'WRITE_AMPLIFICATION.json'
+$churnFixture = Join-Path $corpusRoot '.formal-churn'
+$churnMovedFixture = Join-Path $corpusRoot '.formal-churn-moved'
+Reset-TaskOwnedPath $churnFixture
+Reset-TaskOwnedPath $churnMovedFixture
 $churn = Invoke-FormalMode 'churn' @($corpusRoot,$store,$ChurnSeconds) 'CHURN.json'
 $restart = Invoke-FormalMode 'restart' @($corpusRoot,$store) 'RESTART_MODIFY.json'
 

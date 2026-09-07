@@ -13,7 +13,7 @@ internal sealed record FileSystemEvent(
 /// <summary>One-volume exact-metadata catalog with bounded change ingestion and durable generation deltas.</summary>
 public sealed class FileSystemCatalog : IFilenameCatalog
 {
-    private const long IdleEventQuietMilliseconds = 250;
+    private const long IdleEventQuietMilliseconds = 1000;
     private readonly record struct ReadMetadata(
         string FullPath, string Name, ulong SizeBytes, DateTime ModifiedUtc, byte Flags, FileKey Key);
     private readonly record struct DiscoveredEntry(
