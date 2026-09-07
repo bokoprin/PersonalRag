@@ -1,0 +1,9 @@
+{
+  "blockSizeChars": 65536,
+  "overlapChars": 256,
+  "rounds": 20,
+  "warmupRounds": 2,
+  "measuredRounds": 18,
+  "seed": 123456,
+  "cancellationTargetMs": 100
+}

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ContentSearch.Core\ContentSearch.Core.csproj" />
+    <ProjectReference Include="..\..\src\ContentSearch.Backends.Scan\ContentSearch.Backends.Scan.csproj" />
+    <ProjectReference Include="..\..\src\ContentSearch.Backends.Bloom\ContentSearch.Backends.Bloom.csproj" />
+    <ProjectReference Include="..\..\src\ContentSearch.Backends.Trigram\ContentSearch.Backends.Trigram.csproj" />
+    <ProjectReference Include="..\..\src\ContentSearch.Backends.Sqlite\ContentSearch.Backends.Sqlite.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="query-set.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="oracle-v1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="benchmark-settings.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

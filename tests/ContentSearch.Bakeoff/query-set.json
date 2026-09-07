@@ -1,0 +1,12 @@
+[
+  { "text": "GenerationStore", "mode": "Substring", "caseSensitive": false },
+  { "text": "error", "mode": "Substring", "caseSensitive": false },
+  { "text": "0xA1B2C3D4", "mode": "Substring", "caseSensitive": false },
+  { "text": "障害", "mode": "Substring", "caseSensitive": false },
+  { "text": "SS", "mode": "Substring", "caseSensitive": false },
+  { "text": "if", "mode": "Substring", "caseSensitive": false },
+  { "text": "x", "mode": "Substring", "caseSensitive": true },
+  { "text": "Generation(Store|Index)", "mode": "Regex", "caseSensitive": false },
+  { "text": "[a-z]{8}", "mode": "Regex", "caseSensitive": false },
+  { "text": "definitely-no-hit-7f19d2", "mode": "Substring", "caseSensitive": false }
+]
