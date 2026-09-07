@@ -15,6 +15,38 @@ namespace PersonalRag.FilenameSearch;
 /// </summary>
 public sealed class FilenameSearchEngine : IFilenameSearch
 {
+    internal sealed class StableMetadataSnapshot
+    {
+        private readonly ulong[] sizes;
+        private readonly long[] modifiedTicks;
+        private readonly byte[] flags;
+        private readonly bool[] present;
+
+        internal int Capacity => present.Length;
+        internal int LiveCount { get; }
+
+        internal StableMetadataSnapshot(ulong[] sizes, long[] modifiedTicks, byte[] flags,
+            bool[] present, int liveCount)
+        {
+            this.sizes = sizes;
+            this.modifiedTicks = modifiedTicks;
+            this.flags = flags;
+            this.present = present;
+            LiveCount = liveCount;
+        }
+
+        internal bool TryGet(int id, out ulong size, out long ticks, out byte entryFlags)
+        {
+            if ((uint)id >= (uint)present.Length || !present[id])
+            {
+                size = 0; ticks = 0; entryFlags = 0;
+                return false;
+            }
+            size = sizes[id]; ticks = modifiedTicks[id]; entryFlags = flags[id];
+            return true;
+        }
+    }
+
     private readonly object gate = new();
     private RouteCEngine baseEngine = new();
     private ExactTable? baseTable;
@@ -177,28 +209,46 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             bool hasWildcard = HasWildcard(request.Query);
             string broadQuery = hasWildcard ? BuildBroadLiteralQuery(request.Query) : request.Query;
 
-            // Route C is a conservative candidate generator. Ask it for the complete lazy
-            // candidate set; exact verification below stops as soon as enough FileId-ordered
-            // true matches have been collected.
-            int routeLimit = 0;
-
-            var route = baseEngine.Search(new CoreQuery(
+            // Route C is a conservative candidate generator. A bounded candidate prefix is
+            // enough when it already yields the requested number of exact matches (the
+            // common query path); if false positives consume that prefix, retry the complete
+            // candidate set below so Limit never introduces a false negative.
+            int routeLimit = request.Limit > 0
+                ? Math.Clamp(checked(request.Limit * 4), request.Limit, 4_096)
+                : 0;
+            CoreQuery routeQuery = new(
                 broadQuery,
                 request.Scope == SearchScope.Filename ? CoreScope.Filename : CoreScope.FullPath,
                 request.CaseSensitive,
-                routeLimit));
-
+                routeLimit);
+            var route = baseEngine.Search(routeQuery);
             var merged = new Dictionary<int, FilenameRecord>();
-            foreach (CoreFileRecord hit in route.Records)
+
+            void AddBaseCandidates(IReadOnlyList<CoreFileRecord> candidates)
             {
-                if (delta.ContainsKey(hit.FileId)) continue;
-                if (!TryGetBase(hit.FileId, out FilenameRecord? exact) || exact is null) continue;
-                // Route C is intentionally a conservative candidate engine. Search semantics
-                // are owned here so exact path spelling, full Unicode case folding, and
-                // substring wildcard behavior have one authoritative implementation.
-                if (!Matches(exact, request)) continue;
-                merged[exact.FileId] = exact;
-                if (request.Limit > 0 && merged.Count >= request.Limit) break;
+                foreach (CoreFileRecord hit in candidates)
+                {
+                    if (delta.ContainsKey(hit.FileId)) continue;
+                    if (!TryGetBase(hit.FileId, out FilenameRecord? exact) || exact is null) continue;
+                    // Route C is intentionally a conservative candidate engine. Search
+                    // semantics are owned here so exact path spelling, full Unicode case
+                    // folding, and substring wildcard behavior have one authority.
+                    if (!Matches(exact, request)) continue;
+                    merged[exact.FileId] = exact;
+                    if (request.Limit > 0 && merged.Count >= request.Limit) break;
+                }
+            }
+
+            AddBaseCandidates(route.Records);
+            if (request.Limit > 0 && merged.Count < request.Limit &&
+                route.Candidates > route.Records.Count)
+            {
+                // The prefix did not contain enough true matches. Re-run without a
+                // candidate limit before merging the indexed delta, preserving complete
+                // results for every query shape.
+                route = baseEngine.Search(routeQuery with { Limit = 0 });
+                merged.Clear();
+                AddBaseCandidates(route.Records);
             }
 
             IReadOnlyList<FilenameRecord> deltaMatches = deltaIndex.Search(
@@ -345,6 +395,43 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             ThrowIfDisposed();
             if (delta.TryGetValue(id, out record)) return record is not null;
             return baseTable is not null && baseTable.TryGet(id, out record);
+        }
+    }
+
+    /// <summary>
+    /// Reads the fixed-width metadata columns without decoding the exact name/path blobs.
+    /// Reconcile uses this for every existing entry; full FilenameRecord materialization is
+    /// reserved for the small subset whose filesystem metadata actually changed.
+    /// </summary>
+    internal StableMetadataSnapshot CreateStableMetadataSnapshot()
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            int maxId = Math.Max(0, baseTable?.MaxId ?? 0);
+            foreach (int id in delta.Keys) maxId = Math.Max(maxId, id);
+            var sizes = new ulong[checked(maxId + 1)];
+            var ticks = new long[sizes.Length];
+            var flags = new byte[sizes.Length];
+            var present = new bool[sizes.Length];
+            int live = 0;
+            baseTable?.ForEachMetadata((id, size, modified, entryFlags) =>
+            {
+                sizes[id] = size; ticks[id] = modified; flags[id] = entryFlags;
+                present[id] = true; live++;
+            });
+            foreach ((int id, FilenameRecord? record) in delta)
+            {
+                if (record is null)
+                {
+                    if (present[id]) { present[id] = false; live--; }
+                    continue;
+                }
+                if (!present[id]) live++;
+                sizes[id] = record.SizeBytes; ticks[id] = record.ModifiedUtc.Ticks;
+                flags[id] = record.Flags; present[id] = true;
+            }
+            return new StableMetadataSnapshot(sizes, ticks, flags, present, live);
         }
     }
 
@@ -633,6 +720,13 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         {
             if ((uint)id >= (uint)idToIndex.Length || idToIndex[id] == 0) { record = null; return false; }
             record = Get(idToIndex[id] - 1); return true;
+        }
+
+        public void ForEachMetadata(Action<int, ulong, long, byte> visitor)
+        {
+            ArgumentNullException.ThrowIfNull(visitor);
+            for (int i = 0; i < ids.Length; i++)
+                visitor(ids[i], sizes[i], modifiedTicks[i], flags[i]);
         }
 
         public IEnumerable<FilenameRecord> Records()

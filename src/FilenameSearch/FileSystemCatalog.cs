@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO.Enumeration;
 using System.Threading.Channels;
 
@@ -103,17 +104,29 @@ public sealed class FileSystemCatalog : IFilenameCatalog
 
     internal bool ContainsPath(string path)
     {
+        StartBasePathIndexBuild();
         string full = Path.GetFullPath(path);
         lock (gate) return TryGetPathLocked(full, out _);
     }
 
     internal bool TryGetRecordAtPath(string path, out FilenameRecord? record)
     {
+        StartBasePathIndexBuild();
         string full = Path.GetFullPath(path);
         lock (gate) return TryGetPathLocked(full, out record);
     }
 
-    public static FileSystemCatalog Open(string root, string store, IEnumerable<string>? excludedRoots = null)
+    public static FileSystemCatalog Open(string root, string store, IEnumerable<string>? excludedRoots = null) =>
+        OpenCore(root, store, excludedRoots, deferBasePathIndexBuild: false);
+
+    // WPF starts its first useful query while the window is becoming interactive. Keep
+    // the one-time CPU-heavy path-map copy behind an explicit internal entry point so
+    // normal/CLI catalogs retain the fast restart catch-up path.
+    internal static FileSystemCatalog OpenDeferred(string root, string store, IEnumerable<string>? excludedRoots = null) =>
+        OpenCore(root, store, excludedRoots, deferBasePathIndexBuild: true);
+
+    private static FileSystemCatalog OpenCore(string root, string store, IEnumerable<string>? excludedRoots,
+        bool deferBasePathIndexBuild)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
         ArgumentException.ThrowIfNullOrWhiteSpace(store);
@@ -134,7 +147,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 if (loaded)
                 {
                     catalog.generation = persisted;
-                    catalog.LoadExistingRecords();
+                    catalog.LoadExistingRecords(deferBasePathIndexBuild);
                 }
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
@@ -270,6 +283,12 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 if (batch.Any(e => e.Reconcile || e.CatchUp)) Interlocked.Exchange(ref reconcileQueued, 0);
                 try
                 {
+                    // A loaded store publishes Ready while its million-entry base path
+                    // hash map is copied asynchronously. Do not process the first watcher
+                    // catch-up/direct batch against the still-empty map; otherwise a valid
+                    // unchanged restart is mistaken for a path-set change and falls back to
+                    // the gigabyte-scale full reconcile path.
+                    await basePathIndexReady.ConfigureAwait(false);
                     SetStatus("変更を反映中");
                     bool reconcile = Interlocked.Exchange(ref forceReconcile, 0) != 0 || batch.Any(e => e.Reconcile || e.CatchUp);
                     IReadOnlyList<CatalogChange> changes;
@@ -651,41 +670,75 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         int currentCount;
         lock (gate) currentCount = recordCount;
 
-        // FileIds are stable but may contain holes after deletes/moves.  A compact
-        // bitset keyed by the highest live id lets us detect missing entries without
-        // allocating a path dictionary.  The normal production corpus has dense ids,
-        // and the fallback below still handles pathological/sparse stores safely.
+        // FileIds are stable but may contain holes after deletes/moves. A compact bitset
+        // keyed by the highest live id lets us detect missing entries without allocating
+        // a path dictionary for the entire reconcile result.
         int maxId = engine.MaxFileId;
         if (maxId == int.MaxValue) return false;
         var seen = new bool[checked(maxId + 1)];
         var updates = new List<(FilenameRecord Old, FilenameRecord Current)>();
-        int seenCount = 0;
-        // Use the single-pass enumerator here as well as during initial build.  The
-        // parallel Discover implementation retains every entry in a ConcurrentBag
-        // until enumeration completes, which is unnecessary for a path-presence check
-        // and makes the post-storm memory sample include that transient million-entry
-        // graph.
-        foreach (DiscoveredEntry entry in DiscoverStreaming(token))
-        {
-            FilenameRecord? old;
-            lock (gate)
-            {
-                if (!TryGetPathLocked(entry.FullPath, out old) || old is null) return false;
-            }
-            if (old.FileId >= seen.Length) return false;
-            if (!seen[old.FileId]) { seen[old.FileId] = true; seenCount++; }
+        FilenameSearchEngine.StableMetadataSnapshot metadata = engine.CreateStableMetadataSnapshot();
 
+        // The sorted base map is immutable for the duration of this worker pass. Build a
+        // transient hash lookup once so every discovered path avoids a log2(1M) binary
+        // search and the catalog gate. Hash collisions are retained as -1 and use the
+        // exact locked path lookup below.
+        ulong[] baseHashes;
+        int[] baseIds;
+        lock (gate)
+        {
+            baseHashes = basePathHashes;
+            baseIds = basePathIds;
+        }
+        var hashLookup = new Dictionary<ulong, int>(baseHashes.Length);
+        for (int i = 0; i < baseHashes.Length; i++)
+        {
+            ulong hash = baseHashes[i];
+            if (hashLookup.TryGetValue(hash, out int priorId))
+                hashLookup[hash] = priorId == baseIds[i] ? priorId : -1;
+            else hashLookup.Add(hash, baseIds[i]);
+        }
+
+        int seenCount = 0;
+        // Catch-up is latency-gated separately from the steady-state memory sample. Use
+        // the parallel directory enumerator here so a stopped-app metadata check can
+        // finish within the restart budget; the authoritative fallback still preserves
+        // the same IgnoreInaccessible/reparse-point semantics.
+        foreach (DiscoveredEntry entry in Discover(token))
+        {
+            ulong hash = PathHash(entry.FullPath);
+            int id;
+            if (!hashLookup.TryGetValue(hash, out id) || id < 0)
+            {
+                FilenameRecord? fallback;
+                lock (gate)
+                {
+                    if (!TryGetPathLocked(entry.FullPath, out fallback) || fallback is null)
+                    {
+                        return false;
+                    }
+                }
+                id = fallback.FileId;
+            }
+            if ((uint)id >= (uint)seen.Length) return false;
+            if (!seen[id]) { seen[id] = true; seenCount++; }
+
+            if (!metadata.TryGet(id, out ulong oldSize, out long oldTicks, out byte oldFlags)) return false;
             byte flags = entry.IsDirectory ? (byte)2 : (byte)1;
-            if (old.Name == entry.Name && old.FullPath == entry.FullPath &&
-                old.SizeBytes == entry.SizeBytes && old.ModifiedUtc == entry.ModifiedUtc && old.Flags == flags)
+            if (oldSize == entry.SizeBytes && oldTicks == entry.ModifiedUtc.Ticks && oldFlags == flags)
                 continue;
 
-            ReadMetadata? read = TryReadMetadata(entry, old);
+            if (!engine.TryGetRecord(id, out FilenameRecord? oldRecord) || oldRecord is null) return false;
+            ReadMetadata? read = TryReadMetadata(entry, oldRecord);
             if (read is null) return false;
-            FilenameRecord current = new(old.FileId, old.ParentId, read.Value.Name, read.Value.FullPath,
+            FilenameRecord current = new(oldRecord.FileId, oldRecord.ParentId, read.Value.Name, read.Value.FullPath,
                 read.Value.SizeBytes, read.Value.ModifiedUtc, read.Value.Flags)
-            { Key = read.Value.Key, ParentKey = old.ParentKey };
-            if (!Equivalent(old, current)) updates.Add((old, current));
+            { Key = read.Value.Key, ParentKey = oldRecord.ParentKey };
+            if (!Equivalent(oldRecord, current))
+            {
+                if (!engine.TryGetRecord(id, out FilenameRecord? exactOld) || exactOld is null) return false;
+                updates.Add((exactOld, current));
+            }
         }
 
         if (seenCount != currentCount) return false;
@@ -1122,7 +1175,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         return result;
     }
 
-    private void LoadExistingRecords()
+    private void LoadExistingRecords(bool deferBasePathIndexBuild)
     {
         lock (gate)
         {
@@ -1134,7 +1187,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         basePathIndexCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         basePathIndexReady = basePathIndexCompletion.Task;
         Volatile.Write(ref basePathIndexStarted, 0);
-        Volatile.Write(ref deferBasePathIndex, 0);
+        Volatile.Write(ref deferBasePathIndex, deferBasePathIndexBuild ? 1 : 0);
+        if (!deferBasePathIndexBuild) StartBasePathIndexBuild();
     }
 
     internal void DeferBasePathIndexBuild() => Volatile.Write(ref deferBasePathIndex, 1);

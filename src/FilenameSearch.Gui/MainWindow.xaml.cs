@@ -213,7 +213,7 @@ public partial class MainWindow : Window
             string root = Path.GetFullPath(rootOverride);
             string store = storeOverride is null ? DefaultSingleStore(root) : Path.GetFullPath(storeOverride);
             return Task.Factory.StartNew<IFilenameCatalog>(
-                () => FileSystemCatalog.Open(root, store),
+                () => FileSystemCatalog.OpenDeferred(root, store),
                 CancellationToken.None,
                 TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
                 TaskScheduler.Default);
