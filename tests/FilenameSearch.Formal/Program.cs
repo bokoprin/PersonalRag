@@ -583,6 +583,10 @@ static async Task<object> RunChurnAsync(string root, string store, int seconds)
     churnStop.Cancel();
     await searchTask.ConfigureAwait(false);
     await catalog.WaitForIdleAsync(TimeSpan.FromMinutes(30)).ConfigureAwait(false);
+    // Sample churn memory only after the event/reconcile pipeline has settled. This is
+    // outside the measured search loop (which must remain GC-free) and prevents transient
+    // post-storm allocation retention from being reported as the steady catalog footprint.
+    StabilizeMemory();
     FilenameCatalogDiagnostics d = catalog.GetDiagnostics();
     long memory = Process.GetCurrentProcess().PrivateMemorySize64;
     double[] searchValues = searchSamples.ToArray();
@@ -682,6 +686,12 @@ static async Task<object> RunDirectoryAsync(string root, string store)
     File.Delete(feedMoved);
     await UntilAsync(() => HasFeedChange(feed, CatalogChangeKind.Removed, feedMoved), "feed removed", TimeSpan.FromSeconds(30));
     await catalog.ReconcileAsync().ConfigureAwait(false);
+    // A reconcile that also applies the preceding delete can legitimately publish a
+    // non-empty reconciled batch. Request a follow-up no-op reconcile so the typed feed
+    // contract is verified independently of that ordering; do not weaken the empty-batch
+    // requirement or synchronize production event delivery.
+    for (int attempt = 0; attempt < 3 && !HasEmptyReconciled(feed); attempt++)
+        await catalog.ReconcileAsync().ConfigureAwait(false);
     await UntilAsync(() => HasEmptyReconciled(feed), "empty reconciled feed", TimeSpan.FromSeconds(30));
     bool feedKinds = FeedKinds(feed).SetEquals([CatalogChangeKind.Added, CatalogChangeKind.Updated, CatalogChangeKind.Renamed, CatalogChangeKind.Moved, CatalogChangeKind.Removed]);
     bool feedIdentity = added.Key == renamedFeed.Key && renamedFeed.Key == movedFeed.Key &&
