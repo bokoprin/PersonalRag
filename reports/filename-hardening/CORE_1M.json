@@ -1,0 +1,1502 @@
+{
+  "version": 1,
+  "mode": "core",
+  "source_commit": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
+  "started_utc": "2026-09-07T16:26:35.2140012Z",
+  "generated_utc": "2026-09-07T16:26:35.2461851Z",
+  "finished_utc": "2026-09-07T16:27:26.3772375Z",
+  "root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\corpus-1m",
+  "store": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\stores\\core.manifest",
+  "count_requested": 1000000,
+  "corpus": {
+    "version": 4,
+    "count": 1000008,
+    "seed": 123456,
+    "logicalBytes": 110592884736,
+    "markerPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\corpus-1m.formal-corpus.json",
+    "hardLinkCreated": true,
+    "hardLinkTarget": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\corpus-1m\\formal-vectors\\hardlink-target.txt",
+    "hardLinkAlias": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\corpus-1m\\formal-vectors\\hardlink-alias.txt"
+  },
+  "benchmark_rounds": 20,
+  "warmup_rounds": 2,
+  "measured_rounds": 18,
+  "query_shuffle_seed": 123456,
+  "initial_build_seconds": 29.7522552,
+  "existing_load_seconds": 0.6426347,
+  "existing_catchup_seconds": 2.2292092,
+  "ready_private_bytes": 1048977408,
+  "ready_managed_bytes": 366982608,
+  "ready_heap_bytes": 367027400,
+  "load_private_bytes": 1294381056,
+  "load_managed_bytes": 366982608,
+  "load_heap_bytes": 367027400,
+  "persistent_bytes": 251003750,
+  "correctness": [
+    {
+      "class": "rare",
+      "query": "Straße",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "common",
+      "query": "fixture_000",
+      "scope": "Filename",
+      "expected": 10000,
+      "actual": 10000,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "oneChar",
+      "query": "Ω",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "twoChar",
+      "query": "zz",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "wildcard",
+      "query": "report_*.xlsx",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "wildcardFullPath",
+      "query": "report_*.xlsx",
+      "scope": "FullPath",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "wildcardQuestion",
+      "query": "X?Z",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "fullPath",
+      "query": "fixture_0000001_ẞ",
+      "scope": "FullPath",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "sharpS",
+      "query": "STRASSE",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    },
+    {
+      "class": "dottedI",
+      "query": "i̇stanbul",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0,
+      "used_scan": false
+    }
+  ],
+  "false_positive": 0,
+  "false_negative": 0,
+  "warmup_samples": [
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0499,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.7149,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0224,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0138,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0026,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.2462,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0384,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0074,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.01,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0139,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.007,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0059,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0065,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.3666,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0114,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.6538,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0094,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0217,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0066,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0297,
+      "usedScan": false,
+      "resultCount": 1
+    }
+  ],
+  "measured_samples": [
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1716,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0056,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0111,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.3963,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0327,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0052,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0053,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0029,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0035,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0024,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0306,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0023,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0036,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0031,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1523,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.1016,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0057,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0067,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0114,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0026,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0048,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0019,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0018,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0343,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0036,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0038,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0108,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1409,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0054,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.1093,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0333,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.9014,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.004,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0046,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.1922,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0082,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0047,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0048,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0093,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0016,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 2.0512,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0402,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0203,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0421,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0198,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.4883,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0794,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0183,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.009,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0072,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0105,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0055,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0152,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0146,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 5.0383,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.041,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0296,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.5302,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 2.8061,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0979,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0936,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.042,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.5096,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0158,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0072,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0171,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 3.1409,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0252,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0151,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0099,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0199,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.3669,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0069,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0262,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.8195,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0177,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0073,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0074,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0037,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0438,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0058,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0165,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.6265,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0535,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 2.9591,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0508,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0075,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0036,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.011,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0049,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0054,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0087,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0022,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1749,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0071,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0039,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.5762,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0339,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0138,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0097,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0052,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0049,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.168,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.6187,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0078,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0365,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0079,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0072,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0159,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0086,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.9668,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0092,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0088,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0129,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0267,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1831,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0028,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0062,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0052,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0035,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0051,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0027,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.429,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0045,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0062,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0122,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0061,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0249,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0069,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1569,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0069,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.003,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0028,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.023,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0047,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0051,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1531,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.3855,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0125,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0049,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0191,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0035,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0086,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0026,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0041,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0049,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.1423,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0053,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1332,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0026,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0016,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0035,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0054,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0021,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.004,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0083,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.1046,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1095,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0176,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0031,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.1891,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0056,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0095,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0027,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0023,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0044,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1175,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.005,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0038,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.0164,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "sharpS",
+      "elapsedMs": 0.0033,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "oneChar",
+      "elapsedMs": 0.0021,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "fullPath",
+      "elapsedMs": 0.1125,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "rare",
+      "elapsedMs": 0.0038,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "dottedI",
+      "elapsedMs": 0.0032,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcard",
+      "elapsedMs": 0.0083,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "twoChar",
+      "elapsedMs": 0.0017,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "common",
+      "elapsedMs": 1.0239,
+      "usedScan": false,
+      "resultCount": 100
+    },
+    {
+      "class": "wildcardQuestion",
+      "elapsedMs": 0.0069,
+      "usedScan": false,
+      "resultCount": 1
+    },
+    {
+      "class": "wildcardFullPath",
+      "elapsedMs": 0.018,
+      "usedScan": false,
+      "resultCount": 1
+    }
+  ],
+  "latency": {
+    "count": 180,
+    "p50_ms": 0.0088,
+    "p95_ms": 1.429,
+    "p99_ms": 3.1409,
+    "max_ms": 5.0383,
+    "used_scan_count": 0
+  },
+  "worst_class": {
+    "class": "common",
+    "count": 18,
+    "p95_ms": 5.0383,
+    "p99_ms": 5.0383,
+    "used_scan_count": 0
+  },
+  "wildcard_vectors": [
+    {
+      "class": "wildcardVectorFilename",
+      "query": "report_*.xlsx",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "class": "wildcardVectorFullPath",
+      "query": "report_*.xlsx",
+      "scope": "FullPath",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0
+    },
+    {
+      "class": "wildcardVectorQuestion",
+      "query": "X?Z",
+      "scope": "Filename",
+      "expected": 1,
+      "actual": 1,
+      "fp": 0,
+      "fn": 0
+    }
+  ],
+  "hard_link": {
+    "supported": true,
+    "same_file_key": true,
+    "distinct_paths": true,
+    "openable": true
+  },
+  "nfc_nfd": {
+    "supported": true,
+    "distinct_exact_paths": true,
+    "exact_spelling_preserved": true,
+    "both_searchable": true
+  },
+  "diagnostics": {
+    "pendingEvents": 0,
+    "maxPendingEvents": 1,
+    "queueSaturationCount": 0,
+    "reconcileCount": 1,
+    "compactionCount": 0,
+    "fullBaseRewriteCount": 1,
+    "deltaChangeCount": 0,
+    "deltaBytes": 0,
+    "persistenceWriteBytes": 251003713,
+    "generation": 1,
+    "baseGeneration": 1
+  },
+  "pass": true,
+  "source_commit_sha": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
+  "report_head_sha": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
+  "report_path": "C:\\shinsuke\\app\\personalRag_astra\\reports\\filename-hardening\\CORE_1M.json",
+  "command": "C:\\Program Files\\dotnet\\dotnet.exe C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-formal-worktree-076ac53c76554fb2872a8275d937af59\\tests\\FilenameSearch.Formal\\bin\\Release\\net8.0\\FilenameSearch.Formal.dll core C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\corpus-1m C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\stores\\core.manifest C:\\shinsuke\\app\\personalRag_astra\\reports\\filename-hardening\\logs\\raw-CORE_1M.json 1000000 123456",
+  "exit_code": 0,
+  "elapsed_seconds": 51.4630957,
+  "stdout_path": "C:\\shinsuke\\app\\personalRag_astra\\reports\\filename-hardening\\logs\\formal-core.stdout.log",
+  "stderr_path": "C:\\shinsuke\\app\\personalRag_astra\\reports\\filename-hardening\\logs\\formal-core.stderr.log",
+  "initial_remote_branch_sha": "930bc4d38276b0d371a3c3df7f36107d3c601172",
+  "ACLineStatus": 1,
+  "battery_status": 2,
+  "charging": false,
+  "power_scheme": "電源設定の GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (バランス)",
+  "thermal_throttling": null,
+  "executable_sha256": "cd830ec5de49ecb8820f069db4ba8be2f70c46c2c1eb1b9301d61192d0678fee",
+  "corpus_manifest_sha256": "23e828f45898a8ff42622f23c22d108d66bf786bceb01c5294d5fa02329ed182",
+  "query_set_sha256": "ed8fc824a6a6964d9ef8d75c4577c64b831c12949e74ad099ddaceb057ab6e36",
+  "independent_oracle_sha256": "33af366d83ecb05b8a95ab0e83166ddb0fc4cb8d2c5d956c08525d2292483c76",
+  "ac_requirement_overridden": true,
+  "informational_limitation": null,
+  "os": "Microsoft Windows NT 10.0.26200.0",
+  "cpu": "Intel64 Family 6 Model 197 Stepping 2, GenuineIntel",
+  "ram_bytes": 33682821120,
+  "dotnet_sdk": "8.0.424",
+  "data_root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal",
+  "physical_disks": [
+    {
+      "DeviceID": "\\\\.\\PHYSICALDRIVE0",
+      "Model": "NVMe MTFDKBA1T0QGN-1BN1AABGA",
+      "InterfaceType": "SCSI",
+      "MediaType": "Fixed hard disk media",
+      "Size": 1024203640320
+    }
+  ],
+  "formal_series_id": "632feb127d27423e8119e68850379b7a",
+  "formal_source_commit_sha": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
+  "production_executable_sha256": "cd830ec5de49ecb8820f069db4ba8be2f70c46c2c1eb1b9301d61192d0678fee",
+  "normalizer_casefold_version": "unicode-15.1-full-casefold+nfc-v3",
+  "threshold_definition_hash": "2c0ce86c9b7d569b44f82f33a617319bfbfcadfbe2b69b4940196546773a3fe5",
+  "acceptance_rule_hash": "653cd89d02f8110420f70ec4c813d9920df015a7a0ed89210d28bb1a39304abc",
+  "acceptance_plan_sha256": "78417bd5d78405f40e5e9a01d5d130c9416ddd0b16df36ceb60f25cf3bdc5bdd",
+  "AC_requirement_overridden": true,
+  "measurement_configuration": {
+    "data_root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal",
+    "corpus_root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\corpus-1m",
+    "store": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-FilenameFormal\\stores\\core.manifest",
+    "count": 1000000,
+    "logical_bytes": 107374182400,
+    "churn_seconds": 1800,
+    "idle_seconds": 600,
+    "build_configuration": "Release",
+    "gc_forced": false,
+    "fixed_query_order": true,
+    "benchmark_rounds": 20,
+    "warmup_rounds": 2,
+    "measured_rounds": 18,
+    "query_shuffle_seed": 123456
+  },
+  "hard_thresholds": {
+    "correctnessFalsePositive": 0,
+    "correctnessFalseNegative": 0,
+    "queryP50Ms": 20,
+    "queryP95Ms": 50,
+    "queryP99Ms": 100,
+    "worstClassP95Ms": 50,
+    "sustainedQueryP95Ms": 50,
+    "sustainedQueryP99Ms": 100,
+    "readyCorePrivateBytes": 1073741824,
+    "persistentBytes": 1073741824,
+    "initialBuildSeconds": 60,
+    "existingLoadSeconds": 1.5,
+    "restartCatchupSeconds": 5,
+    "postUpdateQueryP95Ms": 50,
+    "postUpdateQueryP99Ms": 100,
+    "writeAmplificationFullBaseRewriteCount": 0,
+    "sustainedQueryCount": 10000,
+    "churnConvergenceP95Ms": 1000,
+    "churnSearchP95Ms": 50,
+    "churnSearchP99Ms": 100,
+    "churnPrivateBytes": 1610612736,
+    "guiFreshProcessCount": 10,
+    "guiStartupP95Ms": 2000,
+    "guiWarmP95Ms": 100,
+    "guiWarmMaxMs": 200,
+    "guiLiveRefreshMs": 1000,
+    "idleSeconds": 600,
+    "idleCpuPercent": 1,
+    "idlePrivateBytes": 1610612736
+  }
+}

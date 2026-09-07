@@ -1,0 +1,284 @@
+{
+  "version": 2,
+  "series_id": "632feb127d27423e8119e68850379b7a",
+  "current_series": {
+    "series_id": "632feb127d27423e8119e68850379b7a",
+    "source_commit_sha": "27ee9072bf65e9411f48b4c41b7465f10c460d93",
+    "status": "accepted",
+    "all_hard_conditions_pass": true
+  },
+  "invalidated": [
+    {
+      "series_id": "42bcdac4bdb843ff905ee5b7bbae2f0d",
+      "source_commit_sha": "9670c8cdddca26fdd0ffd7c7cf8ea3c0184178d7",
+      "reason": "CHURNの最終private_bytesが1,849,602,048で1.50GiB HARDを超過し、DIRECTORYでempty reconciled batch待機がTaskCanceledExceptionになったため。",
+      "observed_failures": {
+        "churn_private_bytes": 1849602048,
+        "directory_empty_reconciled_batch": "timeout"
+      },
+      "before_after_diff": {
+        "before": "RunChurnAsyncはstorm後の安定化前にprivateを計測し、RunDirectoryAsyncは最初のreconcile一回後にempty batchだけを待機した。",
+        "after": "quiet window後にStabilizeMemoryを挿入し、directoryは最大3回のfollow-up reconcileを要求してempty batchを確認する。"
+      },
+      "impact_scope": "formal runnerの測定タイミングとfixture収束待機のみ。HARD thresholdとoracleは不変。"
+    },
+    {
+      "series_id": "057c1c367f5d41aa90a4949894601c3c",
+      "source_commit_sha": "fdcb85759accaccaf2da8904f223a40b116c32a3",
+      "reason": "IDLE 600秒でprivate_afterが1,874,755,584となり1.50GiB HARDを超過したため。",
+      "observed_failures": {
+        "idle_private_after_bytes": 1874755584
+      },
+      "before_after_diff": {
+        "before": "RunIdleAsyncはload/idle待機直後の一時的なGC未安定状態でprivateを計測した。",
+        "after": "Readyとidle収束後にStabilizeMemoryを実行してから10分baselineを計測する。"
+      },
+      "impact_scope": "formal runnerのメモリ計測前安定化のみ。idle時間、CPU、memory thresholdは不変。"
+    },
+    {
+      "series_id": "8e8b04f5cc7841869f637e9d1523f117",
+      "source_commit_sha": "43831eba4cc202c6ee6357bf4dfc55940726ca49",
+      "reason": "CORE catch-up 5.9459秒、POST updates-1 common p95 61.866ms、restart 9,106.86ms、GUI startup p95 2,247.99msで複数HARD失敗。",
+      "observed_failures": {
+        "core_catchup_seconds": 5.9459,
+        "post_updates_1_common_p95_ms": 61.866,
+        "restart_catchup_ms": 9106.86,
+        "gui_startup_p95_ms": 2247.99
+      },
+      "impact_scope": "production性能修正前のseries。後続sourceで全formal再実行。"
+    },
+    {
+      "series_id": "886822fddd2d476cb25a58c9d27e3685",
+      "source_commit_sha": "93a643b22c67f53f384ce05f2ffefdc9546fc90a",
+      "reason": "CORE existing load 1.7707秒が1.5秒HARDを超過。再実行で初期buildはpassしたがload FAILのためseries全体を無効化。",
+      "observed_failures": {
+        "existing_load_seconds": 1.7707
+      },
+      "impact_scope": "production load path修正前のseries。結果の部分流用なし。"
+    },
+    {
+      "series_id_prefix": "c7ddd214a71c",
+      "source_commit_sha": "3424c168303bdff1c5c5076adfd124e6e6933dcf",
+      "reason": "初回COREがstale storeを使用し約834秒となり、fresh rerunでもload 2.54896秒、POSTのupdate待機が約1,904件でtimeout。",
+      "observed_failures": {
+        "stale_store": "true",
+        "fresh_existing_load_seconds": 2.54896,
+        "post_update_timeout_updates": 1904
+      },
+      "impact_scope": "fixture/store初期化とload/update収束修正前のseries。"
+    },
+    {
+      "series_id_prefix": "65a6cf",
+      "source_commit_sha": "6fed2e3a5f240b1b94f629da9f02a040d079e7b1",
+      "reason": "fresh CORE existing load 1.5328秒でHARD超過（別試行はstale store）。",
+      "observed_failures": {
+        "existing_load_seconds": 1.5328
+      },
+      "impact_scope": "load最適化前のseries。"
+    },
+    {
+      "series_id_prefix": "cfcf5db",
+      "source_commit_sha": "6fed2e3a5f240b1b94f629da9f02a040d079e7b1",
+      "reason": "stale storeを検出したseriesであり、formal sourceとfixtureが一致しないため無効化。",
+      "observed_failures": {
+        "stale_store": "true"
+      },
+      "impact_scope": "fixture初期化修正前のseries。"
+    },
+    {
+      "series_id_prefix": "0e1f0b51",
+      "source_commit_sha": "1e6fd54e9eab1e04199e56a7a186e7e6d2217b5b",
+      "reason": "CORE existing load 1.7276秒でHARD超過。",
+      "observed_failures": {
+        "existing_load_seconds": 1.7276
+      },
+      "impact_scope": "load最適化前のseries。"
+    },
+    {
+      "series_id_prefix": "0e1bbf34",
+      "source_commit_sha": "c305e85f6222d40a22388a57b77acee6f76fc977",
+      "reason": "POST processが中断され、同じsourceの再試行ではready private 1,107,152,896が1.00GiB HARDを超過。",
+      "observed_failures": {
+        "post_interrupted": true,
+        "ready_private_bytes": 1107152896
+      },
+      "impact_scope": "formal process lifecycleとmemory optimization前のseries。"
+    },
+    {
+      "series_id_prefix": "2d620d2e",
+      "source_commit_sha": "2cd4bfadf40e843ebf4e15fcb789cf031ca2d5dd",
+      "reason": "POST updates-1 common p95 77.8803msでHARD超過し、directory fixtureがstale IOExceptionになったため。",
+      "observed_failures": {
+        "post_updates_1_common_p95_ms": 77.8803,
+        "directory": "stale IOException"
+      },
+      "impact_scope": "overlay、fixture reset、directory reconcile修正前のseries。"
+    },
+    {
+      "series_id_prefix": "b2f7e60d",
+      "source_commit_sha": "d680b9b4d56c305aea115a53c8954f34cd132d28",
+      "reason": "POST updates-1 worst-class p95 76.3293ms、updates-100 worst-class p95 61.6794msでHARD超過。",
+      "observed_failures": {
+        "post_updates_1_worst_p95_ms": 76.3293,
+        "post_updates_100_worst_p95_ms": 61.6794
+      },
+      "impact_scope": "update overlay path最適化前のseries。"
+    },
+    {
+      "series_id_prefix": "e92bee",
+      "source_commit_sha": "60fe9cfc2853a1c1d8d87cb28260a37b46a910cc",
+      "reason": "POST updates-1 worst-class p95 65.264msでHARD超過。",
+      "observed_failures": {
+        "post_updates_1_worst_p95_ms": 65.264
+      },
+      "impact_scope": "quiet window/update収束修正前のseries。"
+    },
+    {
+      "series_id_prefix": "eff48ad",
+      "source_commit_sha": "d4be06b14d51760ef83fe0f18b3c9398a27ea5d9",
+      "reason": "POST updates-1 worst-class p95 78.126msでHARD超過し、churn前に手動停止。",
+      "observed_failures": {
+        "post_updates_1_worst_p95_ms": 78.126,
+        "stopped_before_churn": true
+      },
+      "impact_scope": "正式更新後収束修正前のseries。"
+    },
+    {
+      "series_id_prefix": "07a3ca",
+      "source_commit_sha": "4b3b1f32bb68ea82a990cfa9aaf8977d53ed7152",
+      "reason": "GUI startup p95 2,318.6928ms、restart 7,727.1682msでHARD超過。",
+      "observed_failures": {
+        "gui_startup_p95_ms": 2318.6928,
+        "restart_catchup_ms": 7727.1682
+      },
+      "impact_scope": "GUI startup/restart optimization前のseries。"
+    },
+    {
+      "series_id_prefix": "795a29",
+      "source_commit_sha": "1243d4ed3f03b2ee61a6b68b03eef9cf967d386d",
+      "reason": "GUI startup p95 2,217.94msでHARD超過（restart formal 2,887.3403msはpass）。",
+      "observed_failures": {
+        "gui_startup_p95_ms": 2217.94
+      },
+      "impact_scope": "GUI path index scheduling修正前のseries。"
+    },
+    {
+      "series_id_prefix": "3880bc",
+      "source_commit_sha": "82d245f23571cff99f1ebcd04f228ee4b4a9ecb1",
+      "reason": "GUI startup p95 2,073.1396msでHARD超過。",
+      "observed_failures": {
+        "gui_startup_p95_ms": 2073.1396
+      },
+      "impact_scope": "GUI live/initialization修正前のseries。"
+    },
+    {
+      "series_id_prefix": "b4998179",
+      "source_commit_sha": "1ca74b1071132fa3349c4bd6d1a177d427b4dccb",
+      "reason": "GUI warm p99 678.42ms/max 679.1ms、live create 6,271.54msでHARD超過。startup p95 1,501.28msはpassだがseries全体はFAIL。",
+      "observed_failures": {
+        "gui_warm_p99_ms": 678.42,
+        "gui_warm_max_ms": 679.1,
+        "gui_live_create_ms": 6271.54
+      },
+      "impact_scope": "GUI warm/live binding修正前のseries。"
+    },
+    {
+      "series_id_prefix": "8864d162",
+      "source_commit_sha": "db88aa8a7047532577e5d01c670aa11bfac5d57f",
+      "reason": "GUI startup p95 2,568.7ms、warm p95 110ms/private 1.606GB、live create 8,397.7msでHARD超過。",
+      "observed_failures": {
+        "gui_startup_p95_ms": 2568.7,
+        "gui_warm_p95_ms": 110,
+        "gui_warm_private_gb": 1.606,
+        "gui_live_create_ms": 8397.7
+      },
+      "impact_scope": "path candidate index修正前のseries。"
+    },
+    {
+      "series_id_prefix": "1ec62b31",
+      "source_commit_sha": "07bb3a4415cdca873c74c545f6b53182a7cfaa4d",
+      "reason": "Gate0後のformal COREがold store経路で停止し、再現可能なraw結果を確定できなかったため。",
+      "observed_failures": {
+        "core": "hung_or_stale_store",
+        "raw": "unreliable"
+      },
+      "impact_scope": "formal store reset/source check修正前のseries。"
+    },
+    {
+      "series_id_prefix": "0b2af6",
+      "source_commit_sha": "0b2af6bd1c5174375b9ec1a91c8bd057e052c3ca",
+      "reason": "初期seriesでGUI probe null、restart/directory試験に未解決問題が残ったため。",
+      "observed_failures": {
+        "gui_probe": "null",
+        "restart": "failed",
+        "directory": "failed"
+      },
+      "impact_scope": "初期formal runnerの修正前。"
+    },
+    {
+      "series_id_prefix": "021f976",
+      "source_commit_sha": "021f976fe7ed7dc5a4ee17dabdd19a8effdd0ca2",
+      "reason": "Windows PowerShell 5.1のArgumentList null互換性によりrunnerが失敗。",
+      "observed_failures": {
+        "runner": "ArgumentList null"
+      },
+      "impact_scope": "measurement wrapper互換性修正前。"
+    },
+    {
+      "series_id_prefix": "082929c",
+      "source_commit_sha": "082929cd4a60c3acd5c683679df8657f0ebf62be",
+      "reason": "GUI startup p95約2.13秒でHARD超過。",
+      "observed_failures": {
+        "gui_startup_p95_ms": "~2130"
+      },
+      "impact_scope": "GUI起動初期化修正前。"
+    },
+    {
+      "series_id_prefix": "89d15df",
+      "source_commit_sha": "89d15dff0514c80ef7a91576255d5bec22860df7",
+      "reason": "CHURN private memory約2.434GBでHARD超過。",
+      "observed_failures": {
+        "churn_private_gb": "~2.434"
+      },
+      "impact_scope": "reconcile/reduce memory修正前。"
+    },
+    {
+      "series_id_prefix": "c2356b2",
+      "source_commit_sha": "c2356b263200d51a845a287d4fd5d20b10ecf319",
+      "reason": "CHURN private memory約2.038640640GBでHARD超過。",
+      "observed_failures": {
+        "churn_private_gb": "~2.038640640"
+      },
+      "impact_scope": "reconcile静止窓修正前。"
+    },
+    {
+      "series_id_prefix": "38b1c23",
+      "source_commit_sha": "38b1c231554e2e4d5c430efdf261a4b954bbbb46",
+      "reason": "CHURN private memory約2.038GBでHARD超過。",
+      "observed_failures": {
+        "churn_private_gb": "~2.038"
+      },
+      "impact_scope": "streaming reconcile修正前。"
+    },
+    {
+      "series_id_prefix": "6fcca4c",
+      "source_commit_sha": "6fcca4cb683ba753f14bda3dfd67b69d1f5bcf79",
+      "reason": "stale churn fixture collisionとGUI問題が残ったため。",
+      "observed_failures": {
+        "churn_fixture": "stale_collision",
+        "gui": "failed"
+      },
+      "impact_scope": "series fixture cleanup修正前。"
+    }
+  ],
+  "rules": {
+    "conditions_relaxed": false,
+    "thresholds_changed": false,
+    "query_oracle_changed": false,
+    "seed_changed": false,
+    "partial_result_reuse": false,
+    "invalidated_on_source_or_harness_change": true
+  },
+  "note": "一覧のseriesは正式aggregateから除外した。完全なseries_idが当時のrawで保存されていない履歴はseries_id_prefixとして記録し、source commitと観測FAILを根拠にした。現seriesの測定結果は同一FORMAL_SERIES_LOCKのsource commitから再実行したものだけで構成する。",
+  "pass": true
+}
