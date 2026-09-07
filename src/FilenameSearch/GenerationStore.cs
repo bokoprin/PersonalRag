@@ -338,7 +338,12 @@ internal sealed class GenerationStore : IDisposable
         foreach (string file in Directory.EnumerateFiles(dataDir)) if (!names.Contains(Path.GetFileName(file))) TryDelete(file);
     }
     private static long TryLength(string path) { try { return new FileInfo(path).Length; } catch { return 0; } }
-    private static string ShaFile(string path) { using var s = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(s)).ToLowerInvariant(); }
+    private static string ShaFile(string path)
+    {
+        using var s = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.Read | FileShare.Delete, 1 << 20, FileOptions.SequentialScan);
+        return Convert.ToHexString(SHA256.HashData(s)).ToLowerInvariant();
+    }
     private static string Sha(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     private static void Flush(string path) { using var s = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read); s.Flush(true); }
     private static void TryDelete(string path) { try { if (File.Exists(path)) File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { } }

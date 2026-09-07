@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Text;
 using CoreFileRecord = FilenameSearch.Core.FileRecord;
 using CoreQuery = FilenameSearch.Core.FilenameQuery;
@@ -369,12 +370,20 @@ public sealed class FilenameSearchEngine : IFilenameSearch
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(indexPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(metadataPath);
-        RouteCEngine? next = new RouteCEngine();
+        RouteCEngine? next = null;
         ExactTable? table = null;
+        Task<RouteCEngine> routeTask = Task.Run(() =>
+        {
+            var loaded = new RouteCEngine();
+            try { loaded.Load(Path.GetFullPath(indexPath)); return loaded; }
+            catch { loaded.Dispose(); throw; }
+        });
+        Task<ExactTable> metadataTask = Task.Run(() => ExactTable.Load(Path.GetFullPath(metadataPath), out _));
         try
         {
-            next.Load(Path.GetFullPath(indexPath));
-            table = ExactTable.Load(Path.GetFullPath(metadataPath), out _);
+            Task.WaitAll(routeTask, metadataTask);
+            next = routeTask.Result;
+            table = metadataTask.Result;
             int[] routeIds = next.FileIds.ToArray();
             if (!table.Ids.AsSpan().SequenceEqual(routeIds))
                 throw new InvalidDataException("Route C base/index metadata identity mismatch");
@@ -391,6 +400,14 @@ public sealed class FilenameSearchEngine : IFilenameSearch
             }
             next = null;
             table = null;
+        }
+        catch (AggregateException ex)
+        {
+            // Preserve the original failure type for GenerationStore's fail-safe rebuild
+            // path while disposing whichever independent load completed successfully.
+            if (routeTask.Status == TaskStatus.RanToCompletion) routeTask.Result.Dispose();
+            if (metadataTask.Status == TaskStatus.RanToCompletion) metadataTask.Result.Dispose();
+            throw ex.Flatten().InnerExceptions[0];
         }
         finally
         {
@@ -592,7 +609,7 @@ public sealed class FilenameSearchEngine : IFilenameSearch
                 FileShare.Read | FileShare.Delete, 1 << 20, FileOptions.SequentialScan);
             using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
             string magic = reader.ReadString();
-            if (magic == "PRFMETA5") return LoadCompact(reader, stream, out count);
+            if (magic == "PRFMETA5") return LoadCompactFast(path, out count);
             if (magic is not ("PRFMETA3" or "PRFMETA4")) throw new InvalidDataException("Filename metadata header mismatch");
             bool hasPathHashes = magic == "PRFMETA4";
             count = reader.ReadInt32();
@@ -674,14 +691,25 @@ public sealed class FilenameSearchEngine : IFilenameSearch
                 throw new InvalidDataException("Filename metadata string length encoding invalid");
             }
 
-            static ExactTable LoadCompact(BinaryReader reader, Stream stream, out int count)
+            // PRFMETA5 is the production format and has a fixed-width record section.  
+            // Decode it from one sequential byte buffer instead of issuing roughly ten
+            // million BinaryReader calls and growing two intermediate blob buffers.  The
+            // loaded table keeps one backing array for both exact UTF-8 blobs; offsets are
+            // translated to absolute positions after all structural checks complete.
+            static ExactTable LoadCompactFast(string path, out int count)
             {
-                count = reader.ReadInt32();
+                byte[] data = File.ReadAllBytes(path);
+                int offset = 0;
+                string magic = ReadString(data, ref offset);
+                if (!magic.Equals("PRFMETA5", StringComparison.Ordinal))
+                    throw new InvalidDataException("Filename metadata header mismatch");
+                count = ReadInt32(data, ref offset);
                 if (count < 0 || count > 20_000_000) throw new InvalidDataException("Filename metadata count invalid");
-                int volumeCount = reader.ReadInt32();
+                int volumeCount = ReadInt32(data, ref offset);
                 if (volumeCount < 0 || volumeCount > 256) throw new InvalidDataException("Filename metadata volume count invalid");
                 var volumes = new string[volumeCount];
-                for (int i = 0; i < volumes.Length; i++) volumes[i] = reader.ReadString();
+                for (int i = 0; i < volumes.Length; i++) volumes[i] = ReadString(data, ref offset);
+
                 var ids = new int[count]; int maxId = 0, previousId = int.MinValue;
                 var parentIds = new int[count]; var hasParent = new bool[count]; var hasParentKey = new bool[count];
                 var keys = new FileKey[count]; var parentKeys = new FileKey[count]; var sizes = new ulong[count];
@@ -690,42 +718,102 @@ public sealed class FilenameSearchEngine : IFilenameSearch
                 var pathOffsets = new int[count]; var pathLengths = new int[count];
                 for (int i = 0; i < count; i++)
                 {
-                    int id = reader.ReadInt32();
+                    int id = ReadInt32(data, ref offset);
                     if (id <= previousId) throw new InvalidDataException("Filename metadata ids are not strictly increasing");
                     previousId = id; ids[i] = id; maxId = Math.Max(maxId, id);
-                    parentIds[i] = reader.ReadInt32(); hasParent[i] = reader.ReadBoolean();
-                    keys[i] = ReadCompactKey(reader, volumes);
-                    hasParentKey[i] = reader.ReadBoolean();
-                    if (hasParentKey[i]) parentKeys[i] = ReadCompactKey(reader, volumes);
-                    sizes[i] = reader.ReadUInt64(); ticks[i] = reader.ReadInt64(); flags[i] = reader.ReadByte();
-                    pathHashes[i] = reader.ReadUInt64();
-                    nameOffsets[i] = reader.ReadInt32(); nameLengths[i] = reader.ReadInt32();
-                    pathOffsets[i] = reader.ReadInt32(); pathLengths[i] = reader.ReadInt32();
+                    parentIds[i] = ReadInt32(data, ref offset); hasParent[i] = ReadBoolean(data, ref offset);
+                    keys[i] = ReadCompactKey(data, ref offset, volumes);
+                    hasParentKey[i] = ReadBoolean(data, ref offset);
+                    if (hasParentKey[i]) parentKeys[i] = ReadCompactKey(data, ref offset, volumes);
+                    sizes[i] = ReadUInt64(data, ref offset); ticks[i] = ReadInt64(data, ref offset); flags[i] = ReadByte(data, ref offset);
+                    pathHashes[i] = ReadUInt64(data, ref offset);
+                    nameOffsets[i] = ReadInt32(data, ref offset); nameLengths[i] = ReadInt32(data, ref offset);
+                    pathOffsets[i] = ReadInt32(data, ref offset); pathLengths[i] = ReadInt32(data, ref offset);
                 }
-                int nameBytesLength = reader.ReadInt32(), pathBytesLength = reader.ReadInt32();
+                int nameBytesLength = ReadInt32(data, ref offset), pathBytesLength = ReadInt32(data, ref offset);
                 if (nameBytesLength < 0 || pathBytesLength < 0 || nameBytesLength > 2_000_000_000 || pathBytesLength > 2_000_000_000)
                     throw new InvalidDataException("Filename metadata blob length invalid");
-                byte[] nameBytes = reader.ReadBytes(nameBytesLength), pathBytes = reader.ReadBytes(pathBytesLength);
-                if (nameBytes.Length != nameBytesLength || pathBytes.Length != pathBytesLength || stream.Position != stream.Length)
-                    throw new InvalidDataException("Filename metadata blob is truncated");
+                int nameStart = offset;
+                EnsureAvailable(data, offset, nameBytesLength);
+                offset = checked(offset + nameBytesLength);
+                int pathStart = offset;
+                EnsureAvailable(data, offset, pathBytesLength);
+                offset = checked(offset + pathBytesLength);
+                if (offset != data.Length) throw new InvalidDataException("Filename metadata blob is truncated");
                 for (int i = 0; i < count; i++)
                 {
                     if (nameOffsets[i] < 0 || nameLengths[i] < 0 || pathOffsets[i] < 0 || pathLengths[i] < 0 ||
                         nameOffsets[i] > nameBytesLength - nameLengths[i] || pathOffsets[i] > pathBytesLength - pathLengths[i])
                         throw new InvalidDataException("Filename metadata string bounds invalid");
+                    nameOffsets[i] = checked(nameStart + nameOffsets[i]);
+                    pathOffsets[i] = checked(pathStart + pathOffsets[i]);
                 }
                 var idToIndex = new int[checked(maxId + 1)];
                 for (int i = 0; i < ids.Length; i++) idToIndex[ids[i]] = i + 1;
                 return new ExactTable(ids, idToIndex, parentIds, hasParent, hasParentKey, keys, parentKeys, sizes, ticks, flags,
-                    nameOffsets, nameLengths, pathOffsets, pathLengths, nameBytes, pathBytes, pathHashes);
+                    nameOffsets, nameLengths, pathOffsets, pathLengths, data, data, pathHashes);
+
+                static int ReadInt32(byte[] data, ref int offset)
+                {
+                    EnsureAvailable(data, offset, sizeof(int));
+                    int value = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset, sizeof(int)));
+                    offset += sizeof(int); return value;
+                }
+                static long ReadInt64(byte[] data, ref int offset)
+                {
+                    EnsureAvailable(data, offset, sizeof(long));
+                    long value = BinaryPrimitives.ReadInt64LittleEndian(data.AsSpan(offset, sizeof(long)));
+                    offset += sizeof(long); return value;
+                }
+                static ulong ReadUInt64(byte[] data, ref int offset)
+                {
+                    EnsureAvailable(data, offset, sizeof(ulong));
+                    ulong value = BinaryPrimitives.ReadUInt64LittleEndian(data.AsSpan(offset, sizeof(ulong)));
+                    offset += sizeof(ulong); return value;
+                }
+                static byte ReadByte(byte[] data, ref int offset)
+                {
+                    EnsureAvailable(data, offset, 1); return data[offset++];
+                }
+                static bool ReadBoolean(byte[] data, ref int offset) => ReadByte(data, ref offset) != 0;
+                static string ReadString(byte[] data, ref int offset)
+                {
+                    int length = Read7BitInt(data, ref offset);
+                    if (length < 0 || length > 1_000_000) throw new InvalidDataException("Filename metadata string length invalid");
+                    EnsureAvailable(data, offset, length);
+                    string value = Encoding.UTF8.GetString(data, offset, length);
+                    offset += length; return value;
+                }
+                static int Read7BitInt(byte[] data, ref int offset)
+                {
+                    uint value = 0;
+                    for (int shift = 0; shift < 35; shift += 7)
+                    {
+                        byte next = ReadByte(data, ref offset);
+                        value |= (uint)(next & 0x7F) << shift;
+                        if ((next & 0x80) == 0)
+                        {
+                            if (value > int.MaxValue) throw new InvalidDataException("Filename metadata string length encoding invalid");
+                            return (int)value;
+                        }
+                    }
+                    throw new InvalidDataException("Filename metadata string length encoding invalid");
+                }
+                static FileKey ReadCompactKey(byte[] data, ref int offset, IReadOnlyList<string> volumes)
+                {
+                    int volume = ReadInt32(data, ref offset);
+                    if ((uint)volume >= (uint)volumes.Count) throw new InvalidDataException("Filename metadata volume index invalid");
+                    ulong nativeId = ReadUInt64(data, ref offset);
+                    bool native = ReadBoolean(data, ref offset);
+                    return new FileKey(volumes[volume], nativeId, native);
+                }
+                static void EnsureAvailable(byte[] data, int offset, int length)
+                {
+                    if (offset < 0 || length < 0 || offset > data.Length - length)
+                        throw new EndOfStreamException();
+                }
             }
 
-            static FileKey ReadCompactKey(BinaryReader reader, IReadOnlyList<string> volumes)
-            {
-                int volume = reader.ReadInt32();
-                if ((uint)volume >= (uint)volumes.Count) throw new InvalidDataException("Filename metadata volume index invalid");
-                return new FileKey(volumes[volume], reader.ReadUInt64(), reader.ReadBoolean());
-            }
         }
 
         public int MaxId => ids.Length == 0 ? 0 : ids[^1];

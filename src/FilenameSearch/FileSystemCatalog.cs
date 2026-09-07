@@ -152,7 +152,13 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 if (loaded)
                 {
                     catalog.generation = persisted;
-                    catalog.LoadExistingRecords(deferBasePathIndexBuild);
+                    // Keep the one-time million-entry path map out of the synchronous
+                    // persisted-load critical path.  Ready/search semantics do not require
+                    // this map (the immutable engine serves queries directly), while the
+                    // watcher worker already waits on the same completion barrier before
+                    // processing catch-up events.  StartBasePathIndexBuild is triggered by
+                    // the first search, an idle wait, or disposal.
+                    catalog.LoadExistingRecords(deferBasePathIndexBuild: true);
                 }
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException)
@@ -186,10 +192,10 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         FilenameSearchResult result;
         try { result = engine.Search(request); }
         finally { engineGate.ExitReadLock(); }
-        // Immediate searches by non-GUI consumers release the update worker's idle
-        // barrier.  The GUI can defer this one-time task until after its first useful
-        // result so cold WPF startup is not contending with path-index construction.
-        if (Volatile.Read(ref deferBasePathIndex) == 0) StartBasePathIndexBuild();
+        // The first useful search releases the update worker's idle barrier.  This is
+        // deliberately unconditional: persisted opens defer the one-time path-map copy
+        // until after Ready, and the GUI uses the same post-result trigger.
+        StartBasePathIndexBuild();
         return result;
     }
 
