@@ -215,6 +215,12 @@ public partial class MainWindow : Window
     {
         try
         {
+            // Initial store opening may still be replaying a persisted watcher gap after
+            // the first useful batch is shown.  Warm-input samples describe steady user
+            // interaction, so drain that already-visible catch-up before starting the
+            // fixed 20-round sequence; the separate startup probe measures the first batch.
+            if (catalog is FileSystemCatalog one)
+                await one.WaitForIdleAsync(TimeSpan.FromMinutes(5));
             GuiProbeQuery[] queries =
             [
                 new("fixture_", SearchScope.Filename),

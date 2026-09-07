@@ -114,6 +114,22 @@ try
             Check(addedBatch.SourceGeneration > 0, "typed added event reports source generation");
         }
 
+        string createdDirectory = Path.Combine(root, "live-created-directory");
+        Directory.CreateDirectory(createdDirectory);
+        await Until(() => catalog.Search(new SearchRequest("live-created-directory")).Records
+            .Any(record => record.IsDirectory), "directory create convergence");
+        await Until(() =>
+        {
+            lock (changeBatches)
+                return changeBatches.Any(batch => batch.Changes.Any(change =>
+                    change.Kind == CatalogChangeKind.Added &&
+                    change.After is { IsDirectory: true } after &&
+                    after.FullPath.Equals(createdDirectory, StringComparison.Ordinal)));
+        }, "typed directory added event");
+        Directory.Delete(createdDirectory);
+        await Until(() => catalog.Search(new SearchRequest("live-created-directory")).Records.Count == 0,
+            "directory delete convergence");
+
         string renamed = Path.Combine(root, "live-renamed.md");
         File.Move(unrelated, renamed);
         await Until(() => catalog.Search(new SearchRequest("live-renamed")).Records.Count == 1 &&

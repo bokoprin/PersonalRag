@@ -374,7 +374,33 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         if (IsExcluded(path)) return changes;
         if (Directory.Exists(path))
         {
-            if (kind != FileSystemEventKind.Changed) ScheduleDirectoryReconcile();
+            // A newly-created directory is itself a complete metadata record. Publish it
+            // immediately so live consumers do not wait for a million-entry reconcile just
+            // because the watcher also reports the directory boundary.  A delayed reconcile
+            // still covers children whose notifications were coalesced or dropped.
+            if (kind == FileSystemEventKind.Changed) return changes;
+            lock (gate)
+            {
+                TryGetPathLocked(path, out FilenameRecord? old);
+                FilenameRecord? next = TryReadRecord(path, old?.FileId ?? AllocateId());
+                if (next is null)
+                {
+                    Interlocked.Exchange(ref forceReconcile, 1);
+                    return changes;
+                }
+                next = AttachParent(next);
+                if (old is not null && Equivalent(old, next))
+                {
+                    ScheduleDirectoryReconcile();
+                    return changes;
+                }
+                AddPathLocked(next);
+                mutableRecords[next.FileId] = next;
+                engine.Upsert(next);
+                changes.Add(new(old is null ? CatalogChangeKind.Added : CatalogChangeKind.Updated,
+                    next.Key, old, next));
+            }
+            ScheduleDirectoryReconcile();
             return changes;
         }
         lock (gate)

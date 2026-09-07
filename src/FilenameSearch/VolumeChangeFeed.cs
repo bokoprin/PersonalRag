@@ -37,8 +37,7 @@ internal sealed class WatcherVolumeChangeFeed : IVolumeChangeFeed
         };
         watcher.Created += (_, args) => Changed?.Invoke(new FileSystemEvent(
             args.FullPath,
-            Kind: FileSystemEventKind.Created,
-            Reconcile: Directory.Exists(args.FullPath)));
+            Kind: FileSystemEventKind.Created));
         watcher.Changed += (_, args) => Changed?.Invoke(new FileSystemEvent(
             args.FullPath,
             Kind: FileSystemEventKind.Changed));
@@ -105,8 +104,7 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
         };
         watcher.Created += (_, args) => Changed?.Invoke(new FileSystemEvent(
             args.FullPath,
-            Kind: FileSystemEventKind.Created,
-            Reconcile: Directory.Exists(args.FullPath)));
+            Kind: FileSystemEventKind.Created));
         watcher.Changed += (_, args) => Changed?.Invoke(new FileSystemEvent(
             args.FullPath,
             Kind: FileSystemEventKind.Changed));
@@ -331,7 +329,7 @@ internal sealed class UsnVolumeChangeFeed : IVolumeChangeFeed
             else if (ParentPath(parentId) is string parent && PathIdentity.IsSameOrChild(root, parent))
             {
                 string path = Path.Combine(parent, name);
-                Emit(new FileSystemEvent(path, Kind: FileSystemEventKind.Created, Reconcile: isDirectory));
+                Emit(new FileSystemEvent(path, Kind: FileSystemEventKind.Created));
                 pathsById[fileId] = [path];
             }
         }
