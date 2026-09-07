@@ -1121,11 +1121,18 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             nextId = Math.Max(nextId, engine.MaxFileId == int.MaxValue ? int.MaxValue : engine.MaxFileId + 1);
             recordCount = count;
         }
-        basePathIndexReady = Task.Factory.StartNew(
-            BuildLoadedBasePathIndex,
-            CancellationToken.None,
-            TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
-            TaskScheduler.Default);
+        // Existing GUI startup can publish its first useful search while the persisted
+        // Route C metadata is already available.  Starting the million-entry path hash
+        // copy at the same instant contends with that cold first search and makes the
+        // actual child-process startup sample sensitive to disk/JIT warm-up.  Give the
+        // first result a short, deterministic head start; callers that need settled
+        // filesystem state (WaitForIdleAsync) still await the same task and therefore
+        // observe no semantic change in reconciliation or change-feed ordering.
+        basePathIndexReady = Task.Run(async () =>
+        {
+            await Task.Delay(1500).ConfigureAwait(false);
+            BuildLoadedBasePathIndex();
+        });
     }
 
     private void BuildLoadedBasePathIndex()
