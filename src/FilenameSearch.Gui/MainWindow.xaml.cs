@@ -33,6 +33,8 @@ public partial class MainWindow : Window
     private bool probeDrivingQuery;
     private bool ready;
     private bool closing;
+    private double lastCoreSearchElapsedMs;
+    private double lastRowsReplaceElapsedMs;
 
     public MainWindow(
         string? root = null,
@@ -145,7 +147,11 @@ public partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
             if (version != Volatile.Read(ref searchVersion) || closing) return;
 
+            Stopwatch rowsWatch = Stopwatch.StartNew();
             rows.ReplaceAll(result.Records.Select(record => new ResultRow(record)));
+            rowsWatch.Stop();
+            Volatile.Write(ref lastRowsReplaceElapsedMs, rowsWatch.Elapsed.TotalMilliseconds);
+            Volatile.Write(ref lastCoreSearchElapsedMs, result.ElapsedMs);
             Summary.Text = $"{rows.Count:N0}件表示 · {result.ElapsedMs:F1} ms";
             SetStatus($"{current.Status} · {current.RecordCount:N0} entries · gen {current.Generation:N0}");
             WriteStartupProbeOnce();
@@ -236,6 +242,10 @@ public partial class MainWindow : Window
             GuiProbeQuery[] order = queries.OrderBy(_ => random.Next()).ToArray();
             var warmup = new List<double>();
             var measured = new List<double>();
+            var coreMeasured = new List<double>();
+            var rowsMeasured = new List<double>();
+            var gcMeasured = new List<int[]>();
+            int gc0Before = GC.CollectionCount(0), gc1Before = GC.CollectionCount(1), gc2Before = GC.CollectionCount(2);
             for (int round = 0; round < 20; round++)
             {
                 foreach (GuiProbeQuery query in order)
@@ -251,6 +261,12 @@ public partial class MainWindow : Window
                     finally { probeDrivingQuery = false; }
                     watch.Stop();
                     (round < 2 ? warmup : measured).Add(watch.Elapsed.TotalMilliseconds);
+                    if (round >= 2) coreMeasured.Add(Volatile.Read(ref lastCoreSearchElapsedMs));
+                    if (round >= 2)
+                    {
+                        rowsMeasured.Add(Volatile.Read(ref lastRowsReplaceElapsedMs));
+                        gcMeasured.Add([GC.CollectionCount(0) - gc0Before, GC.CollectionCount(1) - gc1Before, GC.CollectionCount(2) - gc2Before]);
+                    }
                 }
             }
             using Process process = Process.GetCurrentProcess();
@@ -260,7 +276,8 @@ public partial class MainWindow : Window
             {
                 version = 1, mode = "warm-input", source_commit = SourceCommit(), benchmark_rounds = 20,
                 warmup_rounds = 2, measured_rounds = 18, query_shuffle_seed = 123456,
-                warmup_samples_ms = warmup, measured_samples_ms = measured,
+                warmup_samples_ms = warmup, measured_samples_ms = measured, core_search_samples_ms = coreMeasured,
+                rows_replace_samples_ms = rowsMeasured, gc_deltas = gcMeasured,
                 p50_ms = Percentile(measured, .50), p95_ms = p95, p99_ms = p99, max_ms = max,
                 private_bytes = process.PrivateMemorySize64, entries = catalog?.RecordCount ?? 0,
                 pass = p95 <= 100 && max <= 200, utc = DateTime.UtcNow
@@ -274,10 +291,28 @@ public partial class MainWindow : Window
     {
         string? fixture = null;
         string? renamed = null;
+        string? directory = null;
+        var changeTrace = new List<object>();
+        object traceGate = new();
+        DateTime traceStarted = DateTime.UtcNow;
+        void Trace(CatalogChangeBatch batch)
+        {
+            lock (traceGate)
+                changeTrace.Add(new { ms = (DateTime.UtcNow - traceStarted).TotalMilliseconds,
+                    generation = batch.Generation, reconciled = batch.Reconciled,
+                    changes = batch.Changes.Select(change => new { kind = change.Kind.ToString(), path = change.After?.FullPath ?? change.Before?.FullPath }).ToArray() });
+        }
         try
         {
             string root = catalog is FileSystemCatalog one ? one.Root : rootOverride ?? throw new InvalidOperationException("live probe requires a single root catalog");
-            string directory = Path.Combine(root, ".formal-gui-live");
+            // Keep startup catch-up separate from the live-refresh sample.  A newly-opened
+            // store may still be reconciling a watcher gap after the first useful batch;
+            // user edits are measured once that initial catalog work has settled.
+            if (catalog is FileSystemCatalog settled)
+                await settled.WaitForIdleAsync(TimeSpan.FromMinutes(5));
+            catalog!.Changed += Trace;
+            traceStarted = DateTime.UtcNow;
+            directory = Path.Combine(root, ".formal-gui-live-" + Environment.ProcessId);
             Directory.CreateDirectory(directory);
             string stem = "gui_live_probe_" + Environment.ProcessId;
             fixture = Path.Combine(directory, stem + ".txt");
@@ -300,14 +335,17 @@ public partial class MainWindow : Window
             File.Delete(renamed);
             await UntilUiAsync(() => rows.Count == 0, "GUI live delete");
             deleteWatch.Stop();
-            WriteProbeJson(new { version = 1, mode = "live-refresh", source_commit = SourceCommit(), create_ms = createWatch.Elapsed.TotalMilliseconds, rename_ms = renameWatch.Elapsed.TotalMilliseconds, delete_ms = deleteWatch.Elapsed.TotalMilliseconds, pass = createWatch.Elapsed.TotalMilliseconds <= 1000 && renameWatch.Elapsed.TotalMilliseconds <= 1000 && deleteWatch.Elapsed.TotalMilliseconds <= 1000, utc = DateTime.UtcNow });
+            lock (traceGate)
+                WriteProbeJson(new { version = 1, mode = "live-refresh", source_commit = SourceCommit(), create_ms = createWatch.Elapsed.TotalMilliseconds, rename_ms = renameWatch.Elapsed.TotalMilliseconds, delete_ms = deleteWatch.Elapsed.TotalMilliseconds, pass = createWatch.Elapsed.TotalMilliseconds <= 1000 && renameWatch.Elapsed.TotalMilliseconds <= 1000 && deleteWatch.Elapsed.TotalMilliseconds <= 1000, change_trace = changeTrace.ToArray(), utc = DateTime.UtcNow });
         }
-        catch (Exception ex) { WriteProbeJson(new { version = 1, mode = "live-refresh", source_commit = SourceCommit(), pass = false, error = ex.ToString(), utc = DateTime.UtcNow }); }
+        catch (Exception ex) { lock (traceGate) WriteProbeJson(new { version = 1, mode = "live-refresh", source_commit = SourceCommit(), pass = false, error = ex.ToString(), change_trace = changeTrace.ToArray(), utc = DateTime.UtcNow }); }
         finally
         {
+            if (catalog is not null) catalog.Changed -= Trace;
             probeDrivingQuery = false;
             if (fixture is not null) { try { if (File.Exists(fixture)) File.Delete(fixture); } catch { } }
             if (renamed is not null) { try { if (File.Exists(renamed)) File.Delete(renamed); } catch { } }
+            if (directory is not null) { try { if (Directory.Exists(directory) && !new DirectoryInfo(directory).EnumerateFileSystemInfos().Any()) Directory.Delete(directory); } catch { } }
             CloseAfterProbe();
         }
     }

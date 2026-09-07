@@ -33,6 +33,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private readonly Dictionary<ulong, int> pathIds = [];
     private readonly Dictionary<ulong, List<int>> pathCollisions = [];
     private readonly Dictionary<FileKey, (FilenameRecord Record, DateTime ExpiresUtc)> pendingDeletes = [];
+    private readonly ConcurrentDictionary<string, byte> metadataRetries = new(StringComparer.OrdinalIgnoreCase);
     // The immutable base uses sorted flat arrays instead of a million-entry Dictionary.
     // pathIds/pathCollisions are reserved for the small live overlay and tombstones.
     private ulong[] basePathHashes = [];
@@ -180,7 +181,18 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         {
             cts.Token.ThrowIfCancellationRequested();
             if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 &&
-                Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0) return;
+                Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0)
+            {
+                // Existing stores publish Ready before the asynchronous compact path index
+                // is available.  A caller that starts querying immediately after Ready
+                // would then contend with the million-entry hash copy in ForEachPathHash.
+                // Treat that one-time index build as part of idle so startup probes and live
+                // consumers observe a genuinely settled catalog.
+                await basePathIndexReady.WaitAsync(cts.Token).ConfigureAwait(false);
+                if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 &&
+                    Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0)
+                    return;
+            }
             await Task.Delay(20, cts.Token).ConfigureAwait(false);
         }
     }
@@ -253,6 +265,17 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                     IReadOnlyList<CatalogChange> changes;
                     if (reconcile)
                     {
+                        // A delayed directory reconcile can share a batch with ordinary
+                        // child events. Apply those direct events first and publish them
+                        // before the authoritative scan; otherwise a live consumer would
+                        // wait for the full 1M-entry reconcile even though the changed file
+                        // metadata is already available.
+                        FileSystemEvent[] direct = batch.Where(e => !e.Reconcile && !e.CatchUp).ToArray();
+                        if (direct.Length != 0)
+                        {
+                            IReadOnlyList<CatalogChange> directChanges = ProcessEvents(direct);
+                            if (directChanges.Count != 0) Publish(directChanges, reconciled: false);
+                        }
                         // A saturated watcher queue already means the filesystem scan is
                         // the authoritative event set. Drain markers/events and wait for a
                         // short quiet window so one storm cannot retain a million-record
@@ -385,7 +408,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 FilenameRecord? next = TryReadRecord(path, old?.FileId ?? AllocateId());
                 if (next is null)
                 {
-                    Interlocked.Exchange(ref forceReconcile, 1);
+                    ScheduleMetadataRetry(path, kind);
                     return changes;
                 }
                 next = AttachParent(next);
@@ -409,7 +432,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             {
                 TryGetPathLocked(path, out FilenameRecord? old);
                 FilenameRecord? next = TryReadRecord(path, old?.FileId ?? AllocateId());
-                if (next is null) { Interlocked.Exchange(ref forceReconcile, 1); return changes; }
+                if (next is null) { ScheduleMetadataRetry(path, kind); return changes; }
                 if (old is null && next.Key.IsNative && TryTakePendingDelete(next.Key, out FilenameRecord? movedFrom))
                 {
                     next = AttachParent(next with { FileId = movedFrom!.FileId });
@@ -442,10 +465,39 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 // the Created notification may arrive before the destination is
                 // openable.  Do not drop that event; bounded reconcile pairs the
                 // native FileKey and publishes the move once the entry settles.
-                Interlocked.Exchange(ref forceReconcile, 1);
+                ScheduleMetadataRetry(path, kind);
             }
         }
         return changes;
+    }
+
+    private void ScheduleMetadataRetry(string path, FileSystemEventKind kind)
+    {
+        path = Path.GetFullPath(path);
+        if (!metadataRetries.TryAdd(path, 0)) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                for (int attempt = 0; attempt < 6; attempt++)
+                {
+                    await Task.Delay(50, stop.Token).ConfigureAwait(false);
+                    if (disposed) return;
+                    if (File.Exists(path) || Directory.Exists(path))
+                    {
+                        Queue(new FileSystemEvent(path, Kind: kind));
+                        return;
+                    }
+                }
+                if (!disposed)
+                {
+                    Interlocked.Exchange(ref forceReconcile, 1);
+                    SignalReconcile();
+                }
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+            finally { metadataRetries.TryRemove(path, out _); }
+        });
     }
 
     private void Publish(IReadOnlyList<CatalogChange> changes, bool reconciled)
@@ -551,18 +603,31 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private void ScheduleDirectoryReconcile()
     {
         if (Interlocked.Exchange(ref directoryReconcileScheduled, 1) != 0) return;
-        Schedule(2_000);
-
-        void Schedule(int delayMs) => _ = Task.Run(async () =>
+        // Give child notifications a chance to arrive and be published directly.  The
+        // timer is measured from the last filesystem event rather than from the directory
+        // event itself, so a create/rename/delete sequence cannot be interrupted by the
+        // fallback 1M scan.  If notifications are missing, the quiet window still expires
+        // and the authoritative reconcile restores the subtree.
+        _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(delayMs, stop.Token).ConfigureAwait(false);
-                Interlocked.Exchange(ref directoryReconcileScheduled, 0);
-                if (!disposed)
+                const int quietMilliseconds = 10_000;
+                while (true)
                 {
-                    Interlocked.Exchange(ref forceReconcile, 1);
-                    SignalReconcile();
+                    long quietFor = Environment.TickCount64 - Volatile.Read(ref lastEventTick);
+                    int delay = (int)Math.Clamp(quietMilliseconds - quietFor, 100, quietMilliseconds);
+                    await Task.Delay(delay, stop.Token).ConfigureAwait(false);
+                    if (Volatile.Read(ref pendingEvents) != 0) continue;
+                    quietFor = Environment.TickCount64 - Volatile.Read(ref lastEventTick);
+                    if (quietFor < quietMilliseconds) continue;
+                    Interlocked.Exchange(ref directoryReconcileScheduled, 0);
+                    if (!disposed)
+                    {
+                        Interlocked.Exchange(ref forceReconcile, 1);
+                        SignalReconcile();
+                    }
+                    return;
                 }
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
