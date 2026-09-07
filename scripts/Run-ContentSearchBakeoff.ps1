@@ -64,7 +64,7 @@ $oracleResults = @{}
 foreach ($corpusName in @("SOURCE_CONFIG", "LOG", "HUGE")) {
     $corpusRoot = Join-Path $formalRoot $corpusName
     $oraclePath = Join-Path $oracleDir ($corpusName + ".json")
-    $oracleResult = Invoke-Captured ("01-oracle-" + $corpusName) "python" @($oracle, "--root", $corpusRoot, "--query-set", $querySet, "--output", $oraclePath) $logRoot
+    $oracleResult = Invoke-Captured ("01-oracle-" + $corpusName) "python" @($oracle, "--root", $corpusRoot, "--query-set", $querySet, "--output", $oraclePath, "--generated-corpus") $logRoot
     if ($oracleResult.exitCode -ne 0) { throw "Oracle failed: $($oracleResult.logPath)" }
     $oracleResults[$corpusName] = $oraclePath
 }

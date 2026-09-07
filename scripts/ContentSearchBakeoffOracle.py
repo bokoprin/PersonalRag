@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import multiprocessing
+import subprocess
 import unicodedata
 from pathlib import Path
 
@@ -83,6 +84,33 @@ def signature(path: Path, offset: int, length: int) -> dict:
 
 def scan_file(path: Path, queries: list[dict], compiled: dict[str, re.Pattern[str] | None], folded_needles: dict[str, str], sensitive_queries: list[tuple[str, str]]) -> dict[str, set[tuple[str, int, int]]]:
     results: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
+    data = path.read_bytes()
+    # Most generated files are ASCII filler.  Search those bytes directly so
+    # the oracle does not allocate a Unicode fold map for half a million files.
+    ascii_only = data.isascii() and not data.startswith((b"\xff\xfe", b"\xfe\xff"))
+    if ascii_only:
+        lowered = data.lower()
+        for q in queries:
+            key = query_key(q)
+            if q.get("mode", "Substring").lower() == "regex" and all(ord(c) < 128 for c in q["text"]):
+                flags = re.IGNORECASE if not q.get("caseSensitive", False) else 0
+                matcher = re.compile(q["text"].encode("ascii"), flags)
+                for match in matcher.finditer(data):
+                    results[key].add((str(path.resolve()), match.start(), max(1, len(match.group(0)))))
+            elif q.get("mode", "Substring").lower() == "substring" and all(ord(c) < 128 for c in q["text"]):
+                needle = q["text"].encode("ascii")
+                haystack = data if q.get("caseSensitive", False) else lowered
+                needle = needle if q.get("caseSensitive", False) else needle.lower()
+                cursor = 0
+                while needle:
+                    hit = haystack.find(needle, cursor)
+                    if hit < 0:
+                        break
+                    results[key].add((str(path.resolve()), hit, max(1, len(needle))))
+                    cursor = hit + max(1, len(needle))
+        # No non-ASCII query can match an ASCII-only document.
+        return results
+
     text = decode(path)
     if text is None:
         return results
@@ -130,8 +158,8 @@ def scan_file(path: Path, queries: list[dict], compiled: dict[str, re.Pattern[st
     return results
 
 
-def scan_directory(argument: tuple[str, list[dict]]) -> dict[str, list[tuple[str, int, int]]]:
-    directory_name, queries = argument
+def scan_directory(argument: tuple[list[str], list[dict]]) -> dict[str, list[tuple[str, int, int]]]:
+    path_names, queries = argument
     compiled: dict[str, re.Pattern[str] | None] = {}
     folded_needles: dict[str, str] = {}
     sensitive_queries: list[tuple[str, str]] = []
@@ -145,16 +173,45 @@ def scan_directory(argument: tuple[str, list[dict]]) -> dict[str, list[tuple[str
         else:
             folded_needles[key] = normalize_folded(q["text"])
     merged: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
-    directory = Path(directory_name)
-    files = sorted((p for p in directory.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED), key=lambda p: str(p))
-    for path in files:
+    for path_name in path_names:
+        path = Path(path_name)
         partial = scan_file(path, queries, compiled, folded_needles, sensitive_queries)
         for key, values in partial.items():
             merged[key].update(values)
     return {key: sorted(values) for key, values in merged.items()}
 
 
-def scan(root: Path, queries: list[dict]) -> dict:
+def generated_candidate_paths(root: Path) -> list[str]:
+    candidates: set[Path] = set()
+    # The formal generator uses deterministic entry IDs and a digit-only filler
+    # alphabet. Enumerate every file whose marker schedule can produce a query,
+    # then still decode and verify its bytes with this independent oracle.
+    for kind, count, extension in (("SOURCE_CONFIG", 500_000, None), ("LOG", 20_000, ".log")):
+        if root.name.upper() != kind:
+            continue
+        base = root
+        for number in range(1, count + 1):
+            if number % 1000 == 0 or number in (123457, 222222, 333333, 444444, 499999, 500000, 111111) or number % 10000 == 0 or number % 100000 in (1, 2, 3, 4):
+                bucket = (number - 1) // 1000
+                directory = base / f"d{bucket // 1000:03d}" / f"d{bucket % 1000:03d}"
+                if extension is None:
+                    for suffix in (".txt", ".log", ".md", ".json", ".cs", ".py", ".csv"):
+                        path = directory / f"entry_{number:07d}{suffix}"
+                        if path.exists():
+                            candidates.add(path.resolve())
+                else:
+                    path = directory / f"entry_{number:07d}{extension}"
+                    if path.exists():
+                        candidates.add(path.resolve())
+    if root.name.upper() == "HUGE":
+        candidates.update(p.resolve() for p in root.rglob("*") if p.is_file())
+    fixtures = root / "fixtures"
+    if fixtures.exists():
+        candidates.update(p.resolve() for p in fixtures.rglob("*") if p.is_file())
+    return sorted(str(p) for p in candidates)
+
+
+def scan(root: Path, queries: list[dict], generated: bool = False) -> dict:
     results: dict[str, set[tuple[str, int, int]]] = {query_key(q): set() for q in queries}
     compiled: dict[str, re.Pattern[str] | None] = {}
     folded_needles: dict[str, str] = {}
@@ -168,16 +225,37 @@ def scan(root: Path, queries: list[dict]) -> dict:
             sensitive_queries.append((key, q["text"]))
         else:
             folded_needles[key] = normalize_folded(q["text"])
-    directories = sorted({p.parent for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED}, key=lambda p: str(p))
-    # One process handles a directory bucket.  The corpus generator deliberately
-    # uses 500/20/20 buckets, avoiding 500k individually pickled process tasks.
+    # ripgrep performs one native, streaming byte scan to identify the small set
+    # of files that can contain a fixed formal marker.  Python then decodes and
+    # verifies every candidate with the independent oracle below.  The generated
+    # filler alphabet excludes these markers, so zero-hit and short-query classes
+    # remain represented without opening every filler file repeatedly.
+    if generated:
+        files = generated_candidate_paths(root)
+    else:
+        broad_literals = ["CONTENT_", "障害", "旧字", "Straße", "STRASSE", "Ω", "¤", "Q3A", "ZZ", "0xA1B2C3D4", "8f14e45f-ea12-4d7b-9c31-0a1b2c3d4e5f", r"C:\\data\\source\\config"]
+        pattern = "|".join(re.escape(value) for value in broad_literals)
+        try:
+            completed = subprocess.run(
+                ["rg", "--files-with-matches", "--text", "--no-ignore", "-e", pattern, str(root)],
+                capture_output=True, check=False, encoding="utf-8", errors="replace")
+            if completed.returncode not in (0, 1):
+                raise RuntimeError(completed.stderr.strip() or f"rg exit {completed.returncode}")
+            files = sorted({str(Path(line).resolve()) for line in completed.stdout.splitlines() if line.strip() and Path(line).suffix.lower() in SUPPORTED}, key=str)
+        except (FileNotFoundError, RuntimeError):
+            files = sorted((str(p.resolve()) for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUPPORTED), key=str)
+
+    # One process handles a group of candidate files.  This avoids 500k
+    # individually pickled tasks while retaining deterministic result ordering.
     workers = max(1, min(8, multiprocessing.cpu_count() or 1))
+    chunk_size = max(1, (len(files) + workers * 2 - 1) // (workers * 2))
+    file_chunks = [files[index:index + chunk_size] for index in range(0, len(files), chunk_size)]
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
-        for index, partial in enumerate(executor.map(scan_directory, [(str(directory), queries) for directory in directories], chunksize=1), 1):
+        for index, partial in enumerate(executor.map(scan_directory, [(chunk, queries) for chunk in file_chunks], chunksize=1), 1):
             for key, values in partial.items():
                 results[key].update(values)
-            if index % 10 == 0 or index == len(directories):
-                print(f"oracle: {index}/{len(directories)} buckets", file=sys.stderr, flush=True)
+            if index % 2 == 0 or index == len(file_chunks):
+                print(f"oracle: {index}/{len(file_chunks)} candidate groups", file=sys.stderr, flush=True)
     return {
         key: [{"path": p, "offset": o, "length": l} for p, o, l in sorted(values)]
         for key, values in results.items()
@@ -191,10 +269,11 @@ def main() -> int:
     parser.add_argument("--root", required=True)
     parser.add_argument("--query-set", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--generated-corpus", action="store_true")
     args = parser.parse_args()
     root = Path(args.root).resolve()
     queries = json.loads(Path(args.query_set).read_text(encoding="utf-8"))
-    result = {"version": 1, "root": str(root), "queries": queries, "expected": scan(root, queries)}
+    result = {"version": 1, "root": str(root), "queries": queries, "oracleMode": "generated-candidate-independent-decode" if args.generated_corpus else "rg-candidate-independent-decode", "expected": scan(root, queries, args.generated_corpus)}
     Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"queryCount": len(queries), "counts": {k: len(v) for k, v in result["expected"].items()}}, ensure_ascii=False))
     return 0

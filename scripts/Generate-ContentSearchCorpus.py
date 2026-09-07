@@ -155,6 +155,7 @@ def generate(root: Path, force: bool) -> dict:
     write_fixture(fixtures / "utf16be.txt", "CONTENT_UTF16\n障害復旧\n", "utf16be", True)
     write_fixture(fixtures / "utf8bom.txt", "CONTENT_UTF16\n", "utf8", True)
     write_fixture(fixtures / "cp932.txt", "旧字障害\nCONTENT_CP932\n", "cp932", False)
+    write_fixture(fixtures / "casefold.txt", "Straße STRASSE ẞ ss ﬃ ffi Σ σ ς K K\n", "utf8", False)
     (fixtures / "binary.txt").write_bytes(b"binary\x00\x00\x01\xff")
     all_files = [p for p in root.rglob("*") if p.is_file()]
     searchable = [p for p in all_files if p.suffix.lower() in SUPPORTED]
