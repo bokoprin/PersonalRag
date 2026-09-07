@@ -46,7 +46,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
     private int deferBasePathIndex;
     private int recordCount;
     private FilenameSearchEngine engine;
-    private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, reconcileQueued, compactionRunning, directoryReconcileScheduled;
+    private int nextId = 1, pendingEvents, maxPendingEvents, forceReconcile, reconcileQueued, compactionRunning, directoryReconcileScheduled, updateInProgress;
     private long lastEventTick = Environment.TickCount64;
     private long queueSaturationCount, reconcileCount, compactionCount;
     private long generation;
@@ -215,7 +215,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         {
             cts.Token.ThrowIfCancellationRequested();
             if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 &&
-                Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0)
+                Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0 &&
+                Volatile.Read(ref updateInProgress) == 0)
             {
                 // Existing stores publish Ready before the asynchronous compact path index
                 // is available.  A caller that starts querying immediately after Ready
@@ -224,7 +225,8 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 // consumers observe a genuinely settled catalog.
                 await basePathIndexReady.WaitAsync(cts.Token).ConfigureAwait(false);
                 if (Status == "Ready" && Volatile.Read(ref pendingEvents) == 0 &&
-                    Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0)
+                    Volatile.Read(ref forceReconcile) == 0 && Volatile.Read(ref compactionRunning) == 0 &&
+                    Volatile.Read(ref updateInProgress) == 0)
                     return;
             }
             await Task.Delay(20, cts.Token).ConfigureAwait(false);
@@ -288,12 +290,17 @@ public sealed class FileSystemCatalog : IFilenameCatalog
             await basePathIndexReady.ConfigureAwait(false);
             while (await events.Reader.WaitToReadAsync(stop.Token).ConfigureAwait(false))
             {
-                await Task.Delay(50, stop.Token).ConfigureAwait(false);
-                var batch = new List<FileSystemEvent>();
-                while (events.Reader.TryRead(out FileSystemEvent? e)) { Interlocked.Decrement(ref pendingEvents); batch.Add(e); }
-                if (batch.Any(e => e.Reconcile || e.CatchUp)) Interlocked.Exchange(ref reconcileQueued, 0);
                 try
                 {
+                    // Mark the worker busy before draining the channel.  A caller that
+                    // observes pendingEvents == 0 in the short gap after the drain must
+                    // still wait for ProcessEvents/compaction to release engineGate;
+                    // otherwise the first post-update query measures lock contention.
+                    Interlocked.Exchange(ref updateInProgress, 1);
+                    await Task.Delay(50, stop.Token).ConfigureAwait(false);
+                    var batch = new List<FileSystemEvent>();
+                    while (events.Reader.TryRead(out FileSystemEvent? e)) { Interlocked.Decrement(ref pendingEvents); batch.Add(e); }
+                    if (batch.Any(e => e.Reconcile || e.CatchUp)) Interlocked.Exchange(ref reconcileQueued, 0);
                     // A loaded store publishes Ready while its million-entry base path
                     // hash map is copied asynchronously. Do not process the first watcher
                     // catch-up/direct batch against the still-empty map; otherwise a valid
@@ -335,6 +342,10 @@ public sealed class FileSystemCatalog : IFilenameCatalog
                 {
                     SetStatus("変更反映エラー: " + ex.Message);
                     Interlocked.Exchange(ref forceReconcile, 1); SignalReconcile();
+                }
+                finally
+                {
+                    Volatile.Write(ref updateInProgress, 0);
                 }
             }
         }
