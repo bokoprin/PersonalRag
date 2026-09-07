@@ -4,6 +4,7 @@ using System.Text;
 using CoreFileRecord = FilenameSearch.Core.FileRecord;
 using CoreQuery = FilenameSearch.Core.FilenameQuery;
 using CoreScope = FilenameSearch.Core.FilenameScope;
+using CoreFilenameSemantics = FilenameSearch.Core.FilenameSemantics;
 using RouteCEngine = FilenameSearch.RouteC.RouteCEngine;
 
 namespace PersonalRag.FilenameSearch;
@@ -118,9 +119,17 @@ public sealed class FilenameSearchEngine : IFilenameSearch
         ValidateExact(exact);
         var next = new RouteCEngine();
         int[] ids = new int[exact.Count];
+        var normalizedNames = new string[exact.Count];
+        var normalizedPaths = new string[exact.Count];
         for (int i = 0; i < exact.Count; i++)
+        {
             ids[i] = exact[i].FileId;
-        next.Build(ids, i => exact[i].Name, i => exact[i].FullPath);
+            normalizedNames[i] = CoreFilenameSemantics.Normalize(exact[i].Name, false);
+            normalizedPaths[i] = CoreFilenameSemantics.Normalize(exact[i].FullPath, false);
+        }
+        next.Build(ids, normalizedNames, normalizedPaths);
+        normalizedNames = null!;
+        normalizedPaths = null!;
         lock (gate)
         {
             ThrowIfDisposed();

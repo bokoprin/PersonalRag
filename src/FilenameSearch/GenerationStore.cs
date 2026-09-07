@@ -74,8 +74,12 @@ internal sealed class GenerationStore : IDisposable
         string index = Data(current.BaseIndexFile);
         string meta = Data(current.BaseMetadataFile);
         string delta = Data(current.DeltaFile);
-        VerifyFile(index, current.BaseIndexSha256);
-        VerifyFile(meta, current.BaseMetadataSha256);
+        // The two immutable base files are independent. Verify their checksums in parallel
+        // so restart latency is bounded by the slower file read instead of their sum.
+        Task verifyIndex = Task.Run(() => VerifyFile(index, current.BaseIndexSha256));
+        Task verifyMeta = Task.Run(() => VerifyFile(meta, current.BaseMetadataSha256));
+        try { Task.WaitAll(verifyIndex, verifyMeta); }
+        catch (AggregateException ex) { throw ex.Flatten().InnerExceptions[0]; }
         if (!File.Exists(delta)) throw new InvalidDataException("Filename delta journal is missing");
         // Load the persisted metadata directly into the engine's compact exact table. An
         // intermediate million-record object graph would needlessly raise the process

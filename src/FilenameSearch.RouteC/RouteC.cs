@@ -292,10 +292,25 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         var counts = new Dictionary<ulong, int>();
         const int mediumDivisor = 32;
         int medium = Math.Max(4_096, Math.Max(1, values.Count / mediumDivisor));
+        Span<ulong> keyBuffer = stackalloc ulong[1_024];
+        Span<Rune> runeBuffer = stackalloc Rune[512];
+        Span<ulong> seenBuffer = stackalloc ulong[2_048];
         for (int i = 0; i < values.Count; i++)
         {
-            foreach (ulong key in KeysFor(values[i], includeOneRune, includeShort, componentsOnly))
+            int keyCount = CollectKeys(values[i], includeOneRune, includeShort, componentsOnly,
+                keyBuffer, runeBuffer, seenBuffer);
+            if (keyCount < 0)
             {
+                foreach (ulong key in KeysFor(values[i], includeOneRune, includeShort, componentsOnly))
+                {
+                    if (counts.TryGetValue(key, out int count)) counts[key] = count + 1;
+                    else counts[key] = 1;
+                }
+                continue;
+            }
+            for (int keyIndex = 0; keyIndex < keyCount; keyIndex++)
+            {
+                ulong key = keyBuffer[keyIndex];
                 if (counts.TryGetValue(key, out int count)) counts[key] = count + 1;
                 else counts[key] = 1;
             }
@@ -327,8 +342,17 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         var cursors = offsets[..^1].ToArray();
         for (int i = 0; i < values.Count; i++)
         {
-            foreach (ulong key in KeysFor(values[i], includeOneRune, includeShort, componentsOnly))
+            int keyCount = CollectKeys(values[i], includeOneRune, includeShort, componentsOnly,
+                keyBuffer, runeBuffer, seenBuffer);
+            if (keyCount < 0)
             {
+                foreach (ulong key in KeysFor(values[i], includeOneRune, includeShort, componentsOnly))
+                    if (counts.TryGetValue(key, out int index) && index >= 0) valuesFlat[cursors[index]++] = i;
+                continue;
+            }
+            for (int keyIndex = 0; keyIndex < keyCount; keyIndex++)
+            {
+                ulong key = keyBuffer[keyIndex];
                 if (!counts.TryGetValue(key, out int index) || index < 0) continue;
                 valuesFlat[cursors[index]++] = i;
             }
@@ -359,6 +383,71 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
             byteOffsets[i + 1] = encoded.WrittenCount;
         }
         return new CompactIndex(keys, byteOffsets, postingCounts, encoded.WrittenSpan.ToArray());
+    }
+
+    private static int CollectKeys(string value, bool includeOneRune, bool includeShort,
+        bool componentsOnly, Span<ulong> keyBuffer, Span<Rune> runeBuffer, Span<ulong> seenBuffer)
+    {
+        int keyCapacity = checked(value.Length * 3 + 1);
+        // The hot formal corpus path fits in the reusable stack buffers. Long production
+        // paths use the original allocation-safe iterator so no path is truncated.
+        if (value.Length > runeBuffer.Length || keyCapacity > keyBuffer.Length ||
+            keyCapacity > seenBuffer.Length / 2) return -1;
+        return CollectKeysCore(value, includeOneRune, includeShort, componentsOnly,
+            keyBuffer, runeBuffer, seenBuffer);
+    }
+
+    private static int CollectKeysCore(string value, bool includeOneRune, bool includeShort,
+        bool componentsOnly, Span<ulong> output, Span<Rune> runeBuffer, Span<ulong> seen)
+    {
+        seen.Clear();
+        int count = 0;
+        ReadOnlySpan<char> text = value.AsSpan();
+        int partStart = 0;
+        for (int i = 0; i <= text.Length; i++)
+        {
+            if (i < text.Length && (!componentsOnly || (text[i] != '\\' && text[i] != '/'))) continue;
+            ReadOnlySpan<char> part = text[partStart..i];
+            partStart = i + 1;
+            if (part.Length == 0) continue;
+            int runeCount = 0;
+            foreach (Rune rune in part.EnumerateRunes()) runeBuffer[runeCount++] = rune;
+            if (includeShort && includeOneRune)
+                for (int p = 0; p < runeCount; p++) TryAddKey(Pack(runeBuffer, p, 1), output, seen, ref count);
+            if (includeShort)
+                for (int p = 0; p + 2 <= runeCount; p++) TryAddKey(Pack(runeBuffer, p, 2), output, seen, ref count);
+            for (int p = 0; p + 3 <= runeCount; p++)
+                if (TrackTrigram(runeBuffer[..runeCount], p))
+                    TryAddKey(Pack(runeBuffer, p, 3), output, seen, ref count);
+        }
+        return count;
+    }
+
+    private static void TryAddKey(ulong key, Span<ulong> output, Span<ulong> seen, ref int count)
+    {
+        int mask = seen.Length - 1;
+        int slot = (int)Mix(key) & mask;
+        while (true)
+        {
+            ulong existing = seen[slot];
+            if (existing == key) return;
+            if (existing == 0)
+            {
+                seen[slot] = key;
+                output[count++] = key;
+                return;
+            }
+            slot = (slot + 1) & mask;
+        }
+    }
+
+    private static ulong Mix(ulong value)
+    {
+        value ^= value >> 33;
+        value *= 0xff51afd7ed558ccdUL;
+        value ^= value >> 33;
+        value *= 0xc4ceb9fe1a85ec53UL;
+        return value ^ (value >> 33);
     }
 
     private static CompactIndex BuildIndex(int count, Func<int, string> valueSelector,
@@ -441,7 +530,7 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         return seen;
     }
 
-    private static bool TrackTrigram(IReadOnlyList<Rune> runes, int start)
+    private static bool TrackTrigram(ReadOnlySpan<Rune> runes, int start)
     {
         // Keep every trigram that carries a Unicode or path separator signal. Plain
         // alphanumeric keys may be omitted and therefore become an unconstrained candidate
@@ -525,7 +614,7 @@ public sealed class RouteCEngine : IFilenameSearchEngine, IDisposable
         return count == buffer.Length ? buffer : buffer[..count];
     }
 
-    private static ulong Pack(IReadOnlyList<Rune> runes, int start, int length)
+    private static ulong Pack(ReadOnlySpan<Rune> runes, int start, int length)
     {
         ulong key = 1;
         for (int i = start; i < start + length; i++)
