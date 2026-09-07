@@ -20,14 +20,14 @@ SUPPORTED = {".txt", ".log", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".
 
 def decode(path: Path) -> str | None:
     data = path.read_bytes()
-    if b"\x00" in data[:4096] and data[:4096].count(b"\x00") > max(1, len(data[:4096]) // 32):
-        return None
     if data.startswith(b"\xef\xbb\xbf"):
         return data.decode("utf-8-sig")
     if data.startswith(b"\xff\xfe"):
         return data.decode("utf-16-le")
     if data.startswith(b"\xfe\xff"):
         return data.decode("utf-16-be")
+    if b"\x00" in data[:4096] and data[:4096].count(b"\x00") > max(1, len(data[:4096]) // 32):
+        return None
     try:
         return data.decode("utf-8")
     except UnicodeDecodeError:
