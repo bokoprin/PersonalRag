@@ -1,0 +1,9 @@
+[scan] build
+[scan] build=1.9ms persistent=0 bytes update=True
+[bloom] build
+[bloom] build=30.7ms persistent=2,207 bytes update=True
+[trigram] build
+[trigram] build=10.4ms persistent=638 bytes update=True
+[sqlite-fts5] build
+[sqlite-fts5] build=291.6ms persistent=90,288 bytes update=True
+Report: C:\Users\bokop\AppData\Local\Temp\PersonalRag-ContentBakeoff-Work\CONTENT_SEARCH_BAKEOFF_SMOKE.json

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "reportType": "content-search-bakeoff-backend-corpus",
+  "seriesId": "content-bakeoff-93c82c0ffd73",
+  "sourceCommitSha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+  "reportHeadSha": "pending-report-commit",
+  "backend": "sqlite-fts5",
+  "corpus": "LOG",
+  "status": "BLOCKED_NOT_COMPLETED",
+  "exitCode": null,
+  "hardGates": {
+    "fp": null,
+    "fn": null
+  },
+  "reason": "Formal child reports were not produced because the first fixed-series SOURCE_CONFIG/scan process did not finish within the execution window. No performance or correctness value is asserted.",
+  "requiredRounds": {
+    "rounds": 20,
+    "warmupRounds": 2,
+    "measuredRounds": 18,
+    "queryShuffleSeed": 123456
+  }
+}

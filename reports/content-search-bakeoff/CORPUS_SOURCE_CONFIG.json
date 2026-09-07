@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "seriesId": "content-bakeoff-93c82c0ffd73",
+  "sourceCommitSha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+  "reportHeadSha": "pending-report-commit",
+  "corpus": "SOURCE_CONFIG",
+  "status": "PASS_GENERATED_NOT_MEASURED",
+  "manifestSha256": "c5685ee6bfecbc9f8e8765aaeef0a4b60a3dcd80fb97d8e3039968bba94756d6",
+  "required": {
+    "actualFilesystem": true
+  },
+  "observed": {
+    "kind": "SOURCE_CONFIG",
+    "root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal\\SOURCE_CONFIG",
+    "fileCount": 500000,
+    "contentBytes": 5502926848,
+    "perFileNominalBytes": 11005,
+    "actualFilesystem": true
+  },
+  "logicalSourceBytes": 107374182400,
+  "generatorLog": "logs/content-bakeoff-formal/00-corpus-generation.combined.log",
+  "oracle": "independent candidate decode completed before formal child"
+}

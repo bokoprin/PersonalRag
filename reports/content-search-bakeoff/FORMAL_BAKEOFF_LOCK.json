@@ -1,0 +1,109 @@
+﻿{
+    "version":  1,
+    "seriesId":  "content-bakeoff-93c82c0ffd73",
+    "createdUtc":  "\/Date(1788818722070)\/",
+    "formal_source_commit_sha":  "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+    "initial_remote_branch_sha":  "ec8e099f520be54ca24fc83e16f5d539b143f9b6",
+    "report_head_sha":  "pending-report-commit",
+    "benchmark":  {
+                      "blockSizeChars":  65536,
+                      "overlapChars":  256,
+                      "rounds":  20,
+                      "warmupRounds":  2,
+                      "measuredRounds":  18,
+                      "queryShuffleSeed":  123456,
+                      "cancellationTargetMs":  100
+                  },
+    "backendIds":  [
+                       "scan",
+                       "bloom",
+                       "trigram",
+                       "sqlite-fts5"
+                   ],
+    "sourceHashes":  {
+                         "src/ContentSearch.Core/BlockStore.cs":  "4b052e2027435c3f217aeb2fec4604016b92641f5b7bc68e34e06d83aaa8a4c4",
+                         "src/ContentSearch.Core/ContentSearchObservation.cs":  "1b4067d2348bcd75b4be7e419a0724c99683ef9a3ba9c83079f1ac3b3a374c45",
+                         "src/ContentSearch.Core/ContentSemantics.cs":  "273801f4863fb1ea7077b5e644057923543af450327f471d511ef235542978db",
+                         "src/ContentSearch.Core/Contracts.cs":  "6587f5ab3a1d59b7a427461b161e5b585186750b390dc86b640372380c07bd61",
+                         "src/ContentSearch.Core/TextExtraction.cs":  "75ef346075fce54324d41c9990ef4a7a0a10d20e4018cd6459ba24f4ecb526de",
+                         "src/ContentSearch.Core/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs":  "f7a5d9789c863625e139ff99e1113a503830f6b85a88f6129916df83ac76b49e",
+                         "src/ContentSearch.Core/obj/Release/net8.0/ContentSearch.Core.AssemblyInfo.cs":  "5a4f47d935e1f77bb25af16869406a11bc995d27f065c45cab3ccecb71f74050",
+                         "src/ContentSearch.Core/obj/Release/net8.0/ContentSearch.Core.GlobalUsings.g.cs":  "f3f134e9e825e3e7268090f58b1af2bda2de513f61a09c56f48b9b8d08612abc",
+                         "src/ContentSearch.Backends.Scan/DirectScanBackend.cs":  "8ffcd376d5e4875529d41bf846f7e3c837328e24c44f9aee8e22d3225c7a9b68",
+                         "src/ContentSearch.Backends.Scan/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs":  "f7a5d9789c863625e139ff99e1113a503830f6b85a88f6129916df83ac76b49e",
+                         "src/ContentSearch.Backends.Scan/obj/Release/net8.0/ContentSearch.Backends.Scan.AssemblyInfo.cs":  "d8431cf30dfacd988e2b199e4efbb49a623594e6379ac631145ba70106e529cc",
+                         "src/ContentSearch.Backends.Scan/obj/Release/net8.0/ContentSearch.Backends.Scan.GlobalUsings.g.cs":  "f3f134e9e825e3e7268090f58b1af2bda2de513f61a09c56f48b9b8d08612abc",
+                         "src/ContentSearch.Backends.Bloom/BloomFilterBackend.cs":  "fe302bb9d9875fdd904a0e970d093cab472f8775fbfd508413489401f23a7c9f",
+                         "src/ContentSearch.Backends.Bloom/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs":  "f7a5d9789c863625e139ff99e1113a503830f6b85a88f6129916df83ac76b49e",
+                         "src/ContentSearch.Backends.Bloom/obj/Release/net8.0/ContentSearch.Backends.Bloom.AssemblyInfo.cs":  "3f1e84afc21a2dbb4ef2301687c37640ce3753754dc445207f8c08f810c56e64",
+                         "src/ContentSearch.Backends.Bloom/obj/Release/net8.0/ContentSearch.Backends.Bloom.GlobalUsings.g.cs":  "f3f134e9e825e3e7268090f58b1af2bda2de513f61a09c56f48b9b8d08612abc",
+                         "src/ContentSearch.Backends.Trigram/TrigramInvertedBackend.cs":  "2a78eaf57b860e5fb94ebb227f8f4a70e980ae21f99c86ef33a1c645d41430df",
+                         "src/ContentSearch.Backends.Trigram/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs":  "f7a5d9789c863625e139ff99e1113a503830f6b85a88f6129916df83ac76b49e",
+                         "src/ContentSearch.Backends.Trigram/obj/Release/net8.0/ContentSearch.Backends.Trigram.AssemblyInfo.cs":  "6e2adc29cee99d0957fccb76a2fdb416a6cb1a6e307a953b543fec1dcb642dff",
+                         "src/ContentSearch.Backends.Trigram/obj/Release/net8.0/ContentSearch.Backends.Trigram.GlobalUsings.g.cs":  "f3f134e9e825e3e7268090f58b1af2bda2de513f61a09c56f48b9b8d08612abc",
+                         "src/ContentSearch.Backends.Sqlite/SqliteFts5Backend.cs":  "799decd20f73debfec18600d3f75fcc6a49feff053f4434b9febf8e257fbab2c",
+                         "src/ContentSearch.Backends.Sqlite/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs":  "f7a5d9789c863625e139ff99e1113a503830f6b85a88f6129916df83ac76b49e",
+                         "src/ContentSearch.Backends.Sqlite/obj/Release/net8.0/ContentSearch.Backends.Sqlite.AssemblyInfo.cs":  "cddb4b7f1e0523645961dc55409750c8984ac0d9589ee0d15102395b846da3ab",
+                         "src/ContentSearch.Backends.Sqlite/obj/Release/net8.0/ContentSearch.Backends.Sqlite.GlobalUsings.g.cs":  "f3f134e9e825e3e7268090f58b1af2bda2de513f61a09c56f48b9b8d08612abc",
+                         "tests/ContentSearch.Bakeoff/FormalRunner.cs":  "d5b958bcc47ae0320dc4e178a528da769d3d0451462902ea7851512928f5b717",
+                         "tests/ContentSearch.Bakeoff/Program.cs":  "f563fafda390f4e4272713e9e9e7e2551d70017270fa26c2775fc34e90dd3c52"
+                     },
+    "runnerHash":  "d5b958bcc47ae0320dc4e178a528da769d3d0451462902ea7851512928f5b717",
+    "orchestratorHash":  "cf5a1cd27094939d9667315f4de56160845633a8cb45c861b432ace8787a7424",
+    "generatorHash":  "8ed1d5ee20c0e90843001f066bec1d3607981929fbaab92f69a383378a7cec6e",
+    "querySetHash":  "3b18398d622ae25a3cfbfde94a2ae3c908c1e4219639abadef7d53c2729adb03",
+    "independentOracleHash":  "fe5162c2ff8652f2e80128c18470cc0e0fba140a8957cf4c8a959bdbd8ba5d1f",
+    "benchmarkSettingsHash":  "ebcf15902f210b554f9b57bf7f4560ceeab2e2c5d0f1f3a86444ad9b03da57b5",
+    "scoringRulesHash":  "013c791e650545fbce408a5cf67e0a83ad879641de2b25f0c086fd9b7d0ccb0b",
+    "acceptanceRuleHash":  "10cf7d654455759728b2647592621a80a07a61bef7534970c5c0644182a91961",
+    "thresholdDefinitionHash":  "7ff5f06aa980aafde570536ca1124589d773ffa24f447d9e0ec7eecf8ccb723d",
+    "normalizerCasefoldVersion":  "FilenameSearch.Core.FilenameSemantics.NormalizerVersion",
+    "corpusManifestPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal\\corpus-manifest.json",
+    "corpusManifestSha256":  "8440245b3671d7458074d177a8074c1be50cb8e006a175635b264e00846e3647",
+    "corpus":  {
+                   "version":  1,
+                   "seed":  123456,
+                   "generatedUtc":  "2026-09-07T21:27:27Z",
+                   "root":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal",
+                   "freeBytesAtStart":  405678891008,
+                   "corpora":  [
+                                   {
+                                       "kind":  "SOURCE_CONFIG",
+                                       "root":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal\\SOURCE_CONFIG",
+                                       "fileCount":  500000,
+                                       "contentBytes":  5502926848,
+                                       "perFileNominalBytes":  11005
+                                   },
+                                   {
+                                       "kind":  "LOG",
+                                       "root":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal\\LOG",
+                                       "fileCount":  20000,
+                                       "contentBytes":  21609054208,
+                                       "perFileNominalBytes":  1080452
+                                   },
+                                   {
+                                       "kind":  "HUGE",
+                                       "root":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal\\HUGE",
+                                       "fileCount":  20,
+                                       "contentBytes":  10871635968,
+                                       "perFileNominalBytes":  543581798
+                                   }
+                               ],
+                   "fixtureFiles":  6,
+                   "actualFileCount":  520026,
+                   "actualSearchableFileCount":  520026,
+                   "actualSearchableBytes":  37983617201,
+                   "logicalSourceBytes":  107374182400,
+                   "manifestSha256":  "c5685ee6bfecbc9f8e8765aaeef0a4b60a3dcd80fb97d8e3039968bba94756d6"
+               },
+    "power":  {
+                  "ACLineStatus":  "2",
+                  "batteryStatus":  [
+                                        {
+                                            "status":  2,
+                                            "estimatedCharge":  100
+                                        }
+                                    ],
+                  "powerScheme":  "電源設定の GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (バランス)"
+              }
+}

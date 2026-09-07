@@ -1,0 +1,44 @@
+.NET SDK:
+ Version:           8.0.424
+ Commit:            5cbde90d8f
+ Workload version:  8.0.400-manifests.d7d8d4b1
+ MSBuild version:   17.11.48+02bf66295
+
+ランタイム環境:
+ OS Name:     Windows
+ OS Version:  10.0.26200
+ OS Platform: Windows
+ RID:         win-x64
+ Base Path:   C:\Program Files\dotnet\sdk\8.0.424\
+
+インストール済みの .NET ワークロード:
+新しいマニフェストをインストールするときに loose manifests を使用するように構成されています。
+表示するインストール済みワークロードはありません。
+
+Host:
+  Version:      8.0.30
+  Architecture: x64
+  Commit:       a83db3e0eb
+
+.NET SDKs installed:
+  8.0.424 [C:\Program Files\dotnet\sdk]
+
+.NET runtimes installed:
+  Microsoft.AspNetCore.App 8.0.30 [C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App]
+  Microsoft.NETCore.App 8.0.30 [C:\Program Files\dotnet\shared\Microsoft.NETCore.App]
+  Microsoft.WindowsDesktop.App 8.0.30 [C:\Program Files\dotnet\shared\Microsoft.WindowsDesktop.App]
+
+Other architectures found:
+  None
+
+Environment variables:
+  Not set
+
+global.json file:
+  C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\global.json
+
+Learn more:
+  https://aka.ms/dotnet/info
+
+Download .NET:
+  https://aka.ms/dotnet/download

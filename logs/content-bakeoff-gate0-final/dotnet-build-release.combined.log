@@ -1,0 +1,13 @@
+  FilenameSearch.Core -> C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\src\FilenameSearch.Core\bin\Release\net8.0\FilenameSearch.Core.dll
+  ContentSearch.Core -> C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\src\ContentSearch.Core\bin\Release\net8.0\ContentSearch.Core.dll
+  ContentSearch.Backends.Scan -> C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\src\ContentSearch.Backends.Scan\bin\Release\net8.0\ContentSearch.Backends.Scan.dll
+  ContentSearch.Backends.Bloom -> C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\src\ContentSearch.Backends.Bloom\bin\Release\net8.0\ContentSearch.Backends.Bloom.dll
+  ContentSearch.Backends.Sqlite -> C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\src\ContentSearch.Backends.Sqlite\bin\Release\net8.0\ContentSearch.Backends.Sqlite.dll
+  ContentSearch.Backends.Trigram -> C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\src\ContentSearch.Backends.Trigram\bin\Release\net8.0\ContentSearch.Backends.Trigram.dll
+  ContentSearch.Bakeoff -> C:\Users\bokop\AppData\Local\Temp\personalrag-content-bakeoff-worktree\tests\ContentSearch.Bakeoff\bin\Release\net8.0\ContentSearch.Bakeoff.dll
+
+ビルドに成功しました。
+    0 個の警告
+    0 エラー
+
+経過時間 00:00:02.41

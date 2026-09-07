@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "seriesId": "content-bakeoff-93c82c0ffd73",
+  "formal_source_commit_sha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+  "reportHeadSha": "pending-report-commit",
+  "status": "BLOCKED_INCOMPLETE_FORMAL_SERIES",
+  "evaluation_complete": false,
+  "pass": false,
+  "winner": null,
+  "secondary": null,
+  "rejected": [],
+  "blockedReason": "SOURCE_CONFIG/scan child was stopped after a sustained real-filesystem run exceeded the available interactive execution window; no query, threshold, corpus, or round was changed.",
+  "corpusManifestSha256": "c5685ee6bfecbc9f8e8765aaeef0a4b60a3dcd80fb97d8e3039968bba94756d6",
+  "benchmark": {
+    "rounds": 20,
+    "warmupRounds": 2,
+    "measuredRounds": 18,
+    "queryShuffleSeed": 123456
+  },
+  "gate0": {
+    "pass": true
+  },
+  "completedBackendCorpusReports": 0,
+  "requiredBackendCorpusReports": 12,
+  "performanceTargets": {
+    "status": "NOT_EVALUATED"
+  },
+  "remainingIssue": "The fixed 20/2/18 formal child series must be rerun to completion; this report intentionally does not convert unmeasured cases to PASS or allowed NOT_RUN."
+}

@@ -1,0 +1,41 @@
+﻿{
+    "version":  1,
+    "generatedUtc":  "\/Date(1788818720573)\/",
+    "sourceCommitSha":  "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+    "initialRemoteBranchSha":  "ec8e099f520be54ca24fc83e16f5d539b143f9b6",
+    "os":  "Microsoft Windows 11 Home",
+    "osVersion":  "10.0.26200",
+    "cpu":  [
+                {
+                    "name":  "Intel(R) Core(TM) Ultra 9 285H",
+                    "logicalProcessors":  16,
+                    "maxClockMHz":  2900
+                }
+            ],
+    "logicalProcessors":  16,
+    "ramBytes":  33682821120,
+    "sdk":  "8.0.424",
+    "runtime":  "Microsoft.AspNetCore.App 8.0.30 [C:\\Program Files\\dotnet\\shared\\Microsoft.AspNetCore.App]\r\nMicrosoft.NETCore.App 8.0.30 [C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App]\r\nMicrosoft.WindowsDesktop.App 8.0.30 [C:\\Program Files\\dotnet\\shared\\Microsoft.WindowsDesktop.App]",
+    "dataRoot":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal",
+    "freeBytesAtMeasurement":  366246596608,
+    "acLineStatus":  "2",
+    "batteryStatus":  [
+                          {
+                              "status":  2,
+                              "estimatedCharge":  100
+                          }
+                      ],
+    "powerScheme":  "電源設定の GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (バランス)",
+    "thermalThrottling":  "not directly exposed by Win32; no software indication captured",
+    "generation":  {
+                       "command":  "python C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\scripts\\Generate-ContentSearchCorpus.py --root C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal",
+                       "exitCode":  0,
+                       "elapsedMs":  201.089,
+                       "logPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.combined.log"
+                   },
+    "oracles":  {
+                    "HUGE":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal-Work\\oracle\\HUGE.json",
+                    "SOURCE_CONFIG":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal-Work\\oracle\\SOURCE_CONFIG.json",
+                    "LOG":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal-Work\\oracle\\LOG.json"
+                }
+}

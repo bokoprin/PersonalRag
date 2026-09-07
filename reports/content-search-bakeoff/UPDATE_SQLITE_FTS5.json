@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "seriesId": "content-bakeoff-93c82c0ffd73",
+  "sourceCommitSha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+  "status": "BLOCKED_NOT_COMPLETED",
+  "pass": null,
+  "reason": "No backend/corpus formal report completed."
+}

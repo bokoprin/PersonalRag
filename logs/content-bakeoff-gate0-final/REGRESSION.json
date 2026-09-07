@@ -1,0 +1,34 @@
+[
+  {
+    "command": "dotnet --info",
+    "exitCode": 0,
+    "elapsedMs": 409.9697,
+    "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-info.combined.log",
+    "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-info.combined.log",
+    "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+  },
+  {
+    "command": "dotnet restore ContentSearch.Bakeoff.sln",
+    "exitCode": 0,
+    "elapsedMs": 793.1578,
+    "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-restore.combined.log",
+    "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-restore.combined.log",
+    "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+  },
+  {
+    "command": "dotnet build ContentSearch.Bakeoff.sln -c Release --no-restore",
+    "exitCode": 0,
+    "elapsedMs": 2595.8639,
+    "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-build-release.combined.log",
+    "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-build-release.combined.log",
+    "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+  },
+  {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Run-ContentSearchBakeoff.ps1",
+    "exitCode": 0,
+    "elapsedMs": 3240.2583,
+    "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\bakeoff-smoke.combined.log",
+    "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\bakeoff-smoke.combined.log",
+    "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+  }
+]
