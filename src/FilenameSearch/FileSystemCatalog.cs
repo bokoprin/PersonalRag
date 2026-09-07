@@ -1123,7 +1123,13 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         path = Path.GetFullPath(path);
         try
         {
-            FileAttributes attr = File.GetAttributes(path); bool isDirectory = attr.HasFlag(FileAttributes.Directory);
+            FileAttributes attr = File.GetAttributes(path);
+            // Reparse points (junctions/symbolic links) are excluded from the catalog and
+            // traversal.  Watcher notifications can still arrive after creation, so apply
+            // the same guard at the live update boundary to prevent indexing a link to the
+            // catalog root or following it during reconciliation.
+            if (attr.HasFlag(FileAttributes.ReparsePoint)) return null;
+            bool isDirectory = attr.HasFlag(FileAttributes.Directory);
             FileSystemInfo info = isDirectory ? new DirectoryInfo(path) : new FileInfo(path); info.Refresh();
             ulong size = isDirectory ? 0 : checked((ulong)((FileInfo)info).Length);
             return new FilenameRecord(id, null, info.Name, path, size, info.LastWriteTimeUtc, isDirectory ? (byte)2 : (byte)1)
@@ -1138,6 +1144,7 @@ public sealed class FileSystemCatalog : IFilenameCatalog
         {
             FileSystemInfo info = isDirectory ? new DirectoryInfo(path) : new FileInfo(path);
             info.Refresh();
+            if (info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return null;
             ulong size = isDirectory ? 0 : checked((ulong)((FileInfo)info).Length);
             // A quiet restart needs only size/mtime/name for the common unchanged case.
             // Reuse the persisted native identity and avoid opening a second handle for
