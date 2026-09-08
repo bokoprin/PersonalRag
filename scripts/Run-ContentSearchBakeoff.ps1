@@ -26,7 +26,10 @@ function Invoke-Captured {
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
-    foreach ($argument in $ArgumentList) { [void]$startInfo.ArgumentList.Add([string]$argument) }
+    $startInfo.Arguments = (($ArgumentList | ForEach-Object {
+        $value = ([string]$_).Replace('"', '\"')
+        '"' + $value + '"'
+    }) -join ' ')
 
     $process = [Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
