@@ -24,6 +24,8 @@ internal static class FormalRunner
     private const int ShuffleSeed = 123456;
     private const int BlockSizeChars = 65_536;
     private const int OverlapChars = 256;
+    private static readonly TimeSpan BuildTimeout = TimeSpan.FromHours(3);
+    private static readonly TimeSpan SearchTimeout = TimeSpan.FromSeconds(300);
 
     public static bool IsFormal(string[] args)
         => args.Any(a => string.Equals(a, "--formal", StringComparison.OrdinalIgnoreCase));
@@ -45,134 +47,131 @@ internal static class FormalRunner
         var corpus = new ContentCorpus(documents, work, BlockSizeChars, OverlapChars);
         await using IContentSearchBackend backend = CreateBackend(parsed.Backend);
 
-        var sampler = new MemorySampler();
-        sampler.Start();
-        long privateBefore = Process.GetCurrentProcess().PrivateMemorySize64;
-        Stopwatch buildWatch = Stopwatch.StartNew();
-        await backend.BuildAsync(corpus, CancellationToken.None).ConfigureAwait(false);
-        buildWatch.Stop();
-        await Task.Delay(500).ConfigureAwait(false);
-        sampler.Stop();
-        long readyPrivate = Process.GetCurrentProcess().PrivateMemorySize64;
-        MemorySample memory = sampler.Snapshot();
-
+        FormalBuildEvidence? buildEvidence = null;
         var queryMetrics = formalQueries.ToDictionary(q => QueryKey(q.Query), _ => new QueryAccumulator(), StringComparer.Ordinal);
         var allFull = new List<double>();
         var allFirst = new List<double>();
         int fp = 0;
         int fn = 0;
         var mismatchExamples = new List<object>();
-        int[] order = Enumerable.Range(0, formalQueries.Count).ToArray();
-        var random = new Random(ShuffleSeed);
+        MemorySampler? sampler = null;
 
-        for (int round = 0; round < Rounds; round++)
+        try
         {
-            Shuffle(order, random);
-            foreach (int index in order)
+            sampler = new MemorySampler();
+            sampler.Start();
+            long privateBefore = Process.GetCurrentProcess().PrivateMemorySize64;
+            Stopwatch buildWatch = Stopwatch.StartNew();
+            using (var buildTimeout = new CancellationTokenSource(BuildTimeout))
             {
-                FormalQuery formalQuery = formalQueries[index];
-                ContentQuery query = formalQuery.Query;
-                string key = QueryKey(query);
-                (double preciseFull, double? preciseFirst, IReadOnlyList<ContentMatch> preciseMatches) =
-                    await MeasureSearchAsync(backend, query).ConfigureAwait(false);
-                IReadOnlyList<ContentMatch> matches = preciseMatches;
-                double fullMs = preciseFull;
-                double? firstMs = preciseFirst;
-
-                if (round >= WarmupRounds)
+                try
                 {
-                    QueryAccumulator accumulator = queryMetrics[key];
-                    accumulator.FullMs.Add(fullMs);
-                    if (firstMs.HasValue) accumulator.FirstMs.Add(firstMs.Value);
-                    accumulator.Count = matches.Count;
-                    accumulator.UsedScanFallback |= matches.Any(m => m.UsedScanFallback);
-                    allFull.Add(fullMs);
-                    if (firstMs.HasValue) allFirst.Add(firstMs.Value);
+                    await backend.BuildAsync(corpus, buildTimeout.Token).ConfigureAwait(false);
                 }
-
-                // A measured sample is sufficient to establish deterministic
-                // correctness; the remaining rounds still contribute latency.
-                if (round == WarmupRounds)
+                catch (OperationCanceledException) when (buildTimeout.IsCancellationRequested)
                 {
-                    (int sampleFp, int sampleFn, object? example) = CompareExpected(key, matches, expected);
-                    fp += sampleFp;
-                    fn += sampleFn;
-                    if (example is not null && mismatchExamples.Count < 10) mismatchExamples.Add(example);
+                    throw new FormalMeasurementTimeoutException("build", null, BuildTimeout);
                 }
             }
+            buildWatch.Stop();
+            await Task.Delay(500).ConfigureAwait(false);
+            sampler.Stop();
+            long readyPrivate = Process.GetCurrentProcess().PrivateMemorySize64;
+            MemorySample memory = sampler.Snapshot();
+            buildEvidence = new FormalBuildEvidence(
+                buildWatch.Elapsed.TotalMilliseconds,
+                documents.Count,
+                documents.Sum(d => d.SizeBytes),
+                privateBefore,
+                memory.PeakPrivateBytes,
+                readyPrivate,
+                GC.GetTotalMemory(false),
+                GC.CollectionCount(0),
+                GC.CollectionCount(1),
+                GC.CollectionCount(2),
+                backend.GetDiagnostics().PersistentBytes);
+
+            int[] order = Enumerable.Range(0, formalQueries.Count).ToArray();
+            var random = new Random(ShuffleSeed);
+            for (int round = 0; round < Rounds; round++)
+            {
+                Shuffle(order, random);
+                foreach (int index in order)
+                {
+                    FormalQuery formalQuery = formalQueries[index];
+                    ContentQuery query = formalQuery.Query;
+                    string key = QueryKey(query);
+                    (double preciseFull, double? preciseFirst, IReadOnlyList<ContentMatch> preciseMatches) =
+                        await MeasureSearchAsync(backend, query).ConfigureAwait(false);
+                    IReadOnlyList<ContentMatch> matches = preciseMatches;
+
+                    if (round >= WarmupRounds)
+                    {
+                        QueryAccumulator accumulator = queryMetrics[key];
+                        accumulator.FullMs.Add(preciseFull);
+                        if (preciseFirst.HasValue) accumulator.FirstMs.Add(preciseFirst.Value);
+                        accumulator.Count = matches.Count;
+                        accumulator.UsedScanFallback |= matches.Any(m => m.UsedScanFallback);
+                        allFull.Add(preciseFull);
+                        if (preciseFirst.HasValue) allFirst.Add(preciseFirst.Value);
+                    }
+
+                    // A measured sample is sufficient to establish deterministic
+                    // correctness; the remaining rounds still contribute latency.
+                    if (round == WarmupRounds)
+                    {
+                        (int sampleFp, int sampleFn, object? example) = CompareExpected(key, matches, expected);
+                        fp += sampleFp;
+                        fn += sampleFn;
+                        if (example is not null && mismatchExamples.Count < 10) mismatchExamples.Add(example);
+                    }
+                }
+            }
+
+            UpdateResult? updates = parsed.RunUpdates
+                ? await RunUpdatesAsync(backend, corpus, documents).ConfigureAwait(false)
+                : null;
+            CancellationResult? cancellation = parsed.RunCancellation
+                ? await RunCancellationAsync(backend, formalQueries).ConfigureAwait(false)
+                : null;
+
+            await WriteReportAsync(
+                parsed,
+                root,
+                work,
+                documents,
+                buildEvidence,
+                queryMetrics,
+                allFull,
+                allFirst,
+                fp,
+                fn,
+                mismatchExamples,
+                backend.GetDiagnostics(),
+                updates,
+                cancellation,
+                reportPath).ConfigureAwait(false);
         }
-
-        UpdateResult? updates = parsed.RunUpdates
-            ? await RunUpdatesAsync(backend, corpus, documents).ConfigureAwait(false)
-            : null;
-        CancellationResult? cancellation = parsed.RunCancellation
-            ? await RunCancellationAsync(backend, formalQueries).ConfigureAwait(false)
-            : null;
-
-        ContentBackendDiagnostics diagnostics = backend.GetDiagnostics();
-        var report = new
+        catch (FormalMeasurementTimeoutException timeout)
         {
-            version = 1,
-            reportType = "content-search-bakeoff-backend-corpus",
-            seriesId = parsed.SeriesId,
-            sourceCommitSha = parsed.SourceCommit,
-            reportHeadSha = parsed.ReportHead,
-            backend = parsed.Backend,
-            corpus = parsed.Corpus,
-            root,
-            work,
-            command = Environment.CommandLine,
-            exitCode = 0,
-            generatedUtc = DateTime.UtcNow,
-            settings = new { blockSizeChars = BlockSizeChars, overlapChars = OverlapChars, rounds = Rounds, warmupRounds = WarmupRounds, measuredRounds = MeasuredRounds, queryShuffleSeed = ShuffleSeed },
-            build = new
-            {
-                elapsedMs = buildWatch.Elapsed.TotalMilliseconds,
-                documentCount = documents.Count,
-                sourceBytes = documents.Sum(d => d.SizeBytes),
-                privateBeforeBytes = privateBefore,
-                peakPrivateBytes = memory.PeakPrivateBytes,
-                readyPrivateBytes = readyPrivate,
-                managedBytes = GC.GetTotalMemory(false),
-                gen0Collections = GC.CollectionCount(0),
-                gen1Collections = GC.CollectionCount(1),
-                gen2Collections = GC.CollectionCount(2),
-                persistentBytes = diagnostics.PersistentBytes
-            },
-            correctness = new { fp, fn, mismatchExamples },
-            queryMetrics = queryMetrics.ToDictionary(
-                pair => pair.Key,
-                pair => pair.Value.ToReport(), StringComparer.Ordinal),
-            overall = new
-            {
-                fullP50Ms = Percentile(allFull, .50),
-                fullP95Ms = Percentile(allFull, .95),
-                fullP99Ms = Percentile(allFull, .99),
-                fullMaxMs = allFull.Count == 0 ? 0 : allFull.Max(),
-                firstUsefulP50Ms = Percentile(allFirst, .50),
-                firstUsefulP95Ms = Percentile(allFirst, .95),
-                firstUsefulP99Ms = Percentile(allFirst, .99),
-                firstUsefulMaxMs = allFirst.Count == 0 ? 0 : allFirst.Max(),
-                sampleCount = allFull.Count
-            },
-            diagnostics,
-            updates,
-            cancellation,
-            hardGates = new
-            {
-                fp = fp == 0,
-                fn = fn == 0,
-                cancelP95 = cancellation is null || cancellation.P95Ms <= 100,
-                updateFullRebuildCount = updates is null || updates.FullBaseRewriteCount == 0
-            }
-        };
-
-        await File.WriteAllTextAsync(
-            reportPath,
-            JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }),
-            Encoding.UTF8).ConfigureAwait(false);
-        Console.WriteLine($"Formal report: {reportPath}");
-        Console.WriteLine($"backend={parsed.Backend} corpus={parsed.Corpus} documents={documents.Count} fp={fp} fn={fn} p95={Percentile(allFull, .95):F2}ms");
+            sampler?.Stop();
+            await WriteTimeoutReportAsync(
+                parsed,
+                root,
+                work,
+                documents,
+                buildEvidence,
+                queryMetrics,
+                allFull,
+                allFirst,
+                fp,
+                fn,
+                mismatchExamples,
+                backend.GetDiagnostics(),
+                timeout,
+                reportPath).ConfigureAwait(false);
+            Console.WriteLine($"Formal timeout report: {reportPath} stage={timeout.Stage} query={timeout.QueryText ?? "(build)"}");
+        }
     }
 
     private static async Task<(double FullMs, double? FirstMs, IReadOnlyList<ContentMatch> Matches)> MeasureSearchAsync(
@@ -182,10 +181,18 @@ internal static class FormalRunner
         long start = Stopwatch.GetTimestamp();
         long first = -1;
         IReadOnlyList<ContentMatch> matches;
+        using var timeout = new CancellationTokenSource(SearchTimeout);
         using (ContentSearchObservation.Push(_ =>
             Interlocked.CompareExchange(ref first, Stopwatch.GetTimestamp(), -1)))
         {
-            matches = await backend.SearchAsync(query, CancellationToken.None).ConfigureAwait(false);
+            try
+            {
+                matches = await backend.SearchAsync(query, timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+            {
+                throw new FormalMeasurementTimeoutException("search", query.Text, SearchTimeout);
+            }
         }
         long end = Stopwatch.GetTimestamp();
         double fullMs = (end - start) * 1000.0 / Stopwatch.Frequency;
@@ -198,7 +205,7 @@ internal static class FormalRunner
         ContentCorpus corpus,
         IReadOnlyList<ContentDocument> documents)
     {
-        ContentDocument target = documents.OrderBy(d => d.SizeBytes).First();
+        ContentDocument target = await FindWritableTextTargetAsync(documents).ConfigureAwait(false);
         byte[] original = await File.ReadAllBytesAsync(target.ExactPath).ConfigureAwait(false);
         DateTime originalTime = File.GetLastWriteTimeUtc(target.ExactPath);
         var rounds = new List<object>();
@@ -219,18 +226,36 @@ internal static class FormalRunner
                 }
                 watch.Stop();
                 string finalToken = $"CONTENT_UPDATE_{count}_{count:0000}";
+                Stopwatch convergenceWatch = Stopwatch.StartNew();
                 IReadOnlyList<ContentMatch> result = await backend.SearchAsync(
                     new ContentQuery(finalToken, ContentQueryMode.Substring, true), CancellationToken.None).ConfigureAwait(false);
-                rounds.Add(new { updates = count, elapsedMs = watch.Elapsed.TotalMilliseconds, convergenceMs = watch.Elapsed.TotalMilliseconds, finalTokenFound = result.Count > 0 });
+                convergenceWatch.Stop();
+                rounds.Add(new { updates = count, elapsedMs = watch.Elapsed.TotalMilliseconds, convergenceMs = convergenceWatch.Elapsed.TotalMilliseconds, finalTokenFound = result.Count > 0 });
             }
         }
         finally
         {
             await File.WriteAllBytesAsync(target.ExactPath, original).ConfigureAwait(false);
             File.SetLastWriteTimeUtc(target.ExactPath, originalTime);
+            var restored = new FileInfo(target.ExactPath);
+            await backend.ApplyChangesAsync(
+                new[] { new ContentChange(ContentChangeKind.Updated, target with { SizeBytes = restored.Length, ModifiedUtc = restored.LastWriteTimeUtc }, target.FileKey) },
+                CancellationToken.None).ConfigureAwait(false);
         }
 
         return new UpdateResult(0, rounds);
+    }
+
+    private static async Task<ContentDocument> FindWritableTextTargetAsync(IReadOnlyList<ContentDocument> documents)
+    {
+        foreach (ContentDocument document in documents.OrderBy(d => d.SizeBytes).ThenBy(d => d.ExactPath, StringComparer.Ordinal))
+        {
+            ExtractedTextInfo probe = await TextExtraction.ProbeAsync(document.ExactPath, CancellationToken.None).ConfigureAwait(false);
+            if (probe.Status == ContentIndexStatus.Indexed)
+                return document;
+        }
+
+        throw new InvalidOperationException("Formal update fixture has no decodable text document.");
     }
 
     private static async Task<CancellationResult> RunCancellationAsync(
@@ -276,6 +301,161 @@ internal static class FormalRunner
         int fp = actualSet.Except(expectedSet).Count();
         int fn = expectedSet.Except(actualSet).Count();
         return (fp, fn, fp == 0 && fn == 0 ? null : new { key, fp, fn });
+    }
+
+    private static async Task WriteReportAsync(
+        FormalArguments parsed,
+        string root,
+        string work,
+        IReadOnlyList<ContentDocument> documents,
+        FormalBuildEvidence build,
+        IReadOnlyDictionary<string, QueryAccumulator> queryMetrics,
+        IReadOnlyList<double> allFull,
+        IReadOnlyList<double> allFirst,
+        int fp,
+        int fn,
+        IReadOnlyList<object> mismatchExamples,
+        ContentBackendDiagnostics diagnostics,
+        UpdateResult? updates,
+        CancellationResult? cancellation,
+        string reportPath)
+    {
+        var report = new
+        {
+            version = 1,
+            reportType = "content-search-bakeoff-backend-corpus",
+            status = "COMPLETED",
+            seriesId = parsed.SeriesId,
+            sourceCommitSha = parsed.SourceCommit,
+            reportHeadSha = parsed.ReportHead,
+            backend = parsed.Backend,
+            corpus = parsed.Corpus,
+            root,
+            work,
+            command = Environment.CommandLine,
+            exitCode = 0,
+            generatedUtc = DateTime.UtcNow,
+            executableSha256 = ExecutableSha256(),
+            settings = new { blockSizeChars = BlockSizeChars, overlapChars = OverlapChars, rounds = Rounds, warmupRounds = WarmupRounds, measuredRounds = MeasuredRounds, queryShuffleSeed = ShuffleSeed },
+            build = ToBuildReport(build),
+            correctness = new { fp, fn, mismatchExamples },
+            queryMetrics = queryMetrics.ToDictionary(pair => pair.Key, pair => pair.Value.ToReport(), StringComparer.Ordinal),
+            overall = new
+            {
+                fullP50Ms = Percentile(allFull, .50),
+                fullP95Ms = Percentile(allFull, .95),
+                fullP99Ms = Percentile(allFull, .99),
+                fullMaxMs = allFull.Count == 0 ? 0 : allFull.Max(),
+                firstUsefulP50Ms = Percentile(allFirst, .50),
+                firstUsefulP95Ms = Percentile(allFirst, .95),
+                firstUsefulP99Ms = Percentile(allFirst, .99),
+                firstUsefulMaxMs = allFirst.Count == 0 ? 0 : allFirst.Max(),
+                sampleCount = allFull.Count
+            },
+            diagnostics,
+            updates,
+            cancellation,
+            hardGates = new
+            {
+                fp = fp == 0,
+                fn = fn == 0,
+                cancelP95 = cancellation is null || cancellation.P95Ms <= 100,
+                updateFullRebuildCount = updates is null || updates.FullBaseRewriteCount == 0
+            }
+        };
+
+        await WriteJsonAsync(reportPath, report).ConfigureAwait(false);
+        Console.WriteLine($"Formal report: {reportPath}");
+        Console.WriteLine($"backend={parsed.Backend} corpus={parsed.Corpus} documents={documents.Count} fp={fp} fn={fn} p95={Percentile(allFull, .95):F2}ms");
+    }
+
+    private static async Task WriteTimeoutReportAsync(
+        FormalArguments parsed,
+        string root,
+        string work,
+        IReadOnlyList<ContentDocument> documents,
+        FormalBuildEvidence? build,
+        IReadOnlyDictionary<string, QueryAccumulator> queryMetrics,
+        IReadOnlyList<double> allFull,
+        IReadOnlyList<double> allFirst,
+        int fp,
+        int fn,
+        IReadOnlyList<object> mismatchExamples,
+        ContentBackendDiagnostics diagnostics,
+        FormalMeasurementTimeoutException timeout,
+        string reportPath)
+    {
+        var report = new
+        {
+            version = 1,
+            reportType = "content-search-bakeoff-backend-corpus",
+            status = "TIMEOUT",
+            seriesId = parsed.SeriesId,
+            sourceCommitSha = parsed.SourceCommit,
+            reportHeadSha = parsed.ReportHead,
+            backend = parsed.Backend,
+            corpus = parsed.Corpus,
+            root,
+            work,
+            command = Environment.CommandLine,
+            exitCode = 0,
+            generatedUtc = DateTime.UtcNow,
+            executableSha256 = ExecutableSha256(),
+            settings = new { blockSizeChars = BlockSizeChars, overlapChars = OverlapChars, measuredRounds = MeasuredRounds, warmupRounds = WarmupRounds, queryShuffleSeed = ShuffleSeed, buildTimeoutSeconds = BuildTimeout.TotalSeconds, searchTimeoutSeconds = SearchTimeout.TotalSeconds },
+            timeout = new { stage = timeout.Stage, query = timeout.QueryText, timeoutMs = timeout.Limit.TotalMilliseconds },
+            build = build is null ? null : ToBuildReport(build),
+            correctness = new { fp = (int?)null, fn = (int?)null, mismatchExamples },
+            queryMetrics = queryMetrics.ToDictionary(pair => pair.Key, pair => pair.Value.ToReport(), StringComparer.Ordinal),
+            overall = new
+            {
+                fullP50Ms = Percentile(allFull, .50),
+                fullP95Ms = Percentile(allFull, .95),
+                fullP99Ms = Percentile(allFull, .99),
+                fullMaxMs = allFull.Count == 0 ? 0 : allFull.Max(),
+                firstUsefulP50Ms = Percentile(allFirst, .50),
+                firstUsefulP95Ms = Percentile(allFirst, .95),
+                firstUsefulP99Ms = Percentile(allFirst, .99),
+                firstUsefulMaxMs = allFirst.Count == 0 ? 0 : allFirst.Max(),
+                sampleCount = allFull.Count
+            },
+            diagnostics,
+            updates = (UpdateResult?)null,
+            cancellation = (CancellationResult?)null,
+            hardGates = new { fp = false, fn = false, timeout = true }
+        };
+
+        await WriteJsonAsync(reportPath, report).ConfigureAwait(false);
+    }
+
+    private static async Task WriteJsonAsync<T>(string path, T value)
+    {
+        await File.WriteAllTextAsync(
+            path,
+            JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }),
+            Encoding.UTF8).ConfigureAwait(false);
+    }
+
+    private static object ToBuildReport(FormalBuildEvidence build) => new
+    {
+        elapsedMs = build.ElapsedMs,
+        documentCount = build.DocumentCount,
+        sourceBytes = build.SourceBytes,
+        privateBeforeBytes = build.PrivateBeforeBytes,
+        peakPrivateBytes = build.PeakPrivateBytes,
+        readyPrivateBytes = build.ReadyPrivateBytes,
+        managedBytes = build.ManagedBytes,
+        gen0Collections = build.Gen0Collections,
+        gen1Collections = build.Gen1Collections,
+        gen2Collections = build.Gen2Collections,
+        persistentBytes = build.PersistentBytes
+    };
+
+    private static string ExecutableSha256()
+    {
+        string path = typeof(FormalRunner).Assembly.Location;
+        return File.Exists(path)
+            ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant()
+            : string.Empty;
     }
 
     private static IContentSearchBackend CreateBackend(string backend) => backend.ToLowerInvariant() switch
@@ -361,6 +541,33 @@ internal static class FormalRunner
     private sealed record ExpectedSignature(string Path, long Offset, int Length);
     private sealed record UpdateResult(int FullBaseRewriteCount, IReadOnlyList<object> Rounds);
     private sealed record CancellationResult(double P95Ms, double MaxMs, IReadOnlyList<string> Outcomes);
+    private sealed record FormalBuildEvidence(
+        double ElapsedMs,
+        int DocumentCount,
+        long SourceBytes,
+        long PrivateBeforeBytes,
+        long PeakPrivateBytes,
+        long ReadyPrivateBytes,
+        long ManagedBytes,
+        int Gen0Collections,
+        int Gen1Collections,
+        int Gen2Collections,
+        long PersistentBytes);
+
+    private sealed class FormalMeasurementTimeoutException : Exception
+    {
+        public FormalMeasurementTimeoutException(string stage, string? queryText, TimeSpan limit)
+            : base($"Formal {stage} measurement exceeded {limit.TotalSeconds:F0}s.")
+        {
+            Stage = stage;
+            QueryText = queryText;
+            Limit = limit;
+        }
+
+        public string Stage { get; }
+        public string? QueryText { get; }
+        public TimeSpan Limit { get; }
+    }
 
     private sealed class QueryAccumulator
     {

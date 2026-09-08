@@ -16,15 +16,48 @@ function Invoke-Captured {
     param([string]$Name, [string]$FilePath, [string[]]$ArgumentList, [string]$LogDirectory)
     New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
     $logPath = Join-Path $LogDirectory ($Name + ".combined.log")
+    $stdoutPath = Join-Path $LogDirectory ($Name + ".stdout.log")
+    $stderrPath = Join-Path $LogDirectory ($Name + ".stderr.log")
+    $timeoutSeconds = if ($Name.StartsWith("02-run-")) { 6 * 60 * 60 } elseif ($Name.StartsWith("00-")) { 3 * 60 * 60 } else { 30 * 60 }
     $watch = [Diagnostics.Stopwatch]::StartNew()
-    & $FilePath @ArgumentList *> $logPath
-    $exitCode = $LASTEXITCODE
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $FilePath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in $ArgumentList) { [void]$startInfo.ArgumentList.Add([string]$argument) }
+
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    [void]$process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $completed = $process.WaitForExit($timeoutSeconds * 1000)
+    $timedOut = -not $completed
+    if ($timedOut) {
+        try { $process.Kill($true) } catch { }
+        $process.WaitForExit()
+        $exitCode = 124
+    } else {
+        $exitCode = $process.ExitCode
+    }
+    $stdout = $stdoutTask.GetAwaiter().GetResult()
+    $stderr = $stderrTask.GetAwaiter().GetResult()
+    [IO.File]::WriteAllText($stdoutPath, $stdout, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($stderrPath, $stderr, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($logPath, ($stdout + [Environment]::NewLine + $stderr), [Text.UTF8Encoding]::new($false))
+    $process.Dispose()
     $watch.Stop()
     [pscustomobject]@{
         command = (($FilePath + " ") + ($ArgumentList -join " "))
         exitCode = $exitCode
         elapsedMs = $watch.Elapsed.TotalMilliseconds
         logPath = $logPath
+        stdoutPath = $stdoutPath
+        stderrPath = $stderrPath
+        timeoutSeconds = $timeoutSeconds
+        timedOut = $timedOut
     }
 }
 
@@ -116,11 +149,11 @@ $generatorHash = (Get-FileHash -Algorithm SHA256 $generator).Hash.ToLowerInvaria
 $settingsPath = Join-Path $repo "tests\ContentSearch.Bakeoff\benchmark-settings.json"
 $settingsHash = (Get-FileHash -Algorithm SHA256 $settingsPath).Hash.ToLowerInvariant()
 $sourceFiles = @(
-    Get-ChildItem (Join-Path $repo "src\ContentSearch.Core") -File -Filter *.cs -Recurse
-    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Scan") -File -Filter *.cs -Recurse
-    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Bloom") -File -Filter *.cs -Recurse
-    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Trigram") -File -Filter *.cs -Recurse
-    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Sqlite") -File -Filter *.cs -Recurse
+    Get-ChildItem (Join-Path $repo "src\ContentSearch.Core") -File -Filter *.cs -Recurse | Where-Object { $_.FullName -notlike '*\obj\*' }
+    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Scan") -File -Filter *.cs -Recurse | Where-Object { $_.FullName -notlike '*\obj\*' }
+    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Bloom") -File -Filter *.cs -Recurse | Where-Object { $_.FullName -notlike '*\obj\*' }
+    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Trigram") -File -Filter *.cs -Recurse | Where-Object { $_.FullName -notlike '*\obj\*' }
+    Get-ChildItem (Join-Path $repo "src\ContentSearch.Backends.Sqlite") -File -Filter *.cs -Recurse | Where-Object { $_.FullName -notlike '*\obj\*' }
     Get-Item (Join-Path $repo "tests\ContentSearch.Bakeoff\FormalRunner.cs"), (Join-Path $repo "tests\ContentSearch.Bakeoff\Program.cs")
 )
 $sourceHashes = [ordered]@{}
@@ -148,6 +181,10 @@ $lock = [ordered]@{
     scoringRulesHash = $scoringHash
     acceptanceRuleHash = $acceptanceHash
     thresholdDefinitionHash = $thresholdHash
+    executableSha256 = (Get-FileHash -Algorithm SHA256 $dll).Hash.ToLowerInvariant()
+    logical100GiBRequirement = [bool]$rules.corpus.logical100GiBRequirement
+    searchTimeoutSeconds = 300
+    buildTimeoutSeconds = 10800
     normalizerCasefoldVersion = "FilenameSearch.Core.FilenameSemantics.NormalizerVersion"
     corpusManifestPath = $manifestPath
     corpusManifestSha256 = (Get-FileHash -Algorithm SHA256 $manifestPath).Hash.ToLowerInvariant()
@@ -155,8 +192,22 @@ $lock = [ordered]@{
     power = [ordered]@{ ACLineStatus = $environment.acLineStatus; batteryStatus = $environment.batteryStatus; powerScheme = $environment.powerScheme }
 }
 $lockPath = Join-Path $reportRoot "FORMAL_BAKEOFF_LOCK.json"
+$priorInvalidations = @()
+if (Test-Path $lockPath) {
+    try {
+        $oldLock = Get-Content -Raw -Encoding UTF8 $lockPath | ConvertFrom-Json
+        if ($oldLock.formal_source_commit_sha -and $oldLock.formal_source_commit_sha -ne $sourceSha) {
+            $priorInvalidations += [ordered]@{
+                seriesId = $oldLock.seriesId
+                sourceCommitSha = $oldLock.formal_source_commit_sha
+                reason = "Acceptance rule and formal timeout harness were corrected before rerunning the frozen measurement; the previous series is invalid."
+                replacementSourceSha = $sourceSha
+            }
+        }
+    } catch { }
+}
 $lock | ConvertTo-Json -Depth 30 | Set-Content -Encoding UTF8 $lockPath
-$invalidations = [ordered]@{ version = 1; seriesId = $seriesId; invalidations = @(); note = "No post-lock correctness or harness invalidation." }
+$invalidations = [ordered]@{ version = 1; seriesId = $seriesId; invalidations = $priorInvalidations; note = "Any listed prior series was invalidated before this lock. Post-lock source, runner, query, oracle, corpus, threshold, and round changes are prohibited." }
 $invalidations | ConvertTo-Json -Depth 20 | Set-Content -Encoding UTF8 (Join-Path $reportRoot "FORMAL_BAKEOFF_INVALIDATIONS.json")
 
 if (-not (Test-Path $dll)) { throw "Release runner is missing: $dll" }

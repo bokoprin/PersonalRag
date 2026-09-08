@@ -55,15 +55,22 @@ def main() -> int:
     rows: list[dict] = []
     for backend in BACKENDS:
         selected = [r for r in reports if r.get("backend") == backend]
-        correctness_ok = all(r.get("correctness", {}).get("fp") == 0 and r.get("correctness", {}).get("fn") == 0 for r in selected)
-        runtime_ok = len(selected) == len(CORPORA) and all(r.get("exitCode", 1) == 0 for r in selected)
+        completed = [r for r in selected if r.get("status", "COMPLETED") == "COMPLETED"]
+        timed_out = [r for r in selected if r.get("status") == "TIMEOUT"]
+        correctness_ok = len(selected) == len(CORPORA) and all(
+            r.get("correctness", {}).get("fp") == 0 and r.get("correctness", {}).get("fn") == 0
+            for r in completed
+        ) and len(completed) == len(CORPORA)
+        runtime_ok = len(selected) == len(CORPORA) and len(completed) == len(CORPORA) and all(
+            r.get("exitCode", 1) == 0 for r in completed
+        )
         p95s = []
         ready = []
         persistent_ratio = []
         builds = []
         cancel = []
         update_rebuilds = []
-        for report in selected:
+        for report in completed:
             p95s.append(report.get("overall", {}).get("fullP95Ms", 0))
             b = report.get("build", {})
             ready.append(b.get("readyPrivateBytes", 0))
@@ -85,6 +92,8 @@ def main() -> int:
             "cancelP95MaxMs": max(cancel, default=None),
             "fullBaseRewriteMax": max(update_rebuilds, default=0),
             "corporaMeasured": len(selected),
+            "completedReports": len(completed),
+            "timedOutReports": len(timed_out),
         })
 
     eligible = [r for r in rows if r["eligible"]]
@@ -121,15 +130,16 @@ def main() -> int:
 
     for backend in BACKENDS:
         source = next((r for r in reports if r.get("backend") == backend and r.get("corpus") == "SOURCE_CONFIG"), None)
+        update_data = (source or {}).get("updates") or {}
         update = {
             "version": 1,
             "seriesId": lock.get("seriesId"),
             "sourceCommitSha": lock.get("formal_source_commit_sha"),
             "backend": backend,
             "corpus": "SOURCE_CONFIG",
-            "updates": source.get("updates") if source else None,
-            "full_base_rewrite_count": source.get("updates", {}).get("FullBaseRewriteCount", 0) if source else None,
-            "pass": bool(source and source.get("updates", {}).get("FullBaseRewriteCount", 0) == 0),
+            "updates": update_data or None,
+            "full_base_rewrite_count": update_data.get("FullBaseRewriteCount") if update_data else None,
+            "pass": bool(source and source.get("status", "COMPLETED") == "COMPLETED" and update_data.get("FullBaseRewriteCount", 0) == 0),
         }
         (report_root / f"UPDATE_{backend.upper().replace('-', '_')}.json").write_text(json.dumps(update, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     cancel = {
@@ -160,8 +170,8 @@ def main() -> int:
             "additionalReadyRamBytes": 536870912,
             "cancelP95Ms": 100,
         },
-        "evaluationComplete": not missing and len(reports) == 12 and all(r.get("exitCode", 1) == 0 for r in reports),
-        "pass": not missing and len(reports) == 12 and all(r.get("correctness", {}).get("fp") == 0 and r.get("correctness", {}).get("fn") == 0 for r in reports),
+        "evaluationComplete": not missing and len(reports) == 12 and all(r.get("status", "COMPLETED") == "COMPLETED" and r.get("exitCode", 1) == 0 for r in reports),
+        "pass": not missing and len(reports) == 12 and all(r.get("status", "COMPLETED") == "COMPLETED" and r.get("correctness", {}).get("fp") == 0 and r.get("correctness", {}).get("fn") == 0 for r in reports),
     }
     output = Path(args.output_summary).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
