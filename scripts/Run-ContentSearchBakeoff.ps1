@@ -203,7 +203,7 @@ if (Test-Path $lockPath) {
             $priorInvalidations += [ordered]@{
                 seriesId = $oldLock.seriesId
                 sourceCommitSha = $oldLock.formal_source_commit_sha
-                reason = "Acceptance rule and formal timeout harness were corrected before rerunning the frozen measurement; the previous series is invalid."
+                reason = "The frozen series was invalidated after SQLite fallback search materialized an unbounded body result set and exhausted process memory; the replacement source fetches one body at a time with cancellation."
                 replacementSourceSha = $sourceSha
             }
         }

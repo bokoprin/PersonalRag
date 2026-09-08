@@ -77,14 +77,13 @@ public sealed class SqliteFts5Backend : IContentSearchBackend
 
         string sql = fallback
             ? """
-              SELECT m.block_id,m.file_key,m.path,m.ordinal,m.decoded_start,m.base_line,f.body
+              SELECT m.rowid,m.block_id,m.file_key,m.path,m.ordinal,m.decoded_start,m.base_line
               FROM block_meta m
-              JOIN content_fts f ON f.rowid=m.rowid
               WHERE m.active=1
               ORDER BY m.block_id;
               """
             : """
-              SELECT m.block_id,m.file_key,m.path,m.ordinal,m.decoded_start,m.base_line,f.body
+              SELECT m.rowid,m.block_id,m.file_key,m.path,m.ordinal,m.decoded_start,m.base_line
               FROM block_meta m
               JOIN content_fts f ON f.rowid=m.rowid
               WHERE m.active=1 AND content_fts MATCH $query
@@ -106,13 +105,18 @@ public sealed class SqliteFts5Backend : IContentSearchBackend
             cancellationToken.ThrowIfCancellationRequested();
             candidates++;
 
-            long blockId = reader.GetInt64(0);
-            var fileKey = new ContentFileKey(reader.GetString(1));
-            string path = reader.GetString(2);
-            int ordinal = reader.GetInt32(3);
-            long decodedStart = reader.GetInt64(4);
-            int baseLine = reader.GetInt32(5);
-            string body = reader.GetString(6);
+            long rowId = reader.GetInt64(0);
+            long blockId = reader.GetInt64(1);
+            var fileKey = new ContentFileKey(reader.GetString(2));
+            string path = reader.GetString(3);
+            int ordinal = reader.GetInt32(4);
+            long decodedStart = reader.GetInt64(5);
+            int baseLine = reader.GetInt32(6);
+            // Do not select every fallback body into one SQLite result set.  The
+            // fallback path is intentionally broad, so materializing all bodies
+            // at once can exhaust process memory before the cancellation token is
+            // observed.  Fetch one body at a time and verify it immediately.
+            string body = await ReadBodyAsync(connection, rowId, cancellationToken).ConfigureAwait(false);
             int utf8Bytes = System.Text.Encoding.UTF8.GetByteCount(body);
             bytes += utf8Bytes;
 
@@ -141,6 +145,18 @@ public sealed class SqliteFts5Backend : IContentSearchBackend
             .OrderBy(m => m.ExactPath, StringComparer.Ordinal)
             .ThenBy(m => m.DecodedCharOffset)
             .ToArray();
+    }
+
+    private static async Task<string> ReadBodyAsync(
+        SqliteConnection connection,
+        long rowId,
+        CancellationToken cancellationToken)
+    {
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT body FROM content_fts WHERE rowid=$rowid;";
+        command.Parameters.AddWithValue("$rowid", rowId);
+        object? value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return value as string ?? throw new InvalidDataException($"FTS body row {rowId} is missing.");
     }
 
     public async Task ApplyChangesAsync(IReadOnlyList<ContentChange> changes, CancellationToken cancellationToken)
