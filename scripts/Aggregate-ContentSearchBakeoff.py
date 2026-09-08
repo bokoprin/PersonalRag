@@ -84,7 +84,13 @@ def main() -> int:
         rows.append({
             "backend": backend,
             "eligible": correctness_ok and runtime_ok,
-            "correctness": {"fp": sum(r.get("correctness", {}).get("fp", 0) for r in selected), "fn": sum(r.get("correctness", {}).get("fn", 0) for r in selected)},
+            # TIMEOUT reports deliberately carry null correctness values.  They
+            # must not crash aggregation, and they remain ineligible because
+            # correctness_ok/runtime_ok require every corpus to be completed.
+            "correctness": {
+                "fp": sum((r.get("correctness", {}).get("fp") or 0) for r in selected),
+                "fn": sum((r.get("correctness", {}).get("fn") or 0) for r in selected),
+            },
             "searchFullP95GeomeanMs": geo(p95s),
             "readyPrivateMaxBytes": max(ready, default=0),
             "persistentRatioGeomean": geo(persistent_ratio),

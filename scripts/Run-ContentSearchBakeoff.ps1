@@ -203,7 +203,7 @@ if (Test-Path $lockPath) {
             $priorInvalidations += [ordered]@{
                 seriesId = $oldLock.seriesId
                 sourceCommitSha = $oldLock.formal_source_commit_sha
-                reason = "The frozen series was invalidated after SQLite fallback search materialized an unbounded body result set and exhausted process memory; the replacement source fetches one body at a time with cancellation."
+                reason = "The frozen series was invalidated after SQLite fallback search materialized an unbounded body result set and exhausted process memory, and the timeout-report aggregate crashed on null correctness values; the replacement source streams bodies and aggregates incomplete reports safely."
                 replacementSourceSha = $sourceSha
             }
         }
