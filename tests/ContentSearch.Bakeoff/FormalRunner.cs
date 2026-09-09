@@ -43,6 +43,12 @@ internal static class FormalRunner
 
         IReadOnlyList<FormalQuery> formalQueries = LoadQueries(parsed.QuerySet);
         IReadOnlyDictionary<string, HashSet<ExpectedSignature>> expected = LoadExpected(parsed.Expected);
+        // Initial-build measurement includes discovery and metadata collection
+        // for the completed filesystem corpus, as required by the formal plan.
+        MemorySampler? sampler = new MemorySampler();
+        sampler.Start();
+        long privateBefore = Process.GetCurrentProcess().PrivateMemorySize64;
+        Stopwatch buildWatch = Stopwatch.StartNew();
         IReadOnlyList<ContentDocument> documents = BuildDocuments(root);
         var corpus = new ContentCorpus(documents, work, BlockSizeChars, OverlapChars);
         await using IContentSearchBackend backend = CreateBackend(parsed.Backend);
@@ -54,14 +60,9 @@ internal static class FormalRunner
         int fp = 0;
         int fn = 0;
         var mismatchExamples = new List<object>();
-        MemorySampler? sampler = null;
 
         try
         {
-            sampler = new MemorySampler();
-            sampler.Start();
-            long privateBefore = Process.GetCurrentProcess().PrivateMemorySize64;
-            Stopwatch buildWatch = Stopwatch.StartNew();
             using (var buildTimeout = new CancellationTokenSource(BuildTimeout))
             {
                 try
