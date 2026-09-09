@@ -57,6 +57,11 @@ def main() -> int:
         selected = [r for r in reports if r.get("backend") == backend]
         completed = [r for r in selected if r.get("status", "COMPLETED") == "COMPLETED"]
         timed_out = [r for r in selected if r.get("status") == "TIMEOUT"]
+        terminal = [
+            r for r in selected
+            if r.get("status", "COMPLETED") in {"COMPLETED", "TIMEOUT"}
+            and r.get("exitCode", 1) == 0
+        ]
         correctness_ok = len(selected) == len(CORPORA) and all(
             r.get("correctness", {}).get("fp") == 0 and r.get("correctness", {}).get("fn") == 0
             for r in completed
@@ -70,8 +75,9 @@ def main() -> int:
         builds = []
         cancel = []
         update_rebuilds = []
-        for report in completed:
-            p95s.append(report.get("overall", {}).get("fullP95Ms", 0))
+        for report in terminal:
+            if report.get("status", "COMPLETED") == "COMPLETED":
+                p95s.append(report.get("overall", {}).get("fullP95Ms", 0))
             b = report.get("build", {})
             ready.append(b.get("readyPrivateBytes", 0))
             source_bytes = max(1, b.get("sourceBytes", 1))
@@ -84,14 +90,15 @@ def main() -> int:
         rows.append({
             "backend": backend,
             "eligible": correctness_ok and runtime_ok,
-            # TIMEOUT reports deliberately carry null correctness values.  They
-            # must not crash aggregation, and they remain ineligible because
-            # correctness_ok/runtime_ok require every corpus to be completed.
+            # TIMEOUT reports deliberately carry null correctness values. They
+            # remain ineligible because correctness/runtime eligibility requires
+            # every corpus to complete its full query series, but their build and
+            # persistence evidence is still retained in the comparison row.
             "correctness": {
                 "fp": sum((r.get("correctness", {}).get("fp") or 0) for r in selected),
                 "fn": sum((r.get("correctness", {}).get("fn") or 0) for r in selected),
             },
-            "searchFullP95GeomeanMs": geo(p95s),
+            "searchFullP95GeomeanMs": geo(p95s) if p95s else None,
             "readyPrivateMaxBytes": max(ready, default=0),
             "persistentRatioGeomean": geo(persistent_ratio),
             "initialBuildGeomeanMs": geo(builds),
@@ -100,6 +107,8 @@ def main() -> int:
             "corporaMeasured": len(selected),
             "completedReports": len(completed),
             "timedOutReports": len(timed_out),
+            "terminalReports": len(terminal),
+            "performanceMeasurementComplete": len(completed) == len(CORPORA),
         })
 
     eligible = [r for r in rows if r["eligible"]]
@@ -176,7 +185,14 @@ def main() -> int:
             "additionalReadyRamBytes": 536870912,
             "cancelP95Ms": 100,
         },
-        "evaluationComplete": not missing and len(reports) == 12 and all(r.get("status", "COMPLETED") == "COMPLETED" and r.get("exitCode", 1) == 0 for r in reports),
+        # A TIMEOUT is a terminal raw measurement result under the formal
+        # protocol. It completes the evaluation inventory while remaining a
+        # performance/correctness miss for backend eligibility and pass.
+        "evaluationComplete": not missing and len(reports) == 12 and all(
+            r.get("status", "COMPLETED") in {"COMPLETED", "TIMEOUT"}
+            and r.get("exitCode", 1) == 0
+            for r in reports
+        ),
         "pass": not missing and len(reports) == 12 and all(r.get("status", "COMPLETED") == "COMPLETED" and r.get("correctness", {}).get("fp") == 0 and r.get("correctness", {}).get("fn") == 0 for r in reports),
     }
     output = Path(args.output_summary).resolve()
@@ -191,6 +207,7 @@ def main() -> int:
         "winner": summary["winner"],
         "secondary": summary["secondary"],
         "rejected": summary["rejected"],
+        "performanceMeasurementComplete": summary["pass"],
         "allowedNotRun": [],
         "performanceMissesAreResults": True,
     }
@@ -208,8 +225,10 @@ def main() -> int:
         "|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
-        lines.append(f"| {row['backend']} | {row['classification']} | {row['eligible']} | {row['searchFullP95GeomeanMs']:.3f} | {row['readyPrivateMaxBytes']} | {row['persistentRatioGeomean']:.6f} | {row['initialBuildGeomeanMs']:.3f} | {row.get('score') if row.get('score') is not None else 'n/a'} |")
-    lines += ["", "Performance target misses remain visible in each backend report and are not removed as outliers.", ""]
+        p95 = row["searchFullP95GeomeanMs"]
+        p95_text = f"{p95:.3f}" if p95 is not None else "n/a"
+        lines.append(f"| {row['backend']} | {row['classification']} | {row['eligible']} | {p95_text} | {row['readyPrivateMaxBytes']} | {row['persistentRatioGeomean']:.6f} | {row['initialBuildGeomeanMs']:.3f} | {row.get('score') if row.get('score') is not None else 'n/a'} |")
+    lines += ["", "TIMEOUT is a terminal raw result; timed-out backends remain ineligible until correctness and performance samples complete.", "Performance target misses remain visible in each backend report and are not removed as outliers.", ""]
     (report_root.parent.parent / "docs" / "CONTENT_SEARCH_BAKEOFF_FINAL_REPORT.md").write_text("\n".join(lines), encoding="utf-8")
     print(json.dumps({"evaluationComplete": summary["evaluationComplete"], "pass": summary["pass"], "winner": summary["winner"]}, ensure_ascii=False))
     return 0 if summary["evaluationComplete"] else 2
