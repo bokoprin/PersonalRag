@@ -112,3 +112,13 @@ timeout reportではsearch sampleが完了していないため、FP/FNはraw re
 `PERSONALRAG_CONTENT_SEARCH_BAKEOFF_COMPLETE` は、§59の全条件（全query FP/FN、update、cancellation、winner/secondary決定、commit、push、remote HEAD確認）が揃っていないため宣言していません。
 
 \n
+
+## Remote update check
+
+Formal lock後のpush前fetchで確認したSHAは次のとおりです。
+
+- `origin/codex/content-search-bakeoff-measure`: `73999fb4c05afcc46958dc98d5337abd274ef75f`
+- `origin/codex/content-search-bakeoff`: `ec8e099f520be54ca24fc83e16f5d539b143f9b6`
+
+remote側にlocal HEADより先行するcommitはなく、formal sourceへ取り込むremote差分はありません。lock後にpull、merge、rebase、force pushは行っていません。report payload commitは `03eefedd452a843f135ff9ee4cad5e3125fef78b`、report metadata commitは `25d7b2df45f8ec255320559dc3b91788caa842ce` です。
+\n
