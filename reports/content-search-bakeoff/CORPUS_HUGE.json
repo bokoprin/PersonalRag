@@ -2,7 +2,7 @@
     "version":  1,
     "seriesId":  "content-bakeoff-325a13ec1de1",
     "sourceCommitSha":  "325a13ec1de12282a7c1ce9de3f3581689faa061",
-    "reportHeadSha":  "pending-report-commit",
+    "reportHeadSha":  "03eefedd452a843f135ff9ee4cad5e3125fef78b",
     "corpus":  "HUGE",
     "manifestSha256":  "8440245b3671d7458074d177a8074c1be50cb8e006a175635b264e00846e3647",
     "required":  {

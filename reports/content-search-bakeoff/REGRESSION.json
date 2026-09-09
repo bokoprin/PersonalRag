@@ -2,7 +2,7 @@
   "version": 1,
   "seriesId": "content-bakeoff-325a13ec1de1",
   "sourceCommitSha": "325a13ec1de12282a7c1ce9de3f3581689faa061",
-  "reportHeadSha": "pending-report-commit",
+  "reportHeadSha": "03eefedd452a843f135ff9ee4cad5e3125fef78b",
   "status": "PASS",
   "commands": [
     {

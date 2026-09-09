@@ -4,7 +4,7 @@
     "createdUtc":  "\/Date(1788964368194)\/",
     "formal_source_commit_sha":  "325a13ec1de12282a7c1ce9de3f3581689faa061",
     "initial_remote_branch_sha":  "ec8e099f520be54ca24fc83e16f5d539b143f9b6",
-    "report_head_sha":  "pending-report-commit",
+    "report_head_sha":  "03eefedd452a843f135ff9ee4cad5e3125fef78b",
     "benchmark":  {
                       "blockSizeChars":  65536,
                       "overlapChars":  256,

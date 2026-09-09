@@ -4,7 +4,7 @@
 
 - Formal series: `content-bakeoff-325a13ec1de1`
 - Measured source commit: `325a13ec1de12282a7c1ce9de3f3581689faa061`
-- Report payload commit: report commit creation時に確定
+- Report payload commit: `03eefedd452a843f135ff9ee4cad5e3125fef78b`
 - Working branch: `codex/content-search-bakeoff-measure`
 - Initial remote `origin/codex/content-search-bakeoff`: `ec8e099f520be54ca24fc83e16f5d539b143f9b6`
 - Formal lock: `reports/content-search-bakeoff/FORMAL_BAKEOFF_LOCK.json`
