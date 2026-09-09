@@ -1,29 +1,129 @@
 {
   "version": 1,
-  "seriesId": "content-bakeoff-93c82c0ffd73",
-  "formal_source_commit_sha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+  "seriesId": "content-bakeoff-325a13ec1de1",
+  "formal_source_commit_sha": "325a13ec1de12282a7c1ce9de3f3581689faa061",
   "reportHeadSha": "pending-report-commit",
-  "status": "BLOCKED_INCOMPLETE_FORMAL_SERIES",
-  "evaluation_complete": false,
-  "pass": false,
-  "winner": null,
-  "secondary": null,
-  "rejected": [],
-  "blockedReason": "SOURCE_CONFIG/scan child was stopped after a sustained real-filesystem run exceeded the available interactive execution window; no query, threshold, corpus, or round was changed.",
-  "corpusManifestSha256": "c5685ee6bfecbc9f8e8765aaeef0a4b60a3dcd80fb97d8e3039968bba94756d6",
   "benchmark": {
+    "blockSizeChars": 65536,
+    "overlapChars": 256,
     "rounds": 20,
     "warmupRounds": 2,
     "measuredRounds": 18,
-    "queryShuffleSeed": 123456
+    "queryShuffleSeed": 123456,
+    "cancellationTargetMs": 100
   },
-  "gate0": {
-    "pass": true
+  "reports": [
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\SOURCE_CONFIG_scan.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\SOURCE_CONFIG_bloom.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\SOURCE_CONFIG_trigram.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\SOURCE_CONFIG_sqlite-fts5.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\LOG_scan.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\LOG_bloom.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\LOG_trigram.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\LOG_sqlite-fts5.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\HUGE_scan.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\HUGE_bloom.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\HUGE_trigram.json",
+    "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\reports\\content-search-bakeoff\\HUGE_sqlite-fts5.json"
+  ],
+  "missingReports": [],
+  "backendComparison": [
+    {
+      "backend": "scan",
+      "eligible": false,
+      "correctness": {
+        "fp": 0,
+        "fn": 0
+      },
+      "searchFullP95GeomeanMs": null,
+      "readyPrivateMaxBytes": 286957568,
+      "persistentRatioGeomean": 1.0000000000000007e-09,
+      "initialBuildGeomeanMs": 666.5472097544706,
+      "cancelP95MaxMs": null,
+      "fullBaseRewriteMax": 0,
+      "corporaMeasured": 3,
+      "completedReports": 0,
+      "timedOutReports": 3,
+      "terminalReports": 3,
+      "performanceMeasurementComplete": false,
+      "classification": "REJECTED"
+    },
+    {
+      "backend": "bloom",
+      "eligible": false,
+      "correctness": {
+        "fp": 0,
+        "fn": 0
+      },
+      "searchFullP95GeomeanMs": null,
+      "readyPrivateMaxBytes": 847282176,
+      "persistentRatioGeomean": 1.012937960380131,
+      "initialBuildGeomeanMs": 452543.71843603073,
+      "cancelP95MaxMs": null,
+      "fullBaseRewriteMax": 0,
+      "corporaMeasured": 3,
+      "completedReports": 0,
+      "timedOutReports": 3,
+      "terminalReports": 3,
+      "performanceMeasurementComplete": false,
+      "classification": "REJECTED"
+    },
+    {
+      "backend": "trigram",
+      "eligible": false,
+      "correctness": {
+        "fp": 0,
+        "fn": 0
+      },
+      "searchFullP95GeomeanMs": null,
+      "readyPrivateMaxBytes": 672841728,
+      "persistentRatioGeomean": 1.0025655418729567,
+      "initialBuildGeomeanMs": 531474.2551741436,
+      "cancelP95MaxMs": null,
+      "fullBaseRewriteMax": 0,
+      "corporaMeasured": 3,
+      "completedReports": 0,
+      "timedOutReports": 3,
+      "terminalReports": 3,
+      "performanceMeasurementComplete": false,
+      "classification": "REJECTED"
+    },
+    {
+      "backend": "sqlite-fts5",
+      "eligible": false,
+      "correctness": {
+        "fp": 0,
+        "fn": 0
+      },
+      "searchFullP95GeomeanMs": null,
+      "readyPrivateMaxBytes": 460374016,
+      "persistentRatioGeomean": 2.0804686700551054,
+      "initialBuildGeomeanMs": 1883916.9309805934,
+      "cancelP95MaxMs": null,
+      "fullBaseRewriteMax": 0,
+      "corporaMeasured": 3,
+      "completedReports": 0,
+      "timedOutReports": 3,
+      "terminalReports": 3,
+      "performanceMeasurementComplete": false,
+      "classification": "REJECTED"
+    }
+  ],
+  "winner": null,
+  "secondary": null,
+  "rejected": [
+    "scan",
+    "bloom",
+    "trigram",
+    "sqlite-fts5"
+  ],
+  "virtualPerformanceTargets": {
+    "rareFullP95Ms": 50,
+    "generalFullP95Ms": 100,
+    "firstUsefulP95Ms": 100,
+    "additionalReadyRamBytes": 536870912,
+    "cancelP95Ms": 100
   },
-  "completedBackendCorpusReports": 0,
-  "requiredBackendCorpusReports": 12,
-  "performanceTargets": {
-    "status": "NOT_EVALUATED"
-  },
-  "remainingIssue": "The fixed 20/2/18 formal child series must be rerun to completion; this report intentionally does not convert unmeasured cases to PASS or allowed NOT_RUN."
+  "evaluationComplete": true,
+  "pass": false
 }

@@ -1,8 +1,10 @@
 {
   "version": 1,
-  "seriesId": "content-bakeoff-93c82c0ffd73",
-  "sourceCommitSha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
-  "status": "BLOCKED_NOT_COMPLETED",
-  "pass": null,
-  "reason": "No backend/corpus formal report completed."
+  "seriesId": "content-bakeoff-325a13ec1de1",
+  "sourceCommitSha": "325a13ec1de12282a7c1ce9de3f3581689faa061",
+  "backend": "trigram",
+  "corpus": "SOURCE_CONFIG",
+  "updates": null,
+  "full_base_rewrite_count": null,
+  "pass": false
 }

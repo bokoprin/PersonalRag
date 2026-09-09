@@ -1,43 +1,52 @@
 {
   "version": 1,
-  "seriesId": "content-bakeoff-93c82c0ffd73",
-  "sourceCommitSha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+  "seriesId": "content-bakeoff-325a13ec1de1",
+  "sourceCommitSha": "325a13ec1de12282a7c1ce9de3f3581689faa061",
   "reportHeadSha": "pending-report-commit",
   "status": "PASS",
   "commands": [
     {
       "command": "dotnet --info",
       "exitCode": 0,
-      "elapsedMs": 409.9697,
-      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-info.combined.log",
-      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-info.combined.log",
-      "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+      "elapsedMs": 466.4493,
+      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-info.stdout.log",
+      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-info.stderr.log",
+      "combinedPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-info.combined.log",
+      "sourceCommitSha": "325a13ec1de12282a7c1ce9de3f3581689faa061"
     },
     {
       "command": "dotnet restore ContentSearch.Bakeoff.sln",
       "exitCode": 0,
-      "elapsedMs": 793.1578,
-      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-restore.combined.log",
-      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-restore.combined.log",
-      "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+      "elapsedMs": 2363.0398,
+      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-restore.stdout.log",
+      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-restore.stderr.log",
+      "combinedPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-restore.combined.log",
+      "sourceCommitSha": "325a13ec1de12282a7c1ce9de3f3581689faa061"
     },
     {
       "command": "dotnet build ContentSearch.Bakeoff.sln -c Release --no-restore",
       "exitCode": 0,
-      "elapsedMs": 2595.8639,
-      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-build-release.combined.log",
-      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\dotnet-build-release.combined.log",
-      "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+      "elapsedMs": 1734.7442,
+      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-build-release.stdout.log",
+      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-build-release.stderr.log",
+      "combinedPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\dotnet-build-release.combined.log",
+      "sourceCommitSha": "325a13ec1de12282a7c1ce9de3f3581689faa061"
     },
     {
-      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Run-ContentSearchBakeoff.ps1",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\scripts\\Run-ContentSearchBakeoff.ps1",
       "exitCode": 0,
-      "elapsedMs": 3240.2583,
-      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\bakeoff-smoke.combined.log",
-      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-final\\bakeoff-smoke.combined.log",
-      "sourceCommitSha": "1856540621f08a4e1fe9036d9d47507e26ed60dc"
+      "elapsedMs": 4359.2233,
+      "stdoutPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\bakeoff-smoke.stdout.log",
+      "stderrPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\bakeoff-smoke.stderr.log",
+      "combinedPath": "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-gate0-formal-325a13e-current\\bakeoff-smoke.combined.log",
+      "sourceCommitSha": "325a13ec1de12282a7c1ce9de3f3581689faa061"
     }
   ],
   "formalSeriesStarted": true,
-  "formalSeriesComplete": false
+  "formalSeriesComplete": true,
+  "formalSeriesPass": false,
+  "performanceMeasurementComplete": false,
+  "notes": [
+    "Gate 0 re-run after formal series completion. All four formal backends/corpora produced terminal TIMEOUT raw reports; therefore acceptance pass remains false."
+  ]
 }

@@ -1,7 +1,7 @@
 ﻿{
     "version":  1,
-    "generatedUtc":  "\/Date(1788818720573)\/",
-    "sourceCommitSha":  "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
+    "generatedUtc":  "\/Date(1788964367188)\/",
+    "sourceCommitSha":  "325a13ec1de12282a7c1ce9de3f3581689faa061",
     "initialRemoteBranchSha":  "ec8e099f520be54ca24fc83e16f5d539b143f9b6",
     "os":  "Microsoft Windows 11 Home",
     "osVersion":  "10.0.26200",
@@ -14,10 +14,10 @@
             ],
     "logicalProcessors":  16,
     "ramBytes":  33682821120,
-    "sdk":  "8.0.424",
-    "runtime":  "Microsoft.AspNetCore.App 8.0.30 [C:\\Program Files\\dotnet\\shared\\Microsoft.AspNetCore.App]\r\nMicrosoft.NETCore.App 8.0.30 [C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App]\r\nMicrosoft.WindowsDesktop.App 8.0.30 [C:\\Program Files\\dotnet\\shared\\Microsoft.WindowsDesktop.App]",
+    "sdk":  "8.0.425",
+    "runtime":  "Microsoft.AspNetCore.App 8.0.31 [C:\\Program Files\\dotnet\\shared\\Microsoft.AspNetCore.App]\r\nMicrosoft.NETCore.App 8.0.31 [C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App]\r\nMicrosoft.WindowsDesktop.App 8.0.31 [C:\\Program Files\\dotnet\\shared\\Microsoft.WindowsDesktop.App]",
     "dataRoot":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal",
-    "freeBytesAtMeasurement":  366246596608,
+    "freeBytesAtMeasurement":  203091394560,
     "acLineStatus":  "2",
     "batteryStatus":  [
                           {
@@ -30,8 +30,12 @@
     "generation":  {
                        "command":  "python C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\scripts\\Generate-ContentSearchCorpus.py --root C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal",
                        "exitCode":  0,
-                       "elapsedMs":  201.089,
-                       "logPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.combined.log"
+                       "elapsedMs":  161.1352,
+                       "logPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.combined.log",
+                       "stdoutPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.stdout.log",
+                       "stderrPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.stderr.log",
+                       "timeoutSeconds":  10800,
+                       "timedOut":  false
                    },
     "oracles":  {
                     "HUGE":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal-Work\\oracle\\HUGE.json",

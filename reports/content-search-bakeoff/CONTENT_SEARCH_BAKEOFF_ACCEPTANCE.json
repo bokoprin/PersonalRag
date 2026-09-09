@@ -1,10 +1,18 @@
 {
   "version": 1,
-  "seriesId": "content-bakeoff-93c82c0ffd73",
-  "formal_source_commit_sha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
-  "evaluation_complete": false,
+  "evaluation_complete": true,
   "pass": false,
-  "status": "BLOCKED_INCOMPLETE_FORMAL_SERIES",
+  "seriesId": "content-bakeoff-325a13ec1de1",
+  "formal_source_commit_sha": "325a13ec1de12282a7c1ce9de3f3581689faa061",
+  "winner": null,
+  "secondary": null,
+  "rejected": [
+    "scan",
+    "bloom",
+    "trigram",
+    "sqlite-fts5"
+  ],
+  "performanceMeasurementComplete": false,
   "allowedNotRun": [],
-  "reason": "SOURCE_CONFIG/scan child was stopped after a sustained real-filesystem run exceeded the available interactive execution window; no query, threshold, corpus, or round was changed."
+  "performanceMissesAreResults": true
 }

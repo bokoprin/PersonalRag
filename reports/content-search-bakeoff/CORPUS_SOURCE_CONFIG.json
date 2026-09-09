@@ -1,23 +1,39 @@
-{
-  "version": 1,
-  "seriesId": "content-bakeoff-93c82c0ffd73",
-  "sourceCommitSha": "93c82c0ffd73fb29986bdeae0aead345e3b5af7f",
-  "reportHeadSha": "pending-report-commit",
-  "corpus": "SOURCE_CONFIG",
-  "status": "PASS_GENERATED_NOT_MEASURED",
-  "manifestSha256": "c5685ee6bfecbc9f8e8765aaeef0a4b60a3dcd80fb97d8e3039968bba94756d6",
-  "required": {
-    "actualFilesystem": true
-  },
-  "observed": {
-    "kind": "SOURCE_CONFIG",
-    "root": "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal\\SOURCE_CONFIG",
-    "fileCount": 500000,
-    "contentBytes": 5502926848,
-    "perFileNominalBytes": 11005,
-    "actualFilesystem": true
-  },
-  "logicalSourceBytes": 107374182400,
-  "generatorLog": "logs/content-bakeoff-formal/00-corpus-generation.combined.log",
-  "oracle": "independent candidate decode completed before formal child"
+﻿{
+    "version":  1,
+    "seriesId":  "content-bakeoff-325a13ec1de1",
+    "sourceCommitSha":  "325a13ec1de12282a7c1ce9de3f3581689faa061",
+    "reportHeadSha":  "pending-report-commit",
+    "corpus":  "SOURCE_CONFIG",
+    "manifestSha256":  "8440245b3671d7458074d177a8074c1be50cb8e006a175635b264e00846e3647",
+    "required":  {
+                     "sourceConfigFilesMin":  500000,
+                     "sourceConfigBytesMin":  5368709120,
+                     "logFilesMin":  20000,
+                     "logBytesMin":  21474836480,
+                     "hugeFilesMin":  20,
+                     "hugeBytesMin":  10737418240,
+                     "actualFilesystem":  true,
+                     "logical100GiBRequirement":  true,
+                     "seed":  123456
+                 },
+    "observed":  {
+                     "kind":  "SOURCE_CONFIG",
+                     "root":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal\\SOURCE_CONFIG",
+                     "fileCount":  500000,
+                     "contentBytes":  5502926848,
+                     "perFileNominalBytes":  11005
+                 },
+    "actualFilesystem":  true,
+    "logicalSourceBytes":  107374182400,
+    "pass":  true,
+    "runner":  {
+                   "command":  "python C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\scripts\\Generate-ContentSearchCorpus.py --root C:\\Users\\bokop\\AppData\\Local\\Temp\\PersonalRag-ContentBakeoff-Formal",
+                   "exitCode":  0,
+                   "elapsedMs":  161.1352,
+                   "logPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.combined.log",
+                   "stdoutPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.stdout.log",
+                   "stderrPath":  "C:\\Users\\bokop\\AppData\\Local\\Temp\\personalrag-content-bakeoff-worktree\\logs\\content-bakeoff-formal\\00-corpus-generation.stderr.log",
+                   "timeoutSeconds":  10800,
+                   "timedOut":  false
+               }
 }
